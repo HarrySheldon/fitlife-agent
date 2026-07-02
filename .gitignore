@@ -1,0 +1,13 @@
+.venv/
+.uv-cache/
+__pycache__/
+.pytest_cache/
+*.pyc
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+backend/data/eval_results.json
+backend/data/profile_loader_*.json
+.tmp/
+pytest-cache-files-*/

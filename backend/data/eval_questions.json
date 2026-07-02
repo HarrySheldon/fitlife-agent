@@ -1,0 +1,182 @@
+[
+  {
+    "question": "我这周蛋白质吃够了吗？",
+    "expected_tool": "analyze_meals",
+    "expected_retrieval_doc": null,
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "蛋白质"
+    ]
+  },
+  {
+    "question": "帮我总结这周饮食问题。",
+    "expected_tool": "generate_weekly_report",
+    "expected_retrieval_doc": "nutrition_guidelines.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "周报"
+    ]
+  },
+  {
+    "question": "这周我的训练量相比上周有提升吗？",
+    "expected_tool": "analyze_workouts",
+    "expected_retrieval_doc": null,
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "训练"
+    ]
+  },
+  {
+    "question": "我不想吃鸡胸肉，有什么替代？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "meal_templates.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "替代"
+    ]
+  },
+  {
+    "question": "我想减脂，下周怎么安排训练？",
+    "expected_tool": "generate_next_week_plan",
+    "expected_retrieval_doc": "fitness_rules.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "计划"
+    ]
+  },
+  {
+    "question": "找出最近热量最高的食物。",
+    "expected_tool": "analyze_meals",
+    "expected_retrieval_doc": null,
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "热量"
+    ]
+  },
+  {
+    "question": "下周饮食计划需要注意什么？",
+    "expected_tool": "generate_next_week_plan",
+    "expected_retrieval_doc": "plan_rules.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "热量"
+    ]
+  },
+  {
+    "question": "训练计划需要休息日吗？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "plan_rules.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "休息"
+    ]
+  },
+  {
+    "question": "减脂期应该只做有氧吗？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "fitness_rules.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "力量"
+    ]
+  },
+  {
+    "question": "豆腐能替代肉类补蛋白吗？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "meal_templates.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "蛋白"
+    ]
+  },
+  {
+    "question": "帮我生成一份周报。",
+    "expected_tool": "generate_weekly_report",
+    "expected_retrieval_doc": "nutrition_guidelines.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "周报"
+    ]
+  },
+  {
+    "question": "我最近训练肌群覆盖够吗？",
+    "expected_tool": "analyze_workouts",
+    "expected_retrieval_doc": null,
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "肌群"
+    ]
+  },
+  {
+    "question": "这周平均热量是多少？",
+    "expected_tool": "analyze_meals",
+    "expected_retrieval_doc": null,
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "热量"
+    ]
+  },
+  {
+    "question": "每周训练四天怎么安排？",
+    "expected_tool": "generate_next_week_plan",
+    "expected_retrieval_doc": "fitness_rules.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "训练"
+    ]
+  },
+  {
+    "question": "坚果适合作为加餐吗？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "meal_templates.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "加餐"
+    ]
+  },
+  {
+    "question": "蛋白质目标怎么定？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "nutrition_guidelines.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "蛋白质"
+    ]
+  },
+  {
+    "question": "维持期训练怎么做？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "fitness_rules.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "维持"
+    ]
+  },
+  {
+    "question": "背部训练有哪些动作？",
+    "expected_tool": "retrieve_knowledge",
+    "expected_retrieval_doc": "exercise_library.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "背部"
+    ]
+  },
+  {
+    "question": "计划会不会违反我的过敏限制？",
+    "expected_tool": "validate_plan",
+    "expected_retrieval_doc": "plan_rules.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "限制"
+    ]
+  },
+  {
+    "question": "给我一份下周饮食建议。",
+    "expected_tool": "generate_next_week_plan",
+    "expected_retrieval_doc": "meal_templates.md",
+    "expected_answer_format": "markdown",
+    "expected_keywords": [
+      "饮食"
+    ]
+  }
+]

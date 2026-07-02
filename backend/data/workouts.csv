@@ -1,0 +1,17 @@
+date,type,exercise,muscle_group,sets,reps,weight,duration_min
+2026-06-01,strength,squat,legs,4,8,80,55
+2026-06-03,strength,bench press,chest,4,8,60,50
+2026-06-05,strength,row,back,4,10,55,50
+2026-06-07,cardio,zone 2 run,full_body,0,0,0,35
+2026-06-08,strength,squat,legs,4,8,80,55
+2026-06-10,strength,bench press,chest,4,8,60,50
+2026-06-12,strength,row,back,4,10,55,50
+2026-06-14,cardio,zone 2 run,full_body,0,0,0,35
+2026-06-15,strength,squat,legs,4,8,80,55
+2026-06-17,strength,bench press,chest,4,8,60,50
+2026-06-19,strength,row,back,4,10,55,50
+2026-06-21,cardio,zone 2 run,full_body,0,0,0,35
+2026-06-22,strength,squat,legs,4,8,80,55
+2026-06-24,strength,bench press,chest,4,8,60,50
+2026-06-26,strength,row,back,4,10,55,50
+2026-06-28,cardio,zone 2 run,full_body,0,0,0,35
