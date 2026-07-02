@@ -16,4 +16,5 @@ class AgentState(TypedDict, total=False):
     draft_answer: str
     validation_result: dict
     final_answer: str
+    llm_used: bool
     trace: dict

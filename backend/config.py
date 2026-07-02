@@ -10,9 +10,10 @@ BACKEND_ROOT = Path(__file__).resolve().parent
 
 class Settings(BaseSettings):
     app_env: str = "demo"
+    llm_enabled: bool = False
     openai_api_key: str | None = None
     openai_base_url: str | None = None
-    openai_model: str = "gpt-4.1-mini"
+    openai_model: str = "gpt-5.5"
     embedding_model: str = "text-embedding-3-small"
     backend_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

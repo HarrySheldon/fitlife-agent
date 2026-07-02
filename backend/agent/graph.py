@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.agent.generator import generate_plan
+from backend.agent.llm_adapter import try_plan_route_with_llm, try_write_answer_with_llm
 from backend.agent.planner import plan_route
 from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
@@ -30,8 +31,12 @@ def run_fitlife_agent(question: str) -> dict:
 
 
 def planner_node(state: AgentState) -> AgentState:
-    route = plan_route(state["user_query"])
-    return {"intent": route.intent, "tool_requests": route.model_dump()}
+    llm_route = try_plan_route_with_llm(state["user_query"])
+    route = llm_route or plan_route(state["user_query"])
+    update: AgentState = {"intent": route.intent, "tool_requests": route.model_dump()}
+    if llm_route is not None:
+        update["llm_used"] = True
+    return update
 
 
 def build_graph():
@@ -159,6 +164,9 @@ def validator_node(state: AgentState) -> AgentState:
 
 
 def writer_node(state: AgentState) -> AgentState:
+    llm_answer = try_write_answer_with_llm(state)
+    if llm_answer:
+        return {"final_answer": llm_answer, "llm_used": True}
     return {"final_answer": write_answer(state)}
 
 
@@ -171,6 +179,7 @@ def trace_builder_node(state: AgentState) -> AgentState:
         "retrieved_sources": sorted({doc["source"] for doc in retrieved_docs if "source" in doc}),
         "validation_passed": validation.get("passed", True),
         "warnings": validation.get("warnings", []),
+        "llm_used": bool(state.get("llm_used", False)),
     }
     return {"trace": trace}
 

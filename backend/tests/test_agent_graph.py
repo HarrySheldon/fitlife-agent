@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from backend.agent import graph as agent_graph
+from backend.agent.planner import PlannerRoute
 
 
 def test_build_graph_exposes_fitlife_workflow_nodes():
@@ -61,6 +62,28 @@ def test_run_fitlife_agent_invokes_compiled_graph(monkeypatch):
         "tool_results": {},
         "sources": [{"source": "fitness_rules.md", "text": "demo"}],
     }
+
+
+def test_planner_node_uses_llm_route_when_available(monkeypatch):
+    monkeypatch.setattr(
+        agent_graph,
+        "try_plan_route_with_llm",
+        lambda question: PlannerRoute(intent="knowledge_qa", needs_retrieval=True),
+    )
+
+    update = agent_graph.planner_node({"user_query": "Give me general fitness advice."})
+
+    assert update["intent"] == "knowledge_qa"
+    assert update["tool_requests"]["needs_retrieval"] is True
+    assert update["llm_used"] is True
+
+
+def test_writer_node_uses_llm_answer_when_available(monkeypatch):
+    monkeypatch.setattr(agent_graph, "try_write_answer_with_llm", lambda state: "## LLM Answer")
+
+    update = agent_graph.writer_node({"intent": "knowledge_qa", "tool_results": {}, "retrieved_docs": []})
+
+    assert update == {"final_answer": "## LLM Answer", "llm_used": True}
 
 
 @pytest.mark.parametrize(
