@@ -6,6 +6,7 @@ __pycache__/
 node_modules/
 dist/
 *.tsbuildinfo
+.worktrees/
 .env
 backend/data/eval_results.json
 backend/data/profile_loader_*.json
