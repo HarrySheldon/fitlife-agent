@@ -8,7 +8,8 @@ class AgentState(TypedDict, total=False):
     user_query: str
     intent: str
     profile: dict
-    tool_requests: list[str]
+    tool_requests: dict
+    tool_calls: list[str]
     tool_results: dict
     retrieval_query: str
     retrieved_docs: list[dict]
