@@ -10,5 +10,7 @@ dist/
 .env
 backend/data/eval_results.json
 backend/data/profile_loader_*.json
+backend/data/test_vector_index_runtime.json
+backend/data/vector_index.json
 .tmp/
 pytest-cache-files-*/

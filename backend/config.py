@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.backend_cors_origins.split(",") if origin.strip()]
 
+    @property
+    def vector_index_path(self) -> Path:
+        return self.data_dir / "vector_index.json"
+
 
 @lru_cache
 def get_settings() -> Settings:
