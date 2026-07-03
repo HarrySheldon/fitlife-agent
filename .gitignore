@@ -9,6 +9,7 @@ dist/
 .worktrees/
 .env
 backend/data/eval_results.json
+backend/data/eval_results.md
 backend/data/profile_loader_*.json
 backend/data/test_vector_index_runtime.json
 backend/data/vector_index.json
