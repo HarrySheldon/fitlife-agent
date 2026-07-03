@@ -9,9 +9,10 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 - Agent workflow design with a focused **FitLife Coach Agent**
 - RAG over curated Markdown fitness and nutrition documents
 - Tool calling with deterministic Python analyzers
+- Optional OpenAI-compatible planner/writer and embedding adapters, disabled by default for local demos
 - FastAPI backend with typed Pydantic schemas
 - React + Vite + TypeScript frontend
-- Structured plan validation and automated evaluation
+- Structured plan validation and Evaluation v2 reporting
 - Docker Compose deployment path
 
 ## Architecture
@@ -85,6 +86,30 @@ Frontend: `http://127.0.0.1:5173`
 docker compose up --build
 ```
 
+## Optional OpenAI Configuration
+
+Local deterministic behavior is the default. OpenAI-compatible model calls are opt-in:
+
+```env
+LLM_ENABLED=false
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_MODEL=
+EMBEDDING_MODEL=
+```
+
+When `LLM_ENABLED=true` and an API key is available, the adapter can call an OpenAI-compatible Responses API for planner/writer behavior. If configuration is missing or a call fails, the agent falls back to deterministic local logic.
+
+## Demo Script
+
+1. Start the backend and frontend.
+2. Open the Dashboard to inspect generated nutrition and training data.
+3. Ask the Chat page: `Did I hit my protein target this week?`
+4. Ask: `What can replace chicken breast for protein?`
+5. Generate a weekly report.
+6. Generate a next-week plan and inspect validator output.
+7. Run Evaluation and review grouped metrics plus failed-case details.
+
 ## Sample Questions
 
 - 我这周蛋白质吃够了吗？
@@ -101,12 +126,30 @@ Run:
 python scripts/run_eval.py --limit 5
 ```
 
-The evaluation checks tool-call success, retrieval hits, structured Markdown output, keyword coverage, preference compliance, and validator pass rate. Results are written to `backend/data/eval_results.json`.
+Evaluation v2 reports:
+
+- aggregate rates: pass rate, tool-call success, retrieval hit, structured output success, keyword coverage, validator pass;
+- per-case checks: expected tool, retrieval source, keywords, answer format, validator status;
+- failure reasons for each failed case;
+- grouped metrics by expected tool and retrieval requirement.
+
+Artifacts are written to:
+
+- `backend/data/eval_results.json`
+- `backend/data/eval_results.md`
+
+The frontend Evaluation page calls `POST /eval/run` and renders the same aggregate metrics, group metrics, and failed-case details.
 
 ## Safety Note
 
 FitLife Agent provides general lifestyle management suggestions only. It does not provide medical diagnosis, treatment, injury rehabilitation, or disease-specific diet guidance.
 
-## Resume Description
+## Resume Bullets
+
+- Built a LangGraph-based FitLife Coach Agent with deterministic tool calling, vector RAG, plan validation, and FastAPI endpoints for fitness and nutrition workflows.
+- Implemented local-first Evaluation v2 with structured per-case graders, failure reasons, grouped metrics, and JSON/Markdown artifacts.
+- Designed a React + Vite + TypeScript frontend for dashboard analytics, chat, report generation, plan generation, profile management, upload flows, and evaluation review.
+
+## Chinese Resume Description
 
 基于 LangGraph + FastAPI + React 构建 FitLife Agent 个人健身饮食规划智能体，整合用户饮食记录、训练记录和营养知识库，通过 RAG 检索饮食训练规则，并调用 Python 工具完成热量、宏量营养素、训练频率和训练容量分析。系统支持用户画像管理、自然语言问答、周报生成、饮食训练计划生成、计划校验和可视化 Dashboard。前端采用 React + Vite + TypeScript + Tailwind CSS 实现多页面交互界面，后端提供统一 FastAPI 接口，并通过自建评测集验证工具调用成功率、检索命中率和计划校验通过率。

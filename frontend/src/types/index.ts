@@ -71,6 +71,40 @@ export interface EvalResult {
   structured_output_success_rate: number
   preference_compliance_rate: number
   validator_pass_rate: number
-  failed_cases: Array<Record<string, unknown>>
-  cases: Array<Record<string, unknown>>
+  group_metrics: EvalGroupMetrics
+  failed_cases: EvalCaseResult[]
+  cases: EvalCaseResult[]
+}
+
+export interface EvalGroupMetric {
+  total: number
+  pass_rate: number
+}
+
+export interface EvalGroupMetrics {
+  by_expected_tool: Record<string, EvalGroupMetric>
+  by_retrieval_requirement: Record<string, EvalGroupMetric>
+}
+
+export interface EvalCheck {
+  name: string
+  passed: boolean
+  expected: unknown
+  observed: unknown
+  reason: string
+}
+
+export interface EvalCaseResult {
+  question: string
+  expected_tool: string | null
+  expected_retrieval_doc: string | null
+  passed: boolean
+  tool_ok: boolean
+  retrieval_ok: boolean
+  structured_ok: boolean
+  keywords_ok: boolean
+  validator_ok: boolean
+  checks: EvalCheck[]
+  failure_reasons: string[]
+  trace: Record<string, unknown>
 }

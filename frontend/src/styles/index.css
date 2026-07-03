@@ -289,6 +289,125 @@ select {
   padding-top: 12px;
 }
 
+.evaluation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.evaluation-panel h2 {
+  text-transform: capitalize;
+}
+
+.evaluation-table {
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #ded4c5;
+}
+
+.evaluation-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.evaluation-row span {
+  color: #17211d;
+  font-weight: 700;
+}
+
+.evaluation-row strong {
+  color: #216869;
+}
+
+.evaluation-row small {
+  color: #68776d;
+}
+
+.failed-case-list {
+  display: grid;
+  gap: 14px;
+}
+
+.failed-case {
+  border-top: 1px solid #ded4c5;
+  padding-top: 14px;
+}
+
+.failed-case:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.failed-case-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.failed-case-header strong {
+  line-height: 1.4;
+}
+
+.failed-case-header span {
+  flex: 0 0 auto;
+  border: 1px solid #d7b377;
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: #6e5528;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.failed-case ul {
+  margin: 12px 0;
+  padding-left: 18px;
+  color: #a3402d;
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.check-chip {
+  border: 1px solid #ded4c5;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fffdf8;
+}
+
+.check-chip span {
+  display: block;
+  color: #68776d;
+  font-size: 12px;
+}
+
+.check-chip strong {
+  display: block;
+  margin-top: 4px;
+  color: #216869;
+  font-size: 13px;
+}
+
+.check-chip.failed {
+  border-color: #d49a88;
+  background: #fff5f1;
+}
+
+.check-chip.failed strong {
+  color: #a3402d;
+}
+
 pre {
   overflow: auto;
   background: #17211d;
@@ -320,7 +439,13 @@ pre {
   .chart-grid,
   .upload-grid,
   .split-grid,
+  .evaluation-grid,
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .evaluation-row,
+  .check-grid {
     grid-template-columns: 1fr;
   }
 
