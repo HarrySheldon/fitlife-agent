@@ -140,6 +140,10 @@ Artifacts are written to:
 
 The frontend Evaluation page calls `POST /eval/run` and renders the same aggregate metrics, group metrics, and failed-case details.
 
+## Verification Report
+
+See [docs/FINAL_VERIFICATION_REPORT.md](docs/FINAL_VERIFICATION_REPORT.md) for the latest verified command outputs, known warnings, and scope boundaries.
+
 ## Safety Note
 
 FitLife Agent provides general lifestyle management suggestions only. It does not provide medical diagnosis, treatment, injury rehabilitation, or disease-specific diet guidance.
