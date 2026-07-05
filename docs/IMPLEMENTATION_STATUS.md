@@ -30,6 +30,8 @@ cd ..
 docker compose config
 docker version --format '{{.Server.Version}}'
 docker compose up --build -d
+docker compose ps
+Invoke-RestMethod http://127.0.0.1:8000/health
 ```
 
 Observed results:
@@ -40,7 +42,8 @@ Observed results:
 - Frontend build: passed; Vite warned that the production JS chunk is larger than 500 kB.
 - Docker Compose config: valid.
 - Docker daemon: available through Docker Desktop server `29.2.1`.
-- Docker Compose build/start: attempted, but blocked before container startup because Docker Hub token fetches timed out for missing base images.
+- Docker Compose build/start: passed; `jianshen-backend-1` and `jianshen-frontend-1` started successfully.
+- Backend health check: `http://127.0.0.1:8000/health` returned `success = True` and `data.status = ok`.
 
 ## Known Warnings
 
@@ -53,4 +56,3 @@ Observed results:
 - Current verification was run from `D:\code\vibe-coding\jianshen` on `main`.
 - Frontend dependency installation and Vite build may require elevated Windows permission because npm/esbuild spawn child processes.
 - Runtime artifacts are intentionally ignored: `backend/data/eval_results.json`, `backend/data/eval_results.md`, vector index files, `frontend/dist`, and dependency directories.
-- Docker image build cannot complete until `python:3.12-slim`, `node:22-alpine`, and `nginx:1.27-alpine` are available locally or Docker Hub access is restored.
