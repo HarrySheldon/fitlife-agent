@@ -1,7 +1,7 @@
 # FitLife Agent Implementation Status
 
-**Date:** 2026-07-03
-**Status:** MVP implemented and verified on branch `feat/final-verification-packaging`.
+**Date:** 2026-07-05
+**Status:** MVP implemented, merged into `main`, and pushed to `origin/main`.
 
 ## Implemented
 
@@ -28,6 +28,8 @@ cd frontend
 npm run build
 cd ..
 docker compose config
+docker version --format '{{.Server.Version}}'
+docker compose up --build -d
 ```
 
 Observed results:
@@ -37,6 +39,8 @@ Observed results:
 - Eval smoke: `total_tests = 5`, `pass_rate = 1.0`, `failed_cases = 0`.
 - Frontend build: passed; Vite warned that the production JS chunk is larger than 500 kB.
 - Docker Compose config: valid.
+- Docker daemon: available through Docker Desktop server `29.2.1`.
+- Docker Compose build/start: attempted, but blocked before container startup because Docker Hub token fetches timed out for missing base images.
 
 ## Known Warnings
 
@@ -46,7 +50,7 @@ Observed results:
 ## Environment Notes
 
 - The repository is a valid Git repository with stacked feature branches for review.
-- Current verification was run from `D:\code\vibe-coding\jianshen\.worktrees\langgraph-workflow`.
+- Current verification was run from `D:\code\vibe-coding\jianshen` on `main`.
 - Frontend dependency installation and Vite build may require elevated Windows permission because npm/esbuild spawn child processes.
 - Runtime artifacts are intentionally ignored: `backend/data/eval_results.json`, `backend/data/eval_results.md`, vector index files, `frontend/dist`, and dependency directories.
-- Docker image build was not executed in this final verification pass; only `docker compose config` was validated.
+- Docker image build cannot complete until `python:3.12-slim`, `node:22-alpine`, and `nginx:1.27-alpine` are available locally or Docker Hub access is restored.
