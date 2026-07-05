@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status note:** This file is retained as the original historical implementation plan. The checkbox state below is not the active backlog. Current implemented scope and verification results are tracked in [docs/IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) and [docs/FINAL_VERIFICATION_REPORT.md](FINAL_VERIFICATION_REPORT.md).
+
 **Goal:** Build a runnable MVP of FitLife Agent that demonstrates Agentic RAG, deterministic Python tool calling, FastAPI APIs, React UI, structured validation, and automated evaluation.
 
 **Architecture:** The backend exposes FastAPI routers and owns local data, analysis tools, RAG, and a LangGraph workflow. The frontend is a React + Vite + TypeScript client with pages for dashboard, upload, profile, chat, report, plan, and evaluation. The MVP uses local JSON/CSV storage and a replaceable vector-store abstraction.
