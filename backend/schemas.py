@@ -5,6 +5,10 @@ from pydantic import BaseModel, Field, model_validator
 
 T = TypeVar("T")
 
+ExperienceLevel = Literal["beginner", "novice", "experienced"]
+TrainingPreference = Literal["strength", "cardio", "mixed"]
+TargetMode = Literal["suggested", "manual"]
+
 
 class ApiResponse(BaseModel, Generic[T]):
     success: bool
@@ -24,6 +28,9 @@ class UserProfile(BaseModel):
     target_weight_kg: float = Field(gt=30, le=250)
     daily_calorie_target: int = Field(ge=1200, le=5000)
     daily_protein_target: int = Field(ge=40, le=300)
+    experience_level: ExperienceLevel = "novice"
+    training_preference: TrainingPreference = "mixed"
+    target_mode: TargetMode = "suggested"
 
 
 class AuthRegisterRequest(BaseModel):

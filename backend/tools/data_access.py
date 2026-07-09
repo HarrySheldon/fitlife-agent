@@ -27,6 +27,9 @@ DEFAULT_PROFILE = UserProfile(
     target_weight_kg=68,
     daily_calorie_target=2100,
     daily_protein_target=130,
+    experience_level="novice",
+    training_preference="mixed",
+    target_mode="suggested",
 )
 
 
