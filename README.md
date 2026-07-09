@@ -2,7 +2,7 @@
 
 FitLife Agent is an open-source Agentic RAG project for personal fitness and diet management. It combines user profile data, meal records, workout records, a small Markdown knowledge base, deterministic Python analysis tools, a LangGraph-ready agent workflow, FastAPI APIs, and a React + Vite frontend.
 
-The project is designed as a resume-ready AI Agent engineering internship portfolio project. It focuses on a working MVP loop: upload data, analyze records, retrieve knowledge, answer questions, generate weekly reports, generate next-week plans, validate plan safety, and run automated evaluation cases.
+The project is designed as a resume-ready AI Agent engineering internship portfolio project. It focuses on a working MVP loop: register or log in, maintain calendar-based meal and workout records, analyze records, retrieve knowledge, answer questions, generate weekly reports, generate next-week plans, validate plan safety, and run automated evaluation cases.
 
 ## What It Demonstrates
 
@@ -10,6 +10,7 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 - RAG over curated Markdown fitness and nutrition documents
 - Tool calling with deterministic Python analyzers
 - Optional OpenAI-compatible planner/writer and embedding adapters, disabled by default for local demos
+- Demo user management with username, email, or phone login, bearer-token sessions, and per-user local data files
 - FastAPI backend with typed Pydantic schemas
 - React + Vite + TypeScript frontend
 - Structured plan validation and Evaluation v2 reporting
@@ -25,7 +26,7 @@ flowchart LR
   Agent --> Tools["Meal/Workout Tools"]
   Agent --> RAG["Retriever"]
   Agent --> Validator["Validator"]
-  Tools --> CSV["meals.csv / workouts.csv"]
+  Tools --> CSV["per-user meals.csv / workouts.csv"]
   RAG --> KB["Markdown Knowledge Base"]
   API --> Eval["Evaluation Runner"]
 ```
@@ -59,6 +60,8 @@ date,type,exercise,muscle_group,sets,reps,weight,duration_min
 ```
 
 `user_profile.json` includes height, weight, age, gender, goal, training frequency, preferences, restrictions, target weight, calorie target, and protein target.
+
+The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. After registration or login, API requests with a bearer token read and write `backend/data/users/<user_id>/...` so each local demo account has isolated profile, meal, and workout data. Registration asks the user to choose one primary identifier type: username, email, or phone. Login accepts any of those identifiers in one account field. Email and phone are local demo identifiers only; the app does not send verification emails or SMS messages.
 
 ## Local Setup
 
@@ -103,12 +106,14 @@ When `LLM_ENABLED=true` and an API key is available, the adapter can call an Ope
 ## Demo Script
 
 1. Start the backend and frontend.
-2. Open the Dashboard to inspect generated nutrition and training data.
-3. Ask the Chat page: `Did I hit my protein target this week?`
-4. Ask: `What can replace chicken breast for protein?`
-5. Generate a weekly report.
-6. Generate a next-week plan and inspect validator output.
-7. Run Evaluation and review grouped metrics plus failed-case details.
+2. Register a local account by choosing username, email, or phone as the account identifier.
+3. Open Records and add one meal, one workout, or one smart text entry for the selected date.
+4. Open the Dashboard to inspect the selected day and current-week summary.
+5. Ask the Chat page: `Did I hit my protein target this week?`
+6. Ask: `What can replace chicken breast for protein?`
+7. Generate a weekly report.
+8. Generate a next-week plan and inspect validator output.
+9. Run Evaluation and review grouped metrics plus failed-case details.
 
 ## Sample Questions
 
@@ -152,7 +157,7 @@ FitLife Agent provides general lifestyle management suggestions only. It does no
 
 - Built a LangGraph-based FitLife Coach Agent with deterministic tool calling, vector RAG, plan validation, and FastAPI endpoints for fitness and nutrition workflows.
 - Implemented local-first Evaluation v2 with structured per-case graders, failure reasons, grouped metrics, and JSON/Markdown artifacts.
-- Designed a React + Vite + TypeScript frontend for dashboard analytics, chat, report generation, plan generation, profile management, upload flows, and evaluation review.
+- Designed a React + Vite + TypeScript frontend with login/register, calendar-based record maintenance, dashboard analytics, chat, report generation, plan generation, profile management, CSV import, and evaluation review.
 
 ## Chinese Resume Description
 

@@ -1,6 +1,6 @@
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 T = TypeVar("T")
@@ -26,6 +26,39 @@ class UserProfile(BaseModel):
     daily_protein_target: int = Field(ge=40, le=300)
 
 
+class AuthRegisterRequest(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=40)
+    email: str | None = Field(default=None, min_length=3, max_length=254)
+    phone: str | None = Field(default=None, min_length=6, max_length=32)
+    password: str = Field(min_length=8, max_length=128)
+    display_name: str = Field(min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def require_identifier(self):
+        if not (self.username or self.email or self.phone):
+            raise ValueError("Username, email, or phone is required")
+        return self
+
+
+class AuthLoginRequest(BaseModel):
+    identifier: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class AuthenticatedUser(BaseModel):
+    user_id: str
+    username: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    display_name: str
+
+
+class AuthSession(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    user: AuthenticatedUser
+
+
 class MealRecord(BaseModel):
     date: str
     meal: str
@@ -48,7 +81,36 @@ class WorkoutRecord(BaseModel):
     duration_min: float = Field(ge=0)
 
 
+class DailySummary(BaseModel):
+    date: str
+    calories: float = 0
+    protein: float = 0
+    carbs: float = 0
+    fat: float = 0
+    meal_count: int = 0
+    training_sessions: int = 0
+    training_duration_min: float = 0
+    has_data: bool = False
+
+
+class DailyDetail(BaseModel):
+    summary: DailySummary
+    meals: list[MealRecord]
+    workouts: list[WorkoutRecord]
+
+
+class AgentEntryRequest(BaseModel):
+    date: str
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class AgentEntryResponse(BaseModel):
+    parsed_actions: list[str]
+    day: DailyDetail
+
+
 class DashboardSummary(BaseModel):
+    summary_date: str
     today_calories: float
     today_protein: float
     weekly_training_count: int

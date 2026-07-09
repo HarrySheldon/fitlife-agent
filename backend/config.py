@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     openai_model: str = "gpt-5.5"
     embedding_model: str = "text-embedding-3-small"
+    auth_secret: str = "fitlife-agent-demo-secret"
     backend_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     data_dir: Path = BACKEND_ROOT / "data"

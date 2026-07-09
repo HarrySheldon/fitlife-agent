@@ -17,8 +17,8 @@ export function Dashboard() {
         <h1>Fitness and nutrition control room</h1>
       </header>
       <div className="metric-grid">
-        <MetricCard label="Today calories" value={`${data.today_calories} kcal`} detail={data.meal_summary} />
-        <MetricCard label="Today protein" value={`${data.today_protein} g`} />
+        <MetricCard label="Day calories" value={`${data.today_calories} kcal`} detail={data.summary_date} />
+        <MetricCard label="Day protein" value={`${data.today_protein} g`} detail={data.meal_summary} />
         <MetricCard label="Training sessions" value={data.weekly_training_count} detail="Current data window" />
         <MetricCard label="Training duration" value={`${data.weekly_training_duration_min} min`} />
       </div>

@@ -18,7 +18,76 @@ export interface UserProfile {
   daily_protein_target: number
 }
 
+export interface AuthenticatedUser {
+  user_id: string
+  username: string | null
+  email: string | null
+  phone: string | null
+  display_name: string
+}
+
+export interface AuthSession {
+  access_token: string
+  token_type: 'bearer'
+  user: AuthenticatedUser
+}
+
+export interface AuthRequest {
+  identifier?: string
+  username?: string
+  email?: string
+  phone?: string
+  password: string
+  display_name?: string
+}
+
+export interface MealRecord {
+  date: string
+  meal: string
+  food: string
+  amount: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
+export interface WorkoutRecord {
+  date: string
+  type: string
+  exercise: string
+  muscle_group: string
+  sets: number
+  reps: number
+  weight: number
+  duration_min: number
+}
+
+export interface DailySummary {
+  date: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  meal_count: number
+  training_sessions: number
+  training_duration_min: number
+  has_data: boolean
+}
+
+export interface DailyDetail {
+  summary: DailySummary
+  meals: MealRecord[]
+  workouts: WorkoutRecord[]
+}
+
+export interface AgentEntryResponse {
+  parsed_actions: string[]
+  day: DailyDetail
+}
+
 export interface DashboardSummary {
+  summary_date: string
   today_calories: number
   today_protein: number
   weekly_training_count: number

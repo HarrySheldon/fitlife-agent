@@ -14,7 +14,9 @@
 - LangGraph FitLife Coach Agent orchestration with planner, profile loading, tool execution, retrieval, generation, validation, final Markdown answer, and trace metadata.
 - Optional OpenAI-compatible planner/writer adapter, disabled by default with deterministic fallback behavior.
 - Evaluation v2 runner with structured per-case checks, failure reasons, grouped metrics, JSON artifact, and Markdown artifact.
-- React + Vite + TypeScript frontend with Dashboard, Upload, Profile, Chat, Weekly Report, Plan, and Evaluation pages.
+- Demo user registration/login with username, email, or phone identifiers, bearer-token sessions, per-user local data directories, and no external email/SMS verification provider.
+- Calendar APIs for daily summaries, daily details, meal form entry, workout form entry, smart text entry, and CSV import.
+- React + Vite + TypeScript frontend with protected Dashboard, Records, Profile, Chat, Weekly Report, Plan, and Evaluation pages.
 - Evaluation frontend displays aggregate rates, grouped metrics, failed cases, and check-level pass/fail details.
 - Docker Compose, backend Dockerfile, frontend Dockerfile, `.env.example`, README, and project vocabulary docs.
 
@@ -37,7 +39,7 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 Observed results:
 
 - Sample data generation: exit code `0`; no Git diff after generation.
-- Backend tests: `45 passed, 1 warning`.
+- Backend tests: `48 passed, 1 warning`.
 - Eval smoke: `total_tests = 5`, `pass_rate = 1.0`, `failed_cases = 0`.
 - Frontend build: passed; Vite warned that the production JS chunk is larger than 500 kB.
 - Docker Compose config: valid.

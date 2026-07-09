@@ -13,7 +13,7 @@ from backend.tools.report_generator import generate_weekly_report
 from backend.tools.workout_analyzer import analyze_workouts
 
 
-def run_fitlife_agent(question: str) -> dict:
+def run_fitlife_agent(question: str, user_id: str | None = None) -> dict:
     graph = build_graph()
     if graph is None:
         raise RuntimeError("LangGraph workflow could not be built")
@@ -22,6 +22,7 @@ def run_fitlife_agent(question: str) -> dict:
         {
             "messages": [{"role": "user", "content": question}],
             "user_query": question,
+            "current_user_id": user_id,
             "tool_calls": [],
             "tool_results": {},
             "retrieved_docs": [],
@@ -72,7 +73,7 @@ def build_graph():
 
 def profile_loader_node(state: AgentState) -> AgentState:
     return {
-        "profile": read_profile().model_dump(),
+        "profile": read_profile(state.get("current_user_id")).model_dump(),
         "tool_calls": _append_tool_call(state, "load_profile"),
     }
 
@@ -86,13 +87,13 @@ def data_analyzer_node(state: AgentState) -> AgentState:
     if route.get("needs_meal_analysis"):
         tool_calls = _append_tool_call({"tool_calls": tool_calls}, "analyze_meals")
         tool_results["meal_analysis"] = analyze_meals(
-            read_meals(),
+            read_meals(state.get("current_user_id")),
             calorie_target=profile["daily_calorie_target"],
             protein_target=profile["daily_protein_target"],
         )
     if route.get("needs_workout_analysis"):
         tool_calls = _append_tool_call({"tool_calls": tool_calls}, "analyze_workouts")
-        tool_results["workout_analysis"] = analyze_workouts(read_workouts())
+        tool_results["workout_analysis"] = analyze_workouts(read_workouts(state.get("current_user_id")))
 
     return {"tool_calls": tool_calls, "tool_results": tool_results}
 
@@ -124,7 +125,7 @@ def generator_node(state: AgentState) -> AgentState:
         meal_result = tool_results.get("meal_analysis")
         if meal_result is None:
             meal_result = analyze_meals(
-                read_meals(),
+                read_meals(state.get("current_user_id")),
                 calorie_target=profile["daily_calorie_target"],
                 protein_target=profile["daily_protein_target"],
             )
@@ -132,7 +133,7 @@ def generator_node(state: AgentState) -> AgentState:
 
         workout_result = tool_results.get("workout_analysis")
         if workout_result is None:
-            workout_result = analyze_workouts(read_workouts())
+            workout_result = analyze_workouts(read_workouts(state.get("current_user_id")))
             tool_calls = _append_tool_call({"tool_calls": tool_calls}, "analyze_workouts")
 
         tool_results["weekly_report"] = generate_weekly_report(profile, meal_result, workout_result)
