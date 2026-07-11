@@ -3,13 +3,12 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { Auth } from '../pages/Auth'
-import { Chat } from '../pages/Chat'
-import { Dashboard } from '../pages/Dashboard'
 import { Evaluation } from '../pages/Evaluation'
+import { Logbook } from '../pages/Logbook'
 import { Plan } from '../pages/Plan'
 import { Profile } from '../pages/Profile'
-import { Records } from '../pages/Records'
-import { WeeklyReport } from '../pages/WeeklyReport'
+import { Review } from '../pages/Review'
+import { Today } from '../pages/Today'
 
 export function AppRoutes() {
   return (
@@ -17,13 +16,16 @@ export function AppRoutes() {
       <Route path="/login" element={<Auth />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/records" element={<Records />} />
-          <Route path="/upload" element={<Navigate to="/records" replace />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/report" element={<WeeklyReport />} />
+          <Route path="/" element={<Today />} />
+          <Route path="/logbook" element={<Logbook />} />
+          <Route path="/review" element={<Review />} />
           <Route path="/plan" element={<Plan />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/records" element={<Navigate to="/logbook" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/report" element={<Navigate to="/review" replace />} />
+          <Route path="/upload" element={<Navigate to="/logbook" replace />} />
+          <Route path="/chat" element={<Navigate to="/" replace />} />
           <Route path="/evaluation" element={<Evaluation />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

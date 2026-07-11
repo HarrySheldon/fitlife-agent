@@ -43,6 +43,11 @@ select {
   gap: 28px;
 }
 
+.sidebar nav {
+  display: grid;
+  gap: 6px;
+}
+
 .brand-block {
   display: flex;
   align-items: center;
@@ -84,7 +89,6 @@ select {
   text-decoration: none;
   padding: 10px 12px;
   border-radius: 8px;
-  margin-bottom: 6px;
 }
 
 .nav-item.active,
@@ -923,6 +927,12 @@ pre {
 
   .sidebar {
     position: static;
+    padding: 18px;
+  }
+
+  .sidebar nav {
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    overflow-x: auto;
   }
 
   .metric-grid,
