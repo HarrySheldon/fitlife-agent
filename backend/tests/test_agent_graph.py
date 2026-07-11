@@ -73,30 +73,94 @@ def test_run_contextual_coach_action_adds_context_to_prompt_and_trace(monkeypatc
         return {
             "answer_markdown": "Contextual answer",
             "intent": "meal_analysis",
-            "trace": {"tool_calls": ["analyze_meals"]},
+            "trace": {"tool_calls": ["analyze_meals"], "llm_used": True, "llm_answer_used": True},
             "sources": [],
         }
 
     monkeypatch.setattr(agent_graph, "run_fitlife_agent", fake_run)
 
     result = agent_graph.run_contextual_coach_action(
-        surface="today",
-        action="suggest_next_meal",
+        surface="plan",
+        action="adjust_next_plan",
         date="2026-07-09",
         question="Keep it simple.",
         user_id="user-1",
     )
 
-    assert "Suggest the next meal" in str(captured["question"])
+    assert "Create a plan for next week" in str(captured["question"])
     assert "2026-07-09" in str(captured["question"])
     assert "Keep it simple." in str(captured["question"])
     assert captured["user_id"] == "user-1"
     assert result["trace"] == {
         "tool_calls": ["analyze_meals"],
-        "surface": "today",
-        "coach_action": "suggest_next_meal",
+        "llm_used": True,
+        "llm_answer_used": True,
+        "surface": "plan",
+        "coach_action": "adjust_next_plan",
         "context_date": "2026-07-09",
     }
+
+
+def test_contextual_next_meal_uses_selected_day_target_gaps(monkeypatch):
+    class Target:
+        def __init__(self, label: str, remaining: float):
+            self.label = label
+            self.remaining = remaining
+
+    class Summary:
+        meal_count = 2
+        training_sessions = 0
+
+    class Overview:
+        summary = Summary()
+        targets = [Target("Calories", 620), Target("Protein", 38)]
+
+    monkeypatch.setattr(
+        agent_graph,
+        "run_fitlife_agent",
+        lambda question, user_id=None: {
+            "answer_markdown": "generic weekly analysis",
+            "intent": "meal_analysis",
+            "trace": {"tool_calls": ["analyze_meals"], "llm_used": True, "llm_answer_used": True},
+            "sources": [],
+        },
+    )
+    monkeypatch.setattr(agent_graph, "build_today_overview", lambda day, user_id=None: Overview())
+
+    result = agent_graph.run_contextual_coach_action(
+        surface="today",
+        action="suggest_next_meal",
+        date="2026-07-09",
+        user_id="user-1",
+    )
+
+    assert "2026-07-09" in result["answer_markdown"]
+    assert "620 kcal" in result["answer_markdown"]
+    assert "38 g" in result["answer_markdown"]
+    assert "build_today_overview" in result["trace"]["tool_calls"]
+
+
+def test_contextual_target_suggestion_uses_deterministic_target_tool(monkeypatch):
+    monkeypatch.setattr(
+        agent_graph,
+        "run_fitlife_agent",
+        lambda question, user_id=None: {
+            "answer_markdown": "generic meal analysis",
+            "intent": "meal_analysis",
+            "trace": {"tool_calls": ["analyze_meals"], "llm_used": False},
+            "sources": [],
+        },
+    )
+
+    result = agent_graph.run_contextual_coach_action(
+        surface="profile",
+        action="suggest_targets",
+        date=None,
+    )
+
+    assert "Suggested targets" in result["answer_markdown"]
+    assert "Daily calories" in result["answer_markdown"]
+    assert "suggest_targets" in result["trace"]["tool_calls"]
 
 
 def test_planner_node_uses_llm_route_when_available(monkeypatch):
@@ -118,7 +182,7 @@ def test_writer_node_uses_llm_answer_when_available(monkeypatch):
 
     update = agent_graph.writer_node({"intent": "knowledge_qa", "tool_results": {}, "retrieved_docs": []})
 
-    assert update == {"final_answer": "## LLM Answer", "llm_used": True}
+    assert update == {"final_answer": "## LLM Answer", "llm_used": True, "llm_answer_used": True}
 
 
 @pytest.mark.parametrize(

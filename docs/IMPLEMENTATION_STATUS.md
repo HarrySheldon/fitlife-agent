@@ -64,7 +64,7 @@ Observed results:
 
 ## v0.2 Verification
 
-- Backend suite: `55 passed, 1 warning`.
+- Backend suite: `57 passed, 1 warning`.
 - Frontend production build: passed; `2398` modules transformed.
 - Runtime health: `GET /health` returned `success = true`.
 - Frontend dev entry: returned HTTP `200` with the React root element.

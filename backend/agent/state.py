@@ -21,4 +21,5 @@ class AgentState(TypedDict, total=False):
     validation_result: dict
     final_answer: str
     llm_used: bool
+    llm_answer_used: bool
     trace: dict

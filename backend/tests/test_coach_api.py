@@ -17,4 +17,6 @@ def test_coach_action_wraps_agent_with_context():
     assert data["surface"] == "today"
     assert data["action"] == "explain_today"
     assert data["answer_markdown"]
+    assert "Today's status" in data["answer_markdown"]
+    assert "2026-07-09" in data["answer_markdown"]
     assert data["trace"]["surface"] == "today"
