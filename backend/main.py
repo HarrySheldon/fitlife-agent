@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import auth, calendar, chat, dashboard, eval, health, plan, profile, report, upload
+from backend.api import auth, calendar, chat, dashboard, eval, health, plan, profile, report, today, upload
 from backend.config import get_settings
 
 
@@ -20,6 +20,7 @@ def create_app() -> FastAPI:
     app.include_router(profile.router)
     app.include_router(upload.router)
     app.include_router(calendar.router)
+    app.include_router(today.router)
     app.include_router(dashboard.router)
     app.include_router(chat.router)
     app.include_router(report.router)

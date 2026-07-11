@@ -106,6 +106,24 @@ class DailyDetail(BaseModel):
     workouts: list[WorkoutRecord]
 
 
+class TargetProgress(BaseModel):
+    label: str
+    current: float
+    target: float
+    unit: str
+    remaining: float
+    status: Literal["under", "met", "over"]
+
+
+class TodayOverview(BaseModel):
+    date: str
+    summary: DailySummary
+    meals: list[MealRecord]
+    workouts: list[WorkoutRecord]
+    targets: list[TargetProgress]
+    coach_actions: list[str]
+
+
 class AgentEntryRequest(BaseModel):
     date: str
     text: str = Field(min_length=1, max_length=1000)
