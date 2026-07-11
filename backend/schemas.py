@@ -8,6 +8,15 @@ T = TypeVar("T")
 ExperienceLevel = Literal["beginner", "novice", "experienced"]
 TrainingPreference = Literal["strength", "cardio", "mixed"]
 TargetMode = Literal["suggested", "manual"]
+CoachSurface = Literal["today", "logbook", "review", "plan", "profile"]
+CoachAction = Literal[
+    "explain_today",
+    "suggest_next_meal",
+    "adjust_today_training",
+    "explain_weekly_report",
+    "adjust_next_plan",
+    "suggest_targets",
+]
 
 
 class ApiResponse(BaseModel, Generic[T]):
@@ -122,6 +131,22 @@ class TodayOverview(BaseModel):
     workouts: list[WorkoutRecord]
     targets: list[TargetProgress]
     coach_actions: list[str]
+
+
+class CoachActionRequest(BaseModel):
+    surface: CoachSurface
+    action: CoachAction
+    date: str | None = None
+    question: str | None = Field(default=None, max_length=1000)
+
+
+class CoachActionResponse(BaseModel):
+    surface: CoachSurface
+    action: CoachAction
+    answer_markdown: str
+    intent: str
+    trace: dict
+    sources: list[dict] = Field(default_factory=list)
 
 
 class AgentEntryRequest(BaseModel):

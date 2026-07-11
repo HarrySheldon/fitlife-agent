@@ -64,6 +64,41 @@ def test_run_fitlife_agent_invokes_compiled_graph(monkeypatch):
     }
 
 
+def test_run_contextual_coach_action_adds_context_to_prompt_and_trace(monkeypatch):
+    captured: dict[str, str | None] = {}
+
+    def fake_run(question: str, user_id: str | None = None) -> dict:
+        captured["question"] = question
+        captured["user_id"] = user_id
+        return {
+            "answer_markdown": "Contextual answer",
+            "intent": "meal_analysis",
+            "trace": {"tool_calls": ["analyze_meals"]},
+            "sources": [],
+        }
+
+    monkeypatch.setattr(agent_graph, "run_fitlife_agent", fake_run)
+
+    result = agent_graph.run_contextual_coach_action(
+        surface="today",
+        action="suggest_next_meal",
+        date="2026-07-09",
+        question="Keep it simple.",
+        user_id="user-1",
+    )
+
+    assert "Suggest the next meal" in str(captured["question"])
+    assert "2026-07-09" in str(captured["question"])
+    assert "Keep it simple." in str(captured["question"])
+    assert captured["user_id"] == "user-1"
+    assert result["trace"] == {
+        "tool_calls": ["analyze_meals"],
+        "surface": "today",
+        "coach_action": "suggest_next_meal",
+        "context_date": "2026-07-09",
+    }
+
+
 def test_planner_node_uses_llm_route_when_available(monkeypatch):
     monkeypatch.setattr(
         agent_graph,

@@ -7,6 +7,9 @@ class AgentState(TypedDict, total=False):
     messages: list[dict]
     user_query: str
     current_user_id: str | None
+    surface: str | None
+    coach_action: str | None
+    context_date: str | None
     intent: str
     profile: dict
     tool_requests: dict

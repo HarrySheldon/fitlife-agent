@@ -31,6 +31,38 @@ def run_fitlife_agent(question: str, user_id: str | None = None) -> dict:
     return _format_agent_result(state)
 
 
+def run_contextual_coach_action(
+    surface: str,
+    action: str,
+    date: str | None,
+    question: str | None = None,
+    user_id: str | None = None,
+) -> dict:
+    prompt = _coach_prompt(surface, action, date, question)
+    result = run_fitlife_agent(prompt, user_id)
+    result["trace"] = {
+        **result.get("trace", {}),
+        "surface": surface,
+        "coach_action": action,
+        "context_date": date,
+    }
+    return result
+
+
+def _coach_prompt(surface: str, action: str, date: str | None, question: str | None) -> str:
+    base = {
+        "explain_today": "Explain today's calorie, protein, and training status using the user's records.",
+        "suggest_next_meal": "Suggest the next meal using today's remaining calorie and protein gap.",
+        "adjust_today_training": "Suggest a practical training adjustment for today based on the user's profile and records.",
+        "explain_weekly_report": "Explain the weekly report and identify the most important behavior change.",
+        "adjust_next_plan": "Adjust the next plan using recent records and the user's profile.",
+        "suggest_targets": "Suggest calorie and protein targets from the user's body state, goal, and training frequency.",
+    }[action]
+    suffix = f" Date: {date}." if date else ""
+    user_text = f" User question: {question}" if question else ""
+    return f"{base} Surface: {surface}.{suffix}{user_text}"
+
+
 def planner_node(state: AgentState) -> AgentState:
     llm_route = try_plan_route_with_llm(state["user_query"])
     route = llm_route or plan_route(state["user_query"])
