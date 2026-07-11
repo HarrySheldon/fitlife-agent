@@ -1,4 +1,5 @@
 import { ErrorState } from '../components/ErrorState'
+import { CoachPanel } from '../components/CoachPanel'
 import { LoadingState } from '../components/LoadingState'
 import { ProfileForm } from '../components/ProfileForm'
 import { useProfile } from '../hooks/useProfile'
@@ -12,10 +13,13 @@ export function Profile() {
   return (
     <div className="page-stack">
       <header className="page-header">
-        <span>User context</span>
-        <h1>Profile targets and constraints</h1>
+        <span>Personalization</span>
+        <h1>Profile</h1>
       </header>
-      <ProfileForm profile={profile} saving={saving} onChange={setProfile} onSave={save} />
+      <div className="profile-layout">
+        <ProfileForm profile={profile} saving={saving} onChange={setProfile} onSave={save} />
+        <CoachPanel surface="profile" actions={[{ action: 'suggest_targets', label: 'Analyze my targets' }]} />
+      </div>
     </div>
   )
 }

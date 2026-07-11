@@ -613,6 +613,10 @@ select {
 }
 
 .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 0;
   border-radius: 8px;
   background: #216869;
@@ -1150,6 +1154,138 @@ pre {
   color: #d9917f;
 }
 
+.primary-button svg {
+  flex: 0 0 auto;
+}
+
+.calendar-strip {
+  display: grid;
+  grid-template-columns: repeat(30, minmax(86px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.logbook-tools {
+  display: grid;
+  gap: 14px;
+}
+
+.logbook-tools .entry-composer h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.import-tool {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+  border-top: 1px solid #ded4c5;
+  padding-top: 18px;
+}
+
+.import-tool h2,
+.import-tool p {
+  margin: 4px 0 0;
+}
+
+.import-tool > div > span,
+.plan-sections > section > span,
+.validation-summary div span {
+  color: #216869;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.import-tool .upload-box {
+  min-height: 96px;
+  box-shadow: none;
+}
+
+.review-layout,
+.plan-layout,
+.profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 24px;
+  align-items: start;
+}
+
+.review-main {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+.validation-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #cbbfac;
+  border-left: 5px solid #d7b377;
+  padding: 14px 16px;
+  background: #fffaf1;
+}
+
+.validation-summary.passed {
+  border-left-color: #4f7d55;
+}
+
+.validation-summary div strong,
+.validation-summary div span {
+  display: block;
+}
+
+.validation-summary div strong {
+  margin-top: 4px;
+}
+
+.validation-summary > span {
+  color: #68776d;
+}
+
+.validation-findings {
+  margin: 0;
+  border-inline: 1px solid #ded4c5;
+  padding: 14px 36px;
+  background: #fffaf1;
+}
+
+.plan-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.plan-sections > section {
+  min-width: 0;
+}
+
+.plan-sections h2 {
+  margin: 5px 0 12px;
+  font-size: 20px;
+}
+
+.plan-sections pre {
+  min-height: 360px;
+  margin: 0;
+}
+
+.profile-layout .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-grid input:disabled {
+  background: #eee9df;
+  color: #68776d;
+  cursor: not-allowed;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1215,9 +1351,15 @@ pre {
   }
 
   .today-workspace,
+  .review-layout,
+  .plan-layout,
+  .profile-layout,
   .daily-log-grid,
   .target-grid,
-  .compact-entry-form {
+  .compact-entry-form,
+  .plan-sections,
+  .import-tool,
+  .profile-layout .form-grid {
     grid-template-columns: 1fr;
   }
 
