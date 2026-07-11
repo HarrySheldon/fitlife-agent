@@ -920,6 +920,236 @@ pre {
   color: #a3402d;
 }
 
+.today-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 24px;
+  align-items: start;
+}
+
+.today-main {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.target-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid #ded4c5;
+}
+
+.target-progress {
+  padding: 18px;
+  border-right: 1px solid #ded4c5;
+}
+
+.target-progress:last-child {
+  border-right: 0;
+}
+
+.target-progress-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.target-progress-heading span,
+.target-progress small {
+  color: #68776d;
+  font-size: 13px;
+}
+
+.target-progress-heading strong {
+  font-size: 15px;
+}
+
+.target-progress-track {
+  height: 7px;
+  margin: 14px 0 9px;
+  overflow: hidden;
+  background: #ded4c5;
+}
+
+.target-progress-track span {
+  display: block;
+  height: 100%;
+  background: #216869;
+  transition: width 240ms ease;
+}
+
+.target-progress.met .target-progress-track span {
+  background: #4f7d55;
+}
+
+.target-progress.over .target-progress-track span {
+  background: #a3402d;
+}
+
+.daily-log-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.daily-log-section > header,
+.entry-composer > header,
+.coach-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid #ded4c5;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.daily-log-section h2,
+.entry-composer h2,
+.coach-panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.daily-log-section > header span {
+  margin-left: auto;
+  min-width: 28px;
+  text-align: center;
+  color: #216869;
+  font-weight: 800;
+}
+
+.entry-composer {
+  border: 1px solid #cbbfac;
+  border-radius: 8px;
+  background: #fffaf1;
+  padding: 18px;
+}
+
+.entry-composer > header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.entry-composer > header > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.entry-mode {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #ded4c5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.entry-mode button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-right: 1px solid #ded4c5;
+  padding: 8px 11px;
+  background: #fffdf8;
+  color: #55645b;
+  cursor: pointer;
+}
+
+.entry-mode button:last-child {
+  border-right: 0;
+}
+
+.entry-mode button.active {
+  background: #216869;
+  color: #ffffff;
+}
+
+.compact-entry-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+}
+
+.compact-entry-form input {
+  min-width: 0;
+}
+
+.coach-panel {
+  position: sticky;
+  top: 0;
+  border: 1px solid #28433a;
+  border-radius: 8px;
+  background: #17211d;
+  color: #f4f1ea;
+  padding: 18px;
+}
+
+.coach-panel > header {
+  border-color: #28433a;
+  align-items: flex-start;
+}
+
+.coach-panel > header svg {
+  color: #d7b377;
+  margin-top: 2px;
+}
+
+.coach-panel header span {
+  color: #a8b5aa;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.coach-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.coach-actions button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  border: 1px solid #405c52;
+  border-radius: 8px;
+  background: #21342e;
+  color: #f4f1ea;
+  padding: 9px 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.coach-actions button:hover {
+  border-color: #d7b377;
+}
+
+.coach-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.coach-answer,
+.coach-empty {
+  margin: 16px 0 0;
+  color: #dbe5dc;
+  line-height: 1.6;
+}
+
+.coach-answer > :first-child {
+  margin-top: 0;
+}
+
+.coach-answer > :last-child {
+  margin-bottom: 0;
+}
+
+.form-error {
+  color: #d9917f;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -982,6 +1212,31 @@ pre {
   .evaluation-row,
   .check-grid {
     grid-template-columns: 1fr;
+  }
+
+  .today-workspace,
+  .daily-log-grid,
+  .target-grid,
+  .compact-entry-form {
+    grid-template-columns: 1fr;
+  }
+
+  .target-progress {
+    border-right: 0;
+    border-bottom: 1px solid #ded4c5;
+  }
+
+  .target-progress:last-child {
+    border-bottom: 0;
+  }
+
+  .coach-panel {
+    position: static;
+  }
+
+  .entry-composer > header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .form-grid .wide {

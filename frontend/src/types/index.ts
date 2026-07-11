@@ -16,6 +16,9 @@ export interface UserProfile {
   target_weight_kg: number
   daily_calorie_target: number
   daily_protein_target: number
+  experience_level: 'beginner' | 'novice' | 'experienced'
+  training_preference: 'strength' | 'cardio' | 'mixed'
+  target_mode: 'suggested' | 'manual'
 }
 
 export interface AuthenticatedUser {
@@ -79,6 +82,49 @@ export interface DailyDetail {
   summary: DailySummary
   meals: MealRecord[]
   workouts: WorkoutRecord[]
+}
+
+export interface TargetProgress {
+  label: string
+  current: number
+  target: number
+  unit: string
+  remaining: number
+  status: 'under' | 'met' | 'over'
+}
+
+export interface TodayOverview {
+  date: string
+  summary: DailySummary
+  meals: MealRecord[]
+  workouts: WorkoutRecord[]
+  targets: TargetProgress[]
+  coach_actions: CoachAction[]
+}
+
+export type CoachSurface = 'today' | 'logbook' | 'review' | 'plan' | 'profile'
+export type CoachAction =
+  | 'explain_today'
+  | 'suggest_next_meal'
+  | 'adjust_today_training'
+  | 'explain_weekly_report'
+  | 'adjust_next_plan'
+  | 'suggest_targets'
+
+export interface CoachActionRequest {
+  surface: CoachSurface
+  action: CoachAction
+  date?: string
+  question?: string
+}
+
+export interface CoachActionResponse {
+  surface: CoachSurface
+  action: CoachAction
+  answer_markdown: string
+  intent: string
+  trace: Record<string, unknown>
+  sources: Array<{ source: string; heading?: string; text?: string }>
 }
 
 export interface AgentEntryResponse {
