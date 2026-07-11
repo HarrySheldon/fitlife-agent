@@ -1,7 +1,17 @@
 # FitLife Agent Implementation Status
 
-**Date:** 2026-07-05
-**Status:** MVP implemented, merged into `main`, and pushed to `origin/main`.
+**Date:** 2026-07-11
+**Status:** v0.2 Today-first product implemented and verified on `codex/today-first-v0-2`.
+
+## v0.2 Product Navigation
+
+- Today-first authenticated home page with target progress, smart/form record entry, and contextual Coach actions.
+- Logbook owns calendar history, dated record forms, and CSV import.
+- Review owns trends, weekly report generation, and report explanation.
+- Plan owns plan generation, validation, and adjustment.
+- Profile owns personalization fields, target mode, constraints, and target analysis.
+- Evaluation remains available as a direct developer route and is excluded from ordinary navigation.
+- Legacy Dashboard, Records, Upload, Report, and Chat URLs redirect into the product hierarchy.
 
 ## Implemented
 
@@ -16,7 +26,7 @@
 - Evaluation v2 runner with structured per-case checks, failure reasons, grouped metrics, JSON artifact, and Markdown artifact.
 - Demo user registration/login with username, email, or phone identifiers, bearer-token sessions, per-user local data directories, and no external email/SMS verification provider.
 - Calendar APIs for daily summaries, daily details, meal form entry, workout form entry, smart text entry, and CSV import.
-- React + Vite + TypeScript frontend with protected Dashboard, Records, Profile, Chat, Weekly Report, Plan, and Evaluation pages.
+- React + Vite + TypeScript frontend with protected Today, Logbook, Review, Plan, and Profile pages plus a developer-only Evaluation route.
 - Evaluation frontend displays aggregate rates, grouped metrics, failed cases, and check-level pass/fail details.
 - Docker Compose, backend Dockerfile, frontend Dockerfile, `.env.example`, README, and project vocabulary docs.
 
@@ -51,6 +61,15 @@ Observed results:
 
 - `StarletteDeprecationWarning` from FastAPI `TestClient` / httpx compatibility during backend tests.
 - Vite production build warns that `dist/assets/index-*.js` is larger than 500 kB. This is acceptable for the current MVP; future polish can add route-level code splitting.
+
+## v0.2 Verification
+
+- Backend suite: `55 passed, 1 warning`.
+- Frontend production build: passed; `2398` modules transformed.
+- Runtime health: `GET /health` returned `success = true`.
+- Frontend dev entry: returned HTTP `200` with the React root element.
+- Authenticated smoke flow: local registration, `GET /today`, and `POST /coach/action` passed with user-scoped bearer authentication.
+- Automated visual browser inspection was unavailable in the verification environment; authenticated page appearance remains a manual browser check.
 
 ## Environment Notes
 

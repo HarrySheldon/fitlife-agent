@@ -2,7 +2,7 @@
 
 FitLife Agent is an open-source Agentic RAG project for personal fitness and diet management. It combines user profile data, meal records, workout records, a small Markdown knowledge base, deterministic Python analysis tools, a LangGraph-ready agent workflow, FastAPI APIs, and a React + Vite frontend.
 
-The project is designed as a resume-ready AI Agent engineering internship portfolio project. It focuses on a working MVP loop: register or log in, maintain calendar-based meal and workout records, analyze records, retrieve knowledge, answer questions, generate weekly reports, generate next-week plans, validate plan safety, and run automated evaluation cases.
+The project is designed as a resume-ready AI Agent engineering internship portfolio project and a locally deliverable product. Its main loop is record-driven: register or log in, maintain meal and workout records from Today, review history and weekly trends, generate the next plan, and ask the contextual Coach for analysis without leaving the active workspace.
 
 ## What It Demonstrates
 
@@ -12,7 +12,7 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 - Optional OpenAI-compatible planner/writer and embedding adapters, disabled by default for local demos
 - Demo user management with username, email, or phone login, bearer-token sessions, and per-user local data files
 - FastAPI backend with typed Pydantic schemas
-- React + Vite + TypeScript frontend
+- Today-first React + Vite + TypeScript frontend with contextual Coach actions
 - Structured plan validation and Evaluation v2 reporting
 - Docker Compose deployment path
 
@@ -103,17 +103,17 @@ EMBEDDING_MODEL=
 
 When `LLM_ENABLED=true` and an API key is available, the adapter can call an OpenAI-compatible Responses API for planner/writer behavior. If configuration is missing or a call fails, the agent falls back to deterministic local logic.
 
-## Demo Script
+## Product Flow
 
 1. Start the backend and frontend.
-2. Register a local account by choosing username, email, or phone as the account identifier.
-3. Open Records and add one meal, one workout, or one smart text entry for the selected date.
-4. Open the Dashboard to inspect the selected day and current-week summary.
-5. Ask the Chat page: `Did I hit my protein target this week?`
-6. Ask: `What can replace chicken breast for protein?`
-7. Generate a weekly report.
-8. Generate a next-week plan and inspect validator output.
-9. Run Evaluation and review grouped metrics plus failed-case details.
+2. Register or log in with a local username, email, or phone identifier.
+3. Complete Profile with body state, goal, experience level, training focus, target mode, and restrictions.
+4. Open Today and record a meal or workout with smart entry or a compact form.
+5. Use the contextual Coach to explain daily progress, suggest the next meal, or adjust today's training.
+6. Open Logbook to inspect calendar history, add records for an earlier date, or import CSV data.
+7. Open Review to inspect trends, generate a weekly report, and ask the Coach to explain patterns.
+8. Open Plan to generate and validate the next diet and training plan.
+9. Use `/evaluation` separately when testing Agent quality; it is intentionally outside ordinary product navigation.
 
 ## Sample Questions
 
@@ -157,7 +157,7 @@ FitLife Agent provides general lifestyle management suggestions only. It does no
 
 - Built a LangGraph-based FitLife Coach Agent with deterministic tool calling, vector RAG, plan validation, and FastAPI endpoints for fitness and nutrition workflows.
 - Implemented local-first Evaluation v2 with structured per-case graders, failure reasons, grouped metrics, and JSON/Markdown artifacts.
-- Designed a React + Vite + TypeScript frontend with login/register, calendar-based record maintenance, dashboard analytics, chat, report generation, plan generation, profile management, CSV import, and evaluation review.
+- Designed a Today-first React + Vite + TypeScript product with contextual Agent actions, calendar-based records, weekly review, validated plan generation, profile personalization, CSV import, and a separate developer evaluation surface.
 
 ## Chinese Resume Description
 
