@@ -155,6 +155,8 @@ class CoachActionResponse(BaseModel):
     intent: str
     trace: dict
     sources: list[dict] = Field(default_factory=list)
+    model: str
+    request_id: str
 
 
 class AgentEntryRequest(BaseModel):
@@ -187,6 +189,9 @@ class ChatResponse(BaseModel):
     answer_markdown: str
     intent: str
     trace: dict
+    sources: list[dict] = Field(default_factory=list)
+    model: str
+    request_id: str
 
 
 class WeeklyReport(BaseModel):

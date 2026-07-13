@@ -6,7 +6,20 @@ from backend.schemas import EvalCase
 from backend.tools.data_access import data_path
 
 
-def test_run_evaluation_returns_metrics_and_cases():
+def test_run_evaluation_returns_metrics_and_cases(monkeypatch):
+    monkeypatch.setattr(
+        evaluation,
+        "run_fitlife_agent",
+        lambda question: {
+            "answer_markdown": "## Model answer",
+            "trace": {
+                "tool_calls": [],
+                "retrieved_sources": [],
+                "validation_passed": True,
+            },
+        },
+    )
+
     result = run_evaluation(limit=3)
 
     assert result["total_tests"] == 3

@@ -49,7 +49,7 @@ Run: `pytest backend/tests/test_api_contracts.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/domain/errors.py backend/schemas.py backend/api/utils.py backend/main.py backend/tests/test_api_contracts.py
@@ -113,7 +113,7 @@ Run: `pytest backend/tests/application/test_ports.py backend/tests/infrastructur
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/application backend/infrastructure backend/tools/data_access.py backend/tests/application backend/tests/infrastructure
@@ -161,7 +161,7 @@ Run: `pytest backend/tests/application/test_deterministic_use_cases.py backend/t
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/application/use_cases backend/api/report.py backend/api/plan.py backend/tests/application/test_deterministic_use_cases.py backend/tests/test_api_basic.py
@@ -184,7 +184,7 @@ git commit -m "refactor: isolate deterministic report and plan use cases"
 - Modify: `backend/tests/test_chat_api.py`
 - Modify: `backend/tests/test_coach_api.py`
 
-- [ ] **Step 1: Write failing boundary tests**
+- [x] **Step 1: Write failing boundary tests**
 
 ```python
 def test_agent_without_gateway_fails_instead_of_writing_template(monkeypatch):
@@ -199,17 +199,17 @@ def test_coach_keeps_model_answer(monkeypatch, fake_gateway):
     assert result["answer_markdown"] == fake_gateway.answer
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `pytest backend/tests/application/test_agent_boundary.py backend/tests/test_agent_graph.py backend/tests/test_chat_api.py backend/tests/test_coach_api.py -q`
 
 Expected: FAIL because current code falls back to `plan_route`, `write_answer`, and `_deterministic_coach_answer`.
 
-- [ ] **Step 3: Implement the explicit Agent boundary**
+- [x] **Step 3: Implement the explicit Agent boundary**
 
 Build the environment-backed OpenAI adapter behind `ModelGateway`. Inject repository and gateway into graph nodes. Raise stable configuration/model errors when no gateway exists or invocation fails. Delete deterministic writer fallback and Coach answer replacement; deterministic tool output may be supplied as model context but never presented as a successful Agent answer.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run: `pytest backend/tests/application/test_agent_boundary.py backend/tests/test_agent_graph.py backend/tests/test_llm_adapter.py backend/tests/test_chat_api.py backend/tests/test_coach_api.py -q`
 

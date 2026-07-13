@@ -26,3 +26,33 @@ def ai_not_configured_error() -> ApplicationError:
         status_code=409,
         processing_mode="agent",
     )
+
+
+def model_gateway_error(error: Exception) -> ApplicationError:
+    error_name = type(error).__name__.lower()
+    if isinstance(error, TimeoutError) or "timeout" in error_name:
+        code = "MODEL_TIMEOUT"
+        message = "The model did not respond before the request timed out."
+        status_code = 504
+    elif "authentication" in error_name or "permission" in error_name:
+        code = "MODEL_AUTH_FAILED"
+        message = "The model provider rejected the configured credentials."
+        status_code = 502
+    elif "notfound" in error_name:
+        code = "MODEL_NOT_FOUND"
+        message = "The configured model could not be found."
+        status_code = 422
+    elif "ratelimit" in error_name:
+        code = "MODEL_RATE_LIMITED"
+        message = "The model provider rate limit was reached."
+        status_code = 429
+    else:
+        code = "MODEL_PROTOCOL_ERROR"
+        message = "The model provider returned an invalid or unsupported response."
+        status_code = 502
+    return ApplicationError(
+        code=code,
+        message=message,
+        status_code=status_code,
+        processing_mode="agent",
+    )

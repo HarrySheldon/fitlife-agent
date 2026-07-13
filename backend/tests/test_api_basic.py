@@ -24,11 +24,14 @@ def test_profile_and_dashboard_endpoints_return_data():
     assert "today_calories" in dashboard.json()["data"]
 
 
-def test_report_plan_and_eval_endpoints_smoke():
+def test_deterministic_generation_works_without_model_but_eval_requires_one():
     report = client.post("/report/weekly")
     plan = client.post("/plan/generate")
     eval_result = client.post("/eval/run", json={"limit": 3})
 
     assert report.json()["success"] is True
+    assert report.json()["processing_mode"] == "deterministic"
     assert plan.json()["success"] is True
-    assert eval_result.json()["success"] is True
+    assert plan.json()["processing_mode"] == "deterministic"
+    assert eval_result.status_code == 409
+    assert eval_result.json()["error"]["code"] == "AI_NOT_CONFIGURED"

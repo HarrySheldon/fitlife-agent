@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from backend.agent.llm_adapter import (
     OpenAIResponsesAdapter,
     build_llm_adapter,
-    try_plan_route_with_llm,
-    try_write_answer_with_llm,
 )
 from backend.agent.planner import PlannerRoute
 from backend.config import Settings
@@ -101,16 +101,17 @@ def test_openai_responses_adapter_writes_answer_with_responses_create():
     assert "meal_templates.md" in responses.create_calls[0]["input"]
 
 
-def test_try_plan_route_with_llm_returns_none_when_adapter_fails():
-    class BrokenAdapter:
-        def plan_route(self, question: str):
-            raise RuntimeError("provider failed")
+def test_openai_responses_adapter_rejects_missing_structured_route():
+    responses = FakeResponses(parsed_route=None)
+    adapter = OpenAIResponsesAdapter(client=FakeClient(responses), model="test-model")
 
-    assert try_plan_route_with_llm("Create a plan", adapter=BrokenAdapter()) is None
+    with pytest.raises(ValueError, match="structured output"):
+        adapter.plan_route("Create a plan")
 
 
-def test_try_write_answer_with_llm_returns_none_for_blank_output():
+def test_openai_responses_adapter_rejects_blank_output():
     responses = FakeResponses(output_text="   ")
     adapter = OpenAIResponsesAdapter(client=FakeClient(responses), model="test-model")
 
-    assert try_write_answer_with_llm({"user_query": "hello"}, adapter=adapter) is None
+    with pytest.raises(ValueError, match="contain text"):
+        adapter.write_answer({"user_query": "hello"})

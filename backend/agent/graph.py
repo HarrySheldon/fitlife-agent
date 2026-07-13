@@ -1,38 +1,34 @@
 from __future__ import annotations
 
-from datetime import date as date_type
+from uuid import uuid4
 
 from backend.agent.generator import generate_plan
-from backend.agent.llm_adapter import build_llm_adapter, try_plan_route_with_llm, try_write_answer_with_llm
-from backend.agent.planner import plan_route
 from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
-from backend.agent.writer import write_answer
+from backend.application.ports.fitness_repository import FitnessRepository
+from backend.application.ports.model_gateway import ModelGateway
+from backend.domain.errors import ApplicationError, ai_not_configured_error, model_gateway_error
+from backend.infrastructure.model_gateway.openai_responses import build_model_gateway
+from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
 from backend.rag.retriever import retrieve_knowledge
-from backend.domain.errors import ai_not_configured_error
-from backend.tools.data_access import read_meals, read_profile, read_workouts
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.report_generator import generate_weekly_report
-from backend.tools.target_suggestions import suggest_targets
-from backend.tools.today_overview import build_today_overview
 from backend.tools.workout_analyzer import analyze_workouts
 
 
-DETERMINISTIC_CONTEXT_ACTIONS = {
-    "explain_today",
-    "suggest_next_meal",
-    "adjust_today_training",
-    "suggest_targets",
-}
-
-
-def run_fitlife_agent(question: str, user_id: str | None = None) -> dict:
-    if build_llm_adapter() is None:
+def run_fitlife_agent(
+    question: str,
+    user_id: str | None = None,
+    *,
+    repository: FitnessRepository | None = None,
+    gateway: ModelGateway | None = None,
+) -> dict:
+    repository = repository or FileFitnessRepository()
+    gateway = gateway or build_model_gateway()
+    if gateway is None:
         raise ai_not_configured_error()
-    graph = build_graph()
-    if graph is None:
-        raise RuntimeError("LangGraph workflow could not be built")
 
+    graph = build_graph(repository=repository, gateway=gateway)
     state = graph.invoke(
         {
             "messages": [{"role": "user", "content": question}],
@@ -43,7 +39,7 @@ def run_fitlife_agent(question: str, user_id: str | None = None) -> dict:
             "retrieved_docs": [],
         }
     )
-    return _format_agent_result(state)
+    return _format_agent_result(state, model=gateway.model)
 
 
 def run_contextual_coach_action(
@@ -52,20 +48,19 @@ def run_contextual_coach_action(
     date: str | None,
     question: str | None = None,
     user_id: str | None = None,
+    *,
+    repository: FitnessRepository | None = None,
+    gateway: ModelGateway | None = None,
 ) -> dict:
     prompt = _coach_prompt(surface, action, date, question)
-    result = run_fitlife_agent(prompt, user_id)
-    trace = dict(result.get("trace", {}))
-    if action in DETERMINISTIC_CONTEXT_ACTIONS or not trace.get("llm_answer_used", False):
-        answer, context_tools = _deterministic_coach_answer(action, date, user_id, result)
-        result["answer_markdown"] = answer
-        tool_calls = list(trace.get("tool_calls", []))
-        for tool_name in context_tools:
-            if tool_name not in tool_calls:
-                tool_calls.append(tool_name)
-        trace["tool_calls"] = tool_calls
+    result = run_fitlife_agent(
+        prompt,
+        user_id,
+        repository=repository,
+        gateway=gateway,
+    )
     result["trace"] = {
-        **trace,
+        **result.get("trace", {}),
         "surface": surface,
         "coach_action": action,
         "context_date": date,
@@ -87,182 +82,77 @@ def _coach_prompt(surface: str, action: str, date: str | None, question: str | N
     return f"{base} Surface: {surface}.{suffix}{user_text}"
 
 
-def _deterministic_coach_answer(
-    action: str,
-    date: str | None,
-    user_id: str | None,
-    result: dict,
-) -> tuple[str, list[str]]:
-    if action == "suggest_targets":
-        suggestion = suggest_targets(read_profile(user_id))
-        return (
-            "\n".join(
-                [
-                    "## Suggested targets",
-                    f"- Daily calories: {suggestion.daily_calorie_target} kcal",
-                    f"- Daily protein: {suggestion.daily_protein_target} g",
-                    f"- Rationale: {suggestion.rationale}",
-                ]
-            ),
-            ["suggest_targets"],
-        )
+def build_graph(
+    *,
+    repository: FitnessRepository,
+    gateway: ModelGateway,
+):
+    from langgraph.graph import END, START, StateGraph
 
-    if action == "explain_weekly_report":
-        report = result.get("tool_results", {}).get("weekly_report", {})
-        sections = "\n".join(
-            f"### {item['title']}\n{item['content']}" for item in report.get("sections", [])
-        )
-        checklist = "\n".join(f"- {item}" for item in report.get("checklist", []))
-        if sections or checklist:
-            return f"## Weekly review\n{sections}\n\n### Next actions\n{checklist}", []
-        return result.get("answer_markdown", ""), []
-
-    if action == "adjust_next_plan":
-        plan = result.get("tool_results", {}).get("generated_plan", {})
-        diet = plan.get("diet_plan", {})
-        validation = plan.get("validation", {})
-        findings = validation.get("warnings", []) + validation.get("violations", [])
-        finding_text = "\n".join(f"- {item}" for item in findings) or "- No blocking validation findings."
-        if plan:
-            return (
-                "\n".join(
-                    [
-                        "## Adjusted next plan",
-                        f"- Daily calories: {diet.get('daily_calorie_target')} kcal",
-                        f"- Daily protein: {diet.get('daily_protein_target')} g",
-                        "### Validation",
-                        finding_text,
-                    ]
-                ),
-                [],
-            )
-        return result.get("answer_markdown", ""), []
-
-    day = date or date_type.today().isoformat()
-    overview = build_today_overview(day, user_id)
-    targets = {target.label: target for target in overview.targets}
-    calories = targets["Calories"]
-    protein = targets["Protein"]
-
-    if action == "explain_today":
-        return (
-            "\n".join(
-                [
-                    f"## Today's status — {day}",
-                    f"- Calories: {calories.current:.0f} / {calories.target:.0f} kcal",
-                    f"- Protein: {protein.current:.0f} / {protein.target:.0f} g",
-                    f"- Meals recorded: {overview.summary.meal_count}",
-                    f"- Training sessions: {overview.summary.training_sessions}",
-                ]
-            ),
-            ["build_today_overview"],
-        )
-
-    if action == "suggest_next_meal":
-        calorie_gap = max(0, calories.remaining)
-        protein_gap = max(0, protein.remaining)
-        if calorie_gap == 0 and protein_gap == 0:
-            suggestion = "Daily calorie and protein targets are already met; choose a light meal only if hungry."
-        elif protein_gap >= 30:
-            suggestion = "Prioritize a lean protein serving with vegetables and a moderate carbohydrate portion."
-        else:
-            suggestion = "Choose a balanced meal with one protein serving and adjust the portion to the calorie gap."
-        return (
-            "\n".join(
-                [
-                    f"## Next meal — {day}",
-                    f"- Remaining: {calorie_gap:.0f} kcal and {protein_gap:.0f} g protein",
-                    f"- Suggestion: {suggestion}",
-                ]
-            ),
-            ["build_today_overview"],
-        )
-
-    profile = read_profile(user_id)
-    if overview.summary.training_sessions > 0:
-        training_text = "A session is already recorded. Keep the next block light and prioritize recovery."
-    else:
-        training_text = (
-            f"No session is recorded. Schedule one practical {profile.training_preference} session "
-            f"that fits your {profile.weekly_training_frequency}-day weekly target."
-        )
-    return (
-        f"## Training adjustment — {day}\n- {training_text}",
-        ["build_today_overview", "load_profile"],
+    builder = StateGraph(AgentState)
+    builder.add_node("planner", lambda state: planner_node(state, gateway))
+    builder.add_node("profile_loader", lambda state: profile_loader_node(state, repository))
+    builder.add_node("data_analyzer", lambda state: data_analyzer_node(state, repository))
+    builder.add_node("retriever", retriever_node)
+    builder.add_node("generator", lambda state: generator_node(state, repository))
+    builder.add_node("validator", validator_node)
+    builder.add_node("writer", lambda state: writer_node(state, gateway))
+    builder.add_node("trace_builder", trace_builder_node)
+    builder.add_edge(START, "planner")
+    builder.add_edge("planner", "profile_loader")
+    builder.add_edge("profile_loader", "data_analyzer")
+    builder.add_conditional_edges(
+        "data_analyzer",
+        route_after_analysis,
+        {"retriever": "retriever", "generator": "generator"},
     )
+    builder.add_edge("retriever", "generator")
+    builder.add_edge("generator", "validator")
+    builder.add_edge("validator", "writer")
+    builder.add_edge("writer", "trace_builder")
+    builder.add_edge("trace_builder", END)
+    return builder.compile()
 
 
-def planner_node(state: AgentState) -> AgentState:
-    llm_route = try_plan_route_with_llm(state["user_query"])
-    route = llm_route or plan_route(state["user_query"])
-    update: AgentState = {"intent": route.intent, "tool_requests": route.model_dump()}
-    if llm_route is not None:
-        update["llm_used"] = True
-    return update
-
-
-def build_graph():
-    try:
-        from langgraph.graph import END, START, StateGraph
-
-        builder = StateGraph(AgentState)
-        builder.add_node("planner", planner_node)
-        builder.add_node("profile_loader", profile_loader_node)
-        builder.add_node("data_analyzer", data_analyzer_node)
-        builder.add_node("retriever", retriever_node)
-        builder.add_node("generator", generator_node)
-        builder.add_node("validator", validator_node)
-        builder.add_node("writer", writer_node)
-        builder.add_node("trace_builder", trace_builder_node)
-        builder.add_edge(START, "planner")
-        builder.add_edge("planner", "profile_loader")
-        builder.add_edge("profile_loader", "data_analyzer")
-        builder.add_conditional_edges(
-            "data_analyzer",
-            route_after_analysis,
-            {"retriever": "retriever", "generator": "generator"},
-        )
-        builder.add_edge("retriever", "generator")
-        builder.add_edge("generator", "validator")
-        builder.add_edge("validator", "writer")
-        builder.add_edge("writer", "trace_builder")
-        builder.add_edge("trace_builder", END)
-        return builder.compile()
-    except Exception:
-        return None
-
-
-def profile_loader_node(state: AgentState) -> AgentState:
+def planner_node(state: AgentState, gateway: ModelGateway) -> AgentState:
+    route = _invoke_model(lambda: gateway.plan_route(state["user_query"]))
     return {
-        "profile": read_profile(state.get("current_user_id")).model_dump(),
+        "intent": route.intent,
+        "tool_requests": route.model_dump(),
+        "llm_used": True,
+    }
+
+
+def profile_loader_node(state: AgentState, repository: FitnessRepository) -> AgentState:
+    return {
+        "profile": repository.read_profile(state.get("current_user_id")).model_dump(),
         "tool_calls": _append_tool_call(state, "load_profile"),
     }
 
 
-def data_analyzer_node(state: AgentState) -> AgentState:
+def data_analyzer_node(state: AgentState, repository: FitnessRepository) -> AgentState:
     route = _route(state)
     profile = state["profile"]
     tool_results = dict(state.get("tool_results", {}))
     tool_calls = list(state.get("tool_calls", []))
+    user_id = state.get("current_user_id")
 
     if route.get("needs_meal_analysis"):
         tool_calls = _append_tool_call({"tool_calls": tool_calls}, "analyze_meals")
         tool_results["meal_analysis"] = analyze_meals(
-            read_meals(state.get("current_user_id")),
+            repository.read_meals(user_id),
             calorie_target=profile["daily_calorie_target"],
             protein_target=profile["daily_protein_target"],
         )
     if route.get("needs_workout_analysis"):
         tool_calls = _append_tool_call({"tool_calls": tool_calls}, "analyze_workouts")
-        tool_results["workout_analysis"] = analyze_workouts(read_workouts(state.get("current_user_id")))
+        tool_results["workout_analysis"] = analyze_workouts(repository.read_workouts(user_id))
 
     return {"tool_calls": tool_calls, "tool_results": tool_results}
 
 
 def route_after_analysis(state: AgentState) -> str:
-    if _route(state).get("needs_retrieval"):
-        return "retriever"
-    return "generator"
+    return "retriever" if _route(state).get("needs_retrieval") else "generator"
 
 
 def retriever_node(state: AgentState) -> AgentState:
@@ -276,17 +166,18 @@ def retriever_node(state: AgentState) -> AgentState:
     }
 
 
-def generator_node(state: AgentState) -> AgentState:
+def generator_node(state: AgentState, repository: FitnessRepository) -> AgentState:
     route = _route(state)
     profile = state["profile"]
     tool_results = dict(state.get("tool_results", {}))
     tool_calls = list(state.get("tool_calls", []))
+    user_id = state.get("current_user_id")
 
     if route.get("needs_report"):
         meal_result = tool_results.get("meal_analysis")
         if meal_result is None:
             meal_result = analyze_meals(
-                read_meals(state.get("current_user_id")),
+                repository.read_meals(user_id),
                 calorie_target=profile["daily_calorie_target"],
                 protein_target=profile["daily_protein_target"],
             )
@@ -294,7 +185,7 @@ def generator_node(state: AgentState) -> AgentState:
 
         workout_result = tool_results.get("workout_analysis")
         if workout_result is None:
-            workout_result = analyze_workouts(read_workouts(state.get("current_user_id")))
+            workout_result = analyze_workouts(repository.read_workouts(user_id))
             tool_calls = _append_tool_call({"tool_calls": tool_calls}, "analyze_workouts")
 
         tool_results["weekly_report"] = generate_weekly_report(profile, meal_result, workout_result)
@@ -325,11 +216,11 @@ def validator_node(state: AgentState) -> AgentState:
     }
 
 
-def writer_node(state: AgentState) -> AgentState:
-    llm_answer = try_write_answer_with_llm(state)
-    if llm_answer:
-        return {"final_answer": llm_answer, "llm_used": True, "llm_answer_used": True}
-    return {"final_answer": write_answer(state)}
+def writer_node(state: AgentState, gateway: ModelGateway) -> AgentState:
+    answer = _invoke_model(lambda: gateway.write_answer(state))
+    if not answer.strip():
+        raise model_gateway_error(ValueError("Model returned a blank answer"))
+    return {"final_answer": answer, "llm_used": True, "llm_answer_used": True}
 
 
 def trace_builder_node(state: AgentState) -> AgentState:
@@ -347,13 +238,24 @@ def trace_builder_node(state: AgentState) -> AgentState:
     return {"trace": trace}
 
 
-def _format_agent_result(state: dict) -> dict:
+def _invoke_model(operation):
+    try:
+        return operation()
+    except ApplicationError:
+        raise
+    except Exception as error:
+        raise model_gateway_error(error) from None
+
+
+def _format_agent_result(state: dict, *, model: str) -> dict:
     return {
         "answer_markdown": state.get("final_answer", ""),
         "intent": state.get("intent", ""),
         "trace": state.get("trace", {}),
         "tool_results": state.get("tool_results", {}),
         "sources": state.get("retrieved_docs", []),
+        "model": model,
+        "request_id": uuid4().hex,
     }
 
 

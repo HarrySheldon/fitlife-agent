@@ -28,5 +28,7 @@ def coach_action(
         intent=result["intent"],
         trace=result["trace"],
         sources=result.get("sources", []),
+        model=result["model"],
+        request_id=result["request_id"],
     )
-    return ok(response.model_dump())
+    return ok(response.model_dump(), processing_mode="agent")
