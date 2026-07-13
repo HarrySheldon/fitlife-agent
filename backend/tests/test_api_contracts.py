@@ -11,7 +11,7 @@ def test_ok_can_identify_deterministic_processing():
     response = ok({"value": 1}, processing_mode="deterministic")
 
     assert response["processing_mode"] == "deterministic"
-    assert response["error"] is None
+    assert "error" not in response
 
 
 def test_agent_without_model_uses_stable_error_contract():

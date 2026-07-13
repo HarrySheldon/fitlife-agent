@@ -131,7 +131,7 @@ git commit -m "refactor: add persistence and model gateway ports"
 - Test: `backend/tests/application/test_deterministic_use_cases.py`
 - Modify: `backend/tests/test_api_basic.py`
 
-- [ ] **Step 1: Write failing no-network use-case tests**
+- [x] **Step 1: Write failing no-network use-case tests**
 
 ```python
 def test_weekly_report_is_deterministic(repository, exploding_gateway):
@@ -145,17 +145,17 @@ def test_report_api_marks_deterministic_processing(client):
     assert response.json()["processing_mode"] == "deterministic"
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `pytest backend/tests/application/test_deterministic_use_cases.py backend/tests/test_api_basic.py -q`
 
 Expected: FAIL because use cases and metadata do not exist.
 
-- [ ] **Step 3: Implement use cases and thin handlers**
+- [x] **Step 3: Implement use cases and thin handlers**
 
 Each use case receives `FitnessRepository`, runs only deterministic analyzers/generators, and returns structured data. API handlers construct the file adapter, execute one use case, and call `ok(..., processing_mode="deterministic")`.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run: `pytest backend/tests/application/test_deterministic_use_cases.py backend/tests/test_api_basic.py -q`
 

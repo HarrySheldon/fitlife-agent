@@ -9,23 +9,34 @@ def ok(
     message: str = "",
     processing_mode: ProcessingMode | None = None,
 ) -> dict:
-    return ApiResponse(
+    response = ApiResponse(
         success=True,
         data=data,
         message=message,
         processing_mode=processing_mode,
-    ).model_dump()
+    )
+    return _dump_response(response)
 
 
 def fail(message: str) -> dict:
-    return ApiResponse(success=False, data=None, message=message).model_dump()
+    return _dump_response(ApiResponse(success=False, data=None, message=message))
 
 
 def application_error_response(error: ApplicationError) -> dict:
-    return ApiResponse(
+    response = ApiResponse(
         success=False,
         data=None,
         message=error.message,
         processing_mode=error.processing_mode,
         error=ApiError(code=error.code, message=error.message),
-    ).model_dump()
+    )
+    return _dump_response(response)
+
+
+def _dump_response(response: ApiResponse) -> dict:
+    exclude = set()
+    if response.processing_mode is None:
+        exclude.add("processing_mode")
+    if response.error is None:
+        exclude.add("error")
+    return response.model_dump(exclude=exclude)
