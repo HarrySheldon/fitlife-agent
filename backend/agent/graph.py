@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date as date_type
 from uuid import uuid4
 
 from backend.agent.generator import generate_plan
@@ -7,12 +8,16 @@ from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
 from backend.application.ports.fitness_repository import FitnessRepository
 from backend.application.ports.model_gateway import ModelGateway
+from backend.application.use_cases.generate_plan import GeneratePlan
+from backend.application.use_cases.generate_weekly_report import GenerateWeeklyReport
 from backend.domain.errors import ApplicationError, ai_not_configured_error, model_gateway_error
 from backend.infrastructure.model_gateway.openai_responses import build_model_gateway
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
 from backend.rag.retriever import retrieve_knowledge
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.report_generator import generate_weekly_report
+from backend.tools.target_suggestions import suggest_targets
+from backend.tools.today_overview import build_today_overview_from_records
 from backend.tools.workout_analyzer import analyze_workouts
 
 
@@ -22,9 +27,17 @@ def run_fitlife_agent(
     *,
     repository: FitnessRepository | None = None,
     gateway: ModelGateway | None = None,
+    initial_tool_results: dict | None = None,
+    initial_tool_calls: list[str] | None = None,
 ) -> dict:
     repository = repository or FileFitnessRepository()
-    gateway = gateway or build_model_gateway()
+    if gateway is None:
+        try:
+            gateway = build_model_gateway()
+        except ApplicationError:
+            raise
+        except Exception as error:
+            raise model_gateway_error(error) from None
     if gateway is None:
         raise ai_not_configured_error()
 
@@ -34,8 +47,8 @@ def run_fitlife_agent(
             "messages": [{"role": "user", "content": question}],
             "user_query": question,
             "current_user_id": user_id,
-            "tool_calls": [],
-            "tool_results": {},
+            "tool_calls": list(initial_tool_calls or []),
+            "tool_results": dict(initial_tool_results or {}),
             "retrieved_docs": [],
         }
     )
@@ -52,12 +65,21 @@ def run_contextual_coach_action(
     repository: FitnessRepository | None = None,
     gateway: ModelGateway | None = None,
 ) -> dict:
+    repository = repository or FileFitnessRepository()
     prompt = _coach_prompt(surface, action, date, question)
+    tool_results, tool_calls = _build_contextual_tool_context(
+        action,
+        date,
+        user_id,
+        repository,
+    )
     result = run_fitlife_agent(
         prompt,
         user_id,
         repository=repository,
         gateway=gateway,
+        initial_tool_results=tool_results,
+        initial_tool_calls=tool_calls,
     )
     result["trace"] = {
         **result.get("trace", {}),
@@ -66,6 +88,34 @@ def run_contextual_coach_action(
         "context_date": date,
     }
     return result
+
+
+def _build_contextual_tool_context(
+    action: str,
+    date: str | None,
+    user_id: str | None,
+    repository: FitnessRepository,
+) -> tuple[dict, list[str]]:
+    if action == "suggest_targets":
+        suggestion = suggest_targets(repository.read_profile(user_id))
+        return {"target_suggestion": suggestion.model_dump()}, ["suggest_targets"]
+
+    if action == "explain_weekly_report":
+        report = GenerateWeeklyReport(repository).execute(user_id)
+        return {"weekly_report": report}, list(report["trace"]["tool_calls"])
+
+    if action == "adjust_next_plan":
+        plan = GeneratePlan(repository).execute(user_id)
+        return {"generated_plan": plan}, list(plan["trace"]["tool_calls"])
+
+    day = date or date_type.today().isoformat()
+    overview = build_today_overview_from_records(
+        day,
+        repository.read_profile(user_id),
+        repository.read_meals(user_id),
+        repository.read_workouts(user_id),
+    )
+    return {"today_overview": overview.model_dump()}, ["build_today_overview"]
 
 
 def _coach_prompt(surface: str, action: str, date: str | None, question: str | None) -> str:

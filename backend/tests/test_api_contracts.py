@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from backend.agent import graph as agent_graph
 from backend.api.utils import ok
 from backend.main import app
 
@@ -28,3 +29,20 @@ def test_agent_without_model_uses_stable_error_contract():
             "message": "Configure and enable a model connection before using Agent features.",
         },
     }
+
+
+def test_model_gateway_initialization_failure_is_normalized(monkeypatch):
+    def fail_to_build_gateway():
+        raise RuntimeError("client configuration details must not escape")
+
+    monkeypatch.setattr(agent_graph, "build_model_gateway", fail_to_build_gateway)
+
+    response = client.post("/chat", json={"question": "Help me"})
+
+    assert response.status_code == 502
+    assert response.json()["processing_mode"] == "agent"
+    assert response.json()["error"] == {
+        "code": "MODEL_PROTOCOL_ERROR",
+        "message": "The model provider returned an invalid or unsupported response.",
+    }
+    assert "configuration details" not in response.text

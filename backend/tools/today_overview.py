@@ -1,11 +1,19 @@
 from backend.schemas import TargetProgress, TodayOverview, UserProfile
-from backend.tools.calendar_store import get_daily_detail
-from backend.tools.data_access import read_profile
+from backend.tools.calendar_store import build_daily_detail
+from backend.tools.data_access import read_meals, read_profile, read_workouts
 
 
 def build_today_overview(day: str, user_id: str | None = None) -> TodayOverview:
-    profile = read_profile(user_id)
-    detail = get_daily_detail(day, user_id)
+    return build_today_overview_from_records(
+        day,
+        read_profile(user_id),
+        read_meals(user_id),
+        read_workouts(user_id),
+    )
+
+
+def build_today_overview_from_records(day: str, profile: UserProfile, meals, workouts) -> TodayOverview:
+    detail = build_daily_detail(day, meals, workouts)
     summary = detail.summary
     return TodayOverview(
         date=day,

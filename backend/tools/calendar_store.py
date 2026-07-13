@@ -21,9 +21,11 @@ def list_daily_summaries(start: str, end: str, user_id: str | None = None) -> li
 
 
 def get_daily_detail(day: str, user_id: str | None = None) -> DailyDetail:
+    return build_daily_detail(day, read_meals(user_id), read_workouts(user_id))
+
+
+def build_daily_detail(day: str, meals: pd.DataFrame, workouts: pd.DataFrame) -> DailyDetail:
     day = _parse_date(day).isoformat()
-    meals = read_meals(user_id)
-    workouts = read_workouts(user_id)
     return DailyDetail(
         summary=_summarize_day(day, meals, workouts),
         meals=[MealRecord.model_validate(row) for row in _rows_for_date(meals, day)],
