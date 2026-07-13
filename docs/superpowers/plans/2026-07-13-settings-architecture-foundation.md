@@ -19,7 +19,7 @@
 - Modify: `backend/main.py`
 - Test: `backend/tests/test_api_contracts.py`
 
-- [ ] **Step 1: Write failing response-contract tests**
+- [x] **Step 1: Write failing response-contract tests**
 
 ```python
 def test_ok_can_identify_deterministic_processing():
@@ -33,17 +33,17 @@ def test_application_error_uses_stable_code(client, monkeypatch):
     assert response.json()["error"]["code"] == "AI_NOT_CONFIGURED"
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `pytest backend/tests/test_api_contracts.py -q`
 
 Expected: FAIL because `processing_mode`, `ApplicationError`, and its FastAPI handler do not exist.
 
-- [ ] **Step 3: Implement the contract**
+- [x] **Step 3: Implement the contract**
 
 Add `ProcessingMode = Literal["deterministic", "agent"]`, optional `processing_mode` and structured `ApiError` fields to `ApiResponse`. Define `ApplicationError(code, message, status_code)` and register one FastAPI exception handler that returns the existing response envelope without leaking third-party exception text.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run: `pytest backend/tests/test_api_contracts.py -q`
 

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 T = TypeVar("T")
+ProcessingMode = Literal["deterministic", "agent"]
 
 ExperienceLevel = Literal["beginner", "novice", "experienced"]
 TrainingPreference = Literal["strength", "cardio", "mixed"]
@@ -19,10 +20,17 @@ CoachAction = Literal[
 ]
 
 
+class ApiError(BaseModel):
+    code: str
+    message: str
+
+
 class ApiResponse(BaseModel, Generic[T]):
     success: bool
     data: T | None
     message: str = ""
+    processing_mode: ProcessingMode | None = None
+    error: ApiError | None = None
 
 
 class UserProfile(BaseModel):

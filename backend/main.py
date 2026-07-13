@@ -1,13 +1,24 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import auth, calendar, chat, coach, dashboard, eval, health, plan, profile, report, today, upload
+from backend.api.utils import application_error_response
 from backend.config import get_settings
+from backend.domain.errors import ApplicationError
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="FitLife Agent API", version="0.1.0")
+
+    @app.exception_handler(ApplicationError)
+    async def handle_application_error(_request: Request, error: ApplicationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content=application_error_response(error),
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

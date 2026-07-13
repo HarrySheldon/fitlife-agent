@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import date as date_type
 
 from backend.agent.generator import generate_plan
-from backend.agent.llm_adapter import try_plan_route_with_llm, try_write_answer_with_llm
+from backend.agent.llm_adapter import build_llm_adapter, try_plan_route_with_llm, try_write_answer_with_llm
 from backend.agent.planner import plan_route
 from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
 from backend.agent.writer import write_answer
 from backend.rag.retriever import retrieve_knowledge
+from backend.domain.errors import ai_not_configured_error
 from backend.tools.data_access import read_meals, read_profile, read_workouts
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.report_generator import generate_weekly_report
@@ -26,6 +27,8 @@ DETERMINISTIC_CONTEXT_ACTIONS = {
 
 
 def run_fitlife_agent(question: str, user_id: str | None = None) -> dict:
+    if build_llm_adapter() is None:
+        raise ai_not_configured_error()
     graph = build_graph()
     if graph is None:
         raise RuntimeError("LangGraph workflow could not be built")
