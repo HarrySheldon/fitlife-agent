@@ -21,6 +21,7 @@ def test_profile_and_dashboard_endpoints_return_data():
     assert profile.json()["success"] is True
     assert dashboard.status_code == 200
     assert dashboard.json()["success"] is True
+    assert dashboard.json()["processing_mode"] == "deterministic"
     assert "today_calories" in dashboard.json()["data"]
 
 

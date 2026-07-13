@@ -13,6 +13,7 @@ import type {
   EvalResult,
   GeneratedPlan,
   MealRecord,
+  ProcessingMode,
   TodayOverview,
   UserProfile,
   WeeklyReport,
@@ -38,9 +39,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const payload = (await response.json().catch(() => ({}))) as Partial<ApiResponse<T>> & { detail?: string }
   if (!response.ok || !payload.success) {
-    throw new Error(payload.message || payload.detail || `Request failed: ${response.status}`)
+    const message = payload.error?.message || payload.message || payload.detail || `Request failed: ${response.status}`
+    throw new ApiRequestError(
+      message,
+      payload.error?.code,
+      payload.processing_mode,
+      response.status,
+    )
   }
   return payload.data as T
+}
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly code?: string,
+    public readonly processingMode?: ProcessingMode,
+    public readonly status?: number,
+  ) {
+    super(message)
+    this.name = 'ApiRequestError'
+  }
 }
 
 export const api = {

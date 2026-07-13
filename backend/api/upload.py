@@ -23,11 +23,15 @@ async def upload_workouts(file: UploadFile, user: AuthenticatedUser | None = Dep
 
 async def _save_csv_upload(file: UploadFile, destination: Path):
     if not file.filename or not file.filename.endswith(".csv"):
-        return fail("Only CSV files are supported")
+        return fail("Only CSV files are supported", processing_mode="deterministic")
     content = await file.read()
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(content)
-    return ok({"filename": file.filename, "bytes": len(content)}, "Upload saved")
+    return ok(
+        {"filename": file.filename, "bytes": len(content)},
+        "Upload saved",
+        processing_mode="deterministic",
+    )
 
 
 def _user_id(user: AuthenticatedUser | None) -> str | None:

@@ -18,8 +18,18 @@ def ok(
     return _dump_response(response)
 
 
-def fail(message: str) -> dict:
-    return _dump_response(ApiResponse(success=False, data=None, message=message))
+def fail(
+    message: str,
+    processing_mode: ProcessingMode | None = None,
+) -> dict:
+    return _dump_response(
+        ApiResponse(
+            success=False,
+            data=None,
+            message=message,
+            processing_mode=processing_mode,
+        )
+    )
 
 
 def application_error_response(error: ApplicationError) -> dict:

@@ -46,7 +46,7 @@ def dashboard_summary(date: str | None = None, user: AuthenticatedUser | None = 
         "meal_summary": meal_result["summary"],
         "workout_summary": workout_result["summary"],
     }
-    return ok(data)
+    return ok(data, processing_mode="deterministic")
 
 
 def _workouts_for_week(workouts, selected_date: str):

@@ -9,7 +9,7 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 - Agent workflow design with a focused **FitLife Coach Agent**
 - RAG over curated Markdown fitness and nutrition documents
 - Tool calling with deterministic Python analyzers
-- Optional OpenAI-compatible planner/writer and embedding adapters, disabled by default for local demos
+- OpenAI Responses API planner/writer adapter behind a `ModelGateway`, disabled by default
 - Demo user management with username, email, or phone login, bearer-token sessions, and per-user local data files
 - FastAPI backend with typed Pydantic schemas
 - Today-first React + Vite + TypeScript frontend with contextual Coach actions
@@ -20,16 +20,18 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 
 ```mermaid
 flowchart LR
-  UI["React + Vite Frontend"] --> API["FastAPI Backend"]
-  API --> Agent["FitLife Coach Agent"]
-  Agent --> Planner["Planner"]
-  Agent --> Tools["Meal/Workout Tools"]
-  Agent --> RAG["Retriever"]
-  Agent --> Validator["Validator"]
-  Tools --> CSV["per-user meals.csv / workouts.csv"]
-  RAG --> KB["Markdown Knowledge Base"]
-  API --> Eval["Evaluation Runner"]
+  UI["React + Vite Frontend"] --> API["FastAPI API"]
+  API --> APP["Application Use Cases"]
+  APP --> DOMAIN["Deterministic Domain Tools"]
+  APP --> REPO["FitnessRepository"]
+  AGENT["FitLife Coach Agent"] --> APP
+  AGENT --> MODEL["ModelGateway"]
+  REPO --> FILES["Per-user JSON / CSV"]
+  MODEL --> OPENAI["OpenAI Responses API"]
+  DOMAIN --> KB["Markdown Knowledge Base"]
 ```
+
+The backend is a layered monolith. API handlers map transport concerns, application use cases coordinate work, deterministic domain tools calculate and validate facts, and infrastructure adapters implement persistence and model access.
 
 ## Agent Workflow
 
@@ -91,7 +93,7 @@ docker compose up --build
 
 ## Optional OpenAI Configuration
 
-Local deterministic behavior is the default. OpenAI-compatible model calls are opt-in:
+Deterministic features are available without a model. Agent features are opt-in:
 
 ```env
 LLM_ENABLED=false
@@ -101,7 +103,17 @@ OPENAI_MODEL=
 EMBEDDING_MODEL=
 ```
 
-When `LLM_ENABLED=true` and an API key is available, the adapter can call an OpenAI-compatible Responses API for planner/writer behavior. If configuration is missing or a call fails, the agent falls back to deterministic local logic.
+When `LLM_ENABLED=true` and an API key is available, the adapter calls an OpenAI-compatible Responses API for planner and writer behavior. If configuration is missing, Agent endpoints return `AI_NOT_CONFIGURED`. Provider failures return stable errors such as `MODEL_TIMEOUT` or `MODEL_PROTOCOL_ERROR`; the system never presents a deterministic template as a successful Agent answer.
+
+## Execution Boundaries
+
+- Deterministic: profile and record persistence, Today and Dashboard calculations, calendar summaries, CSV import, weekly report generation, plan generation, and plan validation.
+- Agent: Chat, contextual Coach interpretation, and Evaluation runs.
+- Deterministic API responses include `processing_mode: deterministic`.
+- Agent API responses include `processing_mode: agent`, `model`, and `request_id`.
+- Agent failures do not alter or hide deterministic results.
+
+The endpoint `/calendar/agent-entry` retains its current compatibility name, but its parser is deterministic and its response is marked accordingly. A future smart-input Agent flow must create a draft and require deterministic validation plus user confirmation before persistence.
 
 ## Product Flow
 
@@ -130,6 +142,8 @@ Run:
 ```bash
 python scripts/run_eval.py --limit 5
 ```
+
+Evaluation executes the real Agent path and therefore requires an enabled model connection.
 
 Evaluation v2 reports:
 

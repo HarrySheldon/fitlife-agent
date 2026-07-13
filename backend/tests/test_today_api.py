@@ -12,6 +12,7 @@ def test_today_overview_returns_daily_state():
     assert response.status_code == 200
     payload = response.json()
     assert payload["success"] is True
+    assert payload["processing_mode"] == "deterministic"
     data = payload["data"]
     assert data["date"] == "2026-07-09"
     assert "summary" in data

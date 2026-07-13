@@ -169,12 +169,17 @@ def test_calendar_records_drive_day_detail_and_dashboard_summary(monkeypatch):
 
     assert meal.status_code == 200
     assert workout.status_code == 200
+    assert meal.json()["processing_mode"] == "deterministic"
+    assert workout.json()["processing_mode"] == "deterministic"
 
     day = client.get("/calendar/day/2026-07-08", headers=headers)
     days = client.get("/calendar/days?start=2026-07-08&end=2026-07-08", headers=headers)
     dashboard = client.get("/dashboard/summary?date=2026-07-08", headers=headers)
 
     assert day.json()["data"]["summary"]["calories"] == 620
+    assert day.json()["processing_mode"] == "deterministic"
+    assert days.json()["processing_mode"] == "deterministic"
+    assert dashboard.json()["processing_mode"] == "deterministic"
     assert day.json()["data"]["summary"]["training_sessions"] == 1
     assert len(day.json()["data"]["meals"]) == 1
     assert len(day.json()["data"]["workouts"]) == 1
@@ -195,6 +200,7 @@ def test_agent_entry_can_append_meal_and_workout_records(monkeypatch):
     day = client.get("/calendar/day/2026-07-08", headers=headers)
 
     assert response.status_code == 200
+    assert response.json()["processing_mode"] == "deterministic"
     assert response.json()["data"]["parsed_actions"] == ["meal_record_created", "workout_record_created"]
     assert day.json()["data"]["summary"]["calories"] == 650
     assert day.json()["data"]["summary"]["protein"] == 42

@@ -1,7 +1,16 @@
+export type ProcessingMode = 'deterministic' | 'agent'
+
+export interface ApiError {
+  code: string
+  message: string
+}
+
 export interface ApiResponse<T> {
   success: boolean
-  data: T
+  data: T | null
   message: string
+  processing_mode?: ProcessingMode
+  error?: ApiError
 }
 
 export interface UserProfile {
@@ -125,6 +134,8 @@ export interface CoachActionResponse {
   intent: string
   trace: Record<string, unknown>
   sources: Array<{ source: string; heading?: string; text?: string }>
+  model: string
+  request_id: string
 }
 
 export interface AgentEntryResponse {
@@ -157,6 +168,8 @@ export interface ChatResponse {
     warnings: string[]
   }
   sources: Array<{ source: string; heading: string; text: string }>
+  model: string
+  request_id: string
 }
 
 export interface WeeklyReport {

@@ -11,13 +11,13 @@ router = APIRouter()
 
 @router.get("/profile")
 def get_profile(user: AuthenticatedUser | None = Depends(optional_current_user)):
-    return ok(read_profile(_user_id(user)).model_dump())
+    return ok(read_profile(_user_id(user)).model_dump(), processing_mode="deterministic")
 
 
 @router.post("/profile")
 def update_profile(profile: UserProfile, user: AuthenticatedUser | None = Depends(optional_current_user)):
     write_profile(profile, _user_id(user))
-    return ok(profile.model_dump(), "Profile saved")
+    return ok(profile.model_dump(), "Profile saved", processing_mode="deterministic")
 
 
 def _user_id(user: AuthenticatedUser | None) -> str | None:

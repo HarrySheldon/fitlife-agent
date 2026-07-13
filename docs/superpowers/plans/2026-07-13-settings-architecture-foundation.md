@@ -215,7 +215,7 @@ Run: `pytest backend/tests/application/test_agent_boundary.py backend/tests/test
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/infrastructure/model_gateway backend/agent backend/api/chat.py backend/api/coach.py backend/tests
@@ -230,11 +230,11 @@ git commit -m "refactor: separate agent execution from deterministic fallback"
 - Modify: `backend/tests/test_today_api.py`
 - Modify: `README.md`
 
-- [ ] **Step 1: Update contract assertions first**
+- [x] **Step 1: Update contract assertions first**
 
 Add backend assertions that deterministic endpoints return `processing_mode="deterministic"` and Agent endpoints return `processing_mode="agent"`. Add `ProcessingMode` and optional response error metadata to the frontend envelope type without changing existing page data return types.
 
-- [ ] **Step 2: Run focused backend and frontend checks**
+- [x] **Step 2: Run focused backend and frontend checks**
 
 Run: `pytest backend/tests -q`
 
@@ -246,11 +246,11 @@ Working directory: `frontend`
 
 Expected: TypeScript and Vite build PASS.
 
-- [ ] **Step 3: Document the runtime boundary**
+- [x] **Step 3: Document the runtime boundary**
 
 Document that `/report/weekly`, `/plan/generate`, dashboard and record calculations are deterministic, while `/chat` and `/coach/action` require a configured model. State explicitly that an Agent error never causes a template answer to be returned as AI output.
 
-- [ ] **Step 4: Run final regression suite**
+- [x] **Step 4: Run final regression suite**
 
 Run: `pytest backend/tests -q`
 
@@ -258,7 +258,7 @@ Run: `npm run build`
 
 Expected: both PASS with no new warnings beyond known dependency warnings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/types/index.ts frontend/src/services/api.ts backend/tests/test_today_api.py README.md

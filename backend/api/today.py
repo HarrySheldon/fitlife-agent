@@ -15,4 +15,4 @@ router = APIRouter()
 def today(date: str | None = None, user: AuthenticatedUser | None = Depends(optional_current_user)):
     day = date or date_type.today().isoformat()
     overview = build_today_overview(day, user.user_id if user else None)
-    return ok(overview.model_dump())
+    return ok(overview.model_dump(), processing_mode="deterministic")
