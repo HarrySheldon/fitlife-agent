@@ -70,7 +70,7 @@ git commit -m "feat: add stable processing and error contracts"
 - Test: `backend/tests/application/test_ports.py`
 - Test: `backend/tests/infrastructure/test_file_fitness_repository.py`
 
-- [ ] **Step 1: Write failing port and isolation tests**
+- [x] **Step 1: Write failing port and isolation tests**
 
 ```python
 def test_file_repository_keeps_users_isolated(tmp_path, settings_override):
@@ -97,17 +97,17 @@ def test_fake_gateway_satisfies_model_gateway_protocol():
     assert gateway.write_answer({"user_query": "hello"}) == "answer"
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `pytest backend/tests/application/test_ports.py backend/tests/infrastructure/test_file_fitness_repository.py -q`
 
 Expected: collection FAIL because the ports and adapter do not exist.
 
-- [ ] **Step 3: Implement minimal ports and adapter**
+- [x] **Step 3: Implement minimal ports and adapter**
 
 `FitnessRepository` exposes profile, meal and workout reads plus profile/record writes. `ModelGateway` exposes `plan_route` and `write_answer`. `FileFitnessRepository` delegates the existing JSON/CSV behavior, and legacy `data_access` functions remain compatibility wrappers around the default adapter.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run: `pytest backend/tests/application/test_ports.py backend/tests/infrastructure/test_file_fitness_repository.py -q`
 
