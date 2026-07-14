@@ -3,9 +3,10 @@ from datetime import date as date_type, timedelta
 from fastapi import APIRouter, Depends
 
 from backend.api.dependencies import optional_current_user
+from backend.api.preference_context import preferences_for
 from backend.api.utils import ok
+from backend.domain.account_clock import local_today
 from backend.schemas import AuthenticatedUser
-from backend.tools.calendar_store import latest_activity_date
 from backend.tools.data_access import read_meals, read_profile, read_workouts
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.workout_analyzer import analyze_workouts
@@ -23,7 +24,7 @@ def dashboard_summary(date: str | None = None, user: AuthenticatedUser | None = 
     meal_result = analyze_meals(meals, profile.daily_calorie_target, profile.daily_protein_target)
     workout_result = analyze_workouts(workouts)
     daily = meal_result["daily_totals"]
-    summary_date = date or latest_activity_date(user_id)
+    summary_date = date or local_today(preferences_for(user).timezone).isoformat()
     latest = daily.get(summary_date, {})
     weekly_workouts = _workouts_for_week(workouts, summary_date)
     macro_totals = {"protein": 0, "carbs": 0, "fat": 0}

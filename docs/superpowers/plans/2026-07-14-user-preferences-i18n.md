@@ -42,12 +42,12 @@
 - Test: `backend/tests/domain/test_account_clock.py`
 - Test: `backend/tests/test_timezone_boundaries.py`
 
-- [ ] Write failing tests around UTC day/week boundaries proving two users in different IANA timezones receive different implicit `today` and week windows while explicit date parameters remain unchanged.
-- [ ] Run focused tests and confirm RED.
-- [ ] Implement an injectable UTC clock plus `local_today()` and `local_week_bounds()` using `zoneinfo.ZoneInfo`.
-- [ ] Resolve the current user's timezone for implicit Today, Dashboard, and weekly report requests; do not rewrite historical record dates.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: apply account timezone date boundaries`.
+- [x] Write failing tests around UTC day/week boundaries proving two users in different IANA timezones receive different implicit `today` and week windows while explicit date parameters remain unchanged.
+- [x] Run focused tests and confirm RED.
+- [x] Implement an injectable UTC clock plus `local_today()` and `local_week_bounds()` using `zoneinfo.ZoneInfo`.
+- [x] Resolve the current user's timezone for implicit Today, Dashboard, and weekly report requests; do not rewrite historical record dates.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: apply account timezone date boundaries`.
 
 ### Task 3: Frontend i18n and preferences runtime
 
