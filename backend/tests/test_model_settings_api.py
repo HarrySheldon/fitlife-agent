@@ -19,8 +19,8 @@ def make_data_dir() -> Path:
     return Path(".tmp") / "pytest-model-settings-api" / uuid4().hex
 
 
-def build_client(monkeypatch, *, with_cipher: bool = True) -> TestClient:
-    monkeypatch.setenv("DATA_DIR", str(make_data_dir()))
+def build_client(monkeypatch, *, with_cipher: bool = True, data_dir: Path | None = None) -> TestClient:
+    monkeypatch.setenv("DATA_DIR", str(data_dir or make_data_dir()))
     if with_cipher:
         monkeypatch.setenv("SETTINGS_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
     else:
@@ -168,3 +168,39 @@ def test_model_list_and_connection_test_require_explicit_requests(monkeypatch):
     assert tested.status_code == 200
     assert tested.json()["data"]["status"] == "success"
     assert calls == ["list", "test"]
+
+
+def test_disabled_agent_and_missing_cipher_flows_use_stable_api_errors(monkeypatch):
+    data_dir = make_data_dir()
+    configured_client = build_client(monkeypatch, data_dir=data_dir)
+    headers = register(configured_client, "agent-settings-user")
+    saved = configured_client.put(
+        "/settings/model",
+        headers=headers,
+        json=model_payload(api_key="sk-user-secret", enabled=False),
+    )
+
+    disabled = configured_client.post(
+        "/chat",
+        headers=headers,
+        json={"question": "Explain today's progress"},
+    )
+
+    assert saved.status_code == 200
+    assert disabled.status_code == 409
+    assert disabled.json()["error"]["code"] == "AI_DISABLED"
+
+    configured_client.put(
+        "/settings/model",
+        headers=headers,
+        json=model_payload(enabled=True),
+    )
+    no_cipher_client = build_client(monkeypatch, with_cipher=False, data_dir=data_dir)
+    unavailable = no_cipher_client.post(
+        "/chat",
+        headers=headers,
+        json={"question": "Explain today's progress"},
+    )
+
+    assert unavailable.status_code == 503
+    assert unavailable.json()["error"]["code"] == "CREDENTIAL_STORE_UNAVAILABLE"

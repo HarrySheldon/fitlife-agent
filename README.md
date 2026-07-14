@@ -9,7 +9,7 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 - Agent workflow design with a focused **FitLife Coach Agent**
 - RAG over curated Markdown fitness and nutrition documents
 - Tool calling with deterministic Python analyzers
-- OpenAI Responses API planner/writer adapter behind a `ModelGateway`, disabled by default
+- Per-user OpenAI or OpenAI-compatible model connections with explicit Responses or Chat Completions adapters
 - Demo user management with username, email, or phone login, bearer-token sessions, and per-user local data files
 - FastAPI backend with typed Pydantic schemas
 - Today-first React + Vite + TypeScript frontend with contextual Coach actions
@@ -91,9 +91,25 @@ Frontend: `http://127.0.0.1:5173`
 docker compose up --build
 ```
 
-## Optional OpenAI Configuration
+## Secure Model Configuration
 
-Deterministic features are available without a model. Agent features are opt-in:
+Deterministic features are available without a model. Each authenticated user configures one model connection from **Settings > Model connection**. API keys are encrypted at rest and are never returned by the API.
+
+Generate a deployment Fernet key once:
+
+```powershell
+.venv\Scripts\python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Copy `.env.example` to `.env` and set the generated value:
+
+```env
+SETTINGS_ENCRYPTION_KEY=<generated-fernet-key>
+```
+
+Do not commit `.env` or reuse the example as a real key. Losing or rotating this value without migration makes existing encrypted user API keys unreadable. When it is missing, deterministic features continue, saving a new API key fails with `CREDENTIAL_STORE_UNAVAILABLE`, and authenticated Agent requests cannot use stored credentials.
+
+The deployment-level variables remain available only for the unauthenticated demo path:
 
 ```env
 LLM_ENABLED=false
@@ -103,7 +119,7 @@ OPENAI_MODEL=
 EMBEDDING_MODEL=
 ```
 
-When `LLM_ENABLED=true` and an API key is available, the adapter calls an OpenAI-compatible Responses API for planner and writer behavior. If configuration is missing, Agent endpoints return `AI_NOT_CONFIGURED`. Provider failures return stable errors such as `MODEL_TIMEOUT` or `MODEL_PROTOCOL_ERROR`; the system never presents a deterministic template as a successful Agent answer.
+An authenticated Agent request uses only that user's enabled encrypted connection and never falls back to `OPENAI_API_KEY`. Saving does not contact the provider. Model listing and connection testing run only after the user explicitly selects those actions. Custom endpoints are restricted to HTTPS public addresses and are revalidated before requests. API responses, logs, traces, and exports must not contain API key plaintext or ciphertext. Provider failures return stable errors such as `MODEL_TIMEOUT` or `MODEL_PROTOCOL_ERROR`; the system never presents a deterministic template as a successful Agent answer.
 
 ## Execution Boundaries
 

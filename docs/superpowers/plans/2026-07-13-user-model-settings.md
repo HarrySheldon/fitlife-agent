@@ -98,7 +98,7 @@
 - [x] Build `/settings` as navigation-only rows with title, description, and chevron only; add `/settings/model` as the dedicated form task.
 - [x] Implement provider/protocol controls, manual model input, API-key retain/replace/clear states, explicit Save/Get models/Test buttons, disabled/loading/error/success states, and responsive layout.
 - [x] Run `npm run build` and inspect desktop/mobile routes in the browser.
-- [ ] Commit as `feat: add model settings task pages`.
+- [x] Commit as `feat: add model settings task pages`.
 
 ### Task 6: Security regression and delivery verification
 
@@ -108,8 +108,8 @@
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-07-13-user-model-settings.md`
 
-- [ ] Add deployment documentation for generating and supplying `SETTINGS_ENCRYPTION_KEY`, with no repository default.
-- [ ] Search tracked files, API payloads, logs, traces, and tests for plaintext keys or encrypted credential fields.
-- [ ] Run all backend tests and the frontend production build.
-- [ ] Exercise save, fetch, clear, disabled Agent, and missing-cipher API flows with TestClient.
-- [ ] Commit as `docs: document secure user model settings`.
+- [x] Add deployment documentation for generating and supplying `SETTINGS_ENCRYPTION_KEY`, with no repository default.
+- [x] Search tracked files, API payloads, logs, traces, and tests for plaintext keys or encrypted credential fields.
+- [x] Run all backend tests and the frontend production build.
+- [x] Exercise save, fetch, clear, disabled Agent, and missing-cipher API flows with TestClient.
+- [x] Commit as `docs: document secure user model settings`.
