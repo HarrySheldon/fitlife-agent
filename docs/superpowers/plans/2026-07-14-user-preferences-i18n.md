@@ -65,13 +65,13 @@
 - Modify: `frontend/vite.config.ts`
 - Test: `frontend/src/hooks/usePreferences.test.tsx`
 
-- [ ] Add i18next/react-i18next and Vitest/Testing Library dependencies and a `test` script.
-- [ ] Write failing tests proving pre-login language comes from local storage, authenticated preferences override cache, browser timezone is supplied for first initialization, and updates immediately change `<html lang>` plus persisted account state.
-- [ ] Run the focused tests and confirm RED.
-- [ ] Configure typed translation resources and a `PreferencesProvider` that is independent from model settings and auth form state.
-- [ ] Add API methods/headers for preferences and expose `language`, `unitSystem`, `timezone`, `updatePreferences`, and `localDate()`.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add preferences and i18n runtime`.
+- [x] Add i18next/react-i18next and Vitest/Testing Library dependencies and a `test` script.
+- [x] Write failing tests proving pre-login language comes from local storage, authenticated preferences override cache, browser timezone is supplied for first initialization, and updates immediately change `<html lang>` plus persisted account state.
+- [x] Run the focused tests and confirm RED.
+- [x] Configure typed translation resources and a `PreferencesProvider` that is independent from model settings and auth form state.
+- [x] Add API methods/headers for preferences and expose `language`, `unitSystem`, `timezone`, `updatePreferences`, and `localDate()`.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: add preferences and i18n runtime`.
 
 ### Task 4: General settings task page and metric/imperial conversion
 

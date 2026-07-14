@@ -19,6 +19,8 @@ import type {
   ProcessingMode,
   TodayOverview,
   UserProfile,
+  UserPreferences,
+  UserPreferencesUpdate,
   WeeklyReport,
   WorkoutRecord,
 } from '../types'
@@ -29,6 +31,8 @@ const TOKEN_KEY = 'fitlife_access_token'
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = tokenStorage.get()
   const headers = new Headers(init?.headers)
+  headers.set('Accept-Language', languageStorage.get())
+  headers.set('X-Timezone', browserTimezone())
   if (!(init?.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
@@ -69,6 +73,9 @@ export const api = {
   register: (payload: AuthRequest) => request<AuthSession>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   login: (payload: AuthRequest) => request<AuthSession>('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
   me: () => request<AuthenticatedUser>('/auth/me'),
+  preferences: () => request<UserPreferences>('/settings/preferences'),
+  updatePreferences: (preferences: UserPreferencesUpdate) =>
+    request<UserPreferences>('/settings/preferences', { method: 'PATCH', body: JSON.stringify(preferences) }),
   dashboard: () => request<DashboardSummary>('/dashboard/summary'),
   dashboardForDate: (date: string) => request<DashboardSummary>(`/dashboard/summary?date=${encodeURIComponent(date)}`),
   profile: () => request<UserProfile>('/profile'),
@@ -104,4 +111,15 @@ export const tokenStorage = {
   get: () => window.localStorage.getItem(TOKEN_KEY),
   set: (token: string) => window.localStorage.setItem(TOKEN_KEY, token),
   clear: () => window.localStorage.removeItem(TOKEN_KEY),
+}
+
+const LANGUAGE_KEY = 'fitlife_language'
+
+export const languageStorage = {
+  get: (): 'en-US' | 'zh-CN' => window.localStorage.getItem(LANGUAGE_KEY) === 'zh-CN' ? 'zh-CN' : 'en-US',
+  set: (language: 'en-US' | 'zh-CN') => window.localStorage.setItem(LANGUAGE_KEY, language),
+}
+
+export function browserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 }

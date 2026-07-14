@@ -53,6 +53,17 @@ export interface AuthRequest {
   display_name?: string
 }
 
+export type AppLanguage = 'en-US' | 'zh-CN'
+export type UnitSystem = 'metric' | 'imperial'
+
+export interface UserPreferences {
+  language: AppLanguage
+  unit_system: UnitSystem
+  timezone: string
+}
+
+export type UserPreferencesUpdate = Partial<UserPreferences>
+
 export type ModelProvider = 'openai' | 'custom'
 export type ModelProtocol = 'responses' | 'chat_completions'
 export type ModelTestStatus = 'untested' | 'success' | 'failed'
