@@ -61,6 +61,23 @@ def test_responses_adapter_supports_unified_planner_writer_list_and_probe():
     assert responses.create_calls[-1]["tool_choice"]["name"] == "connection_probe"
 
 
+def test_responses_writer_distinguishes_ui_locale_from_answer_language():
+    responses = ResponsesApi()
+    client = SimpleNamespace(responses=responses, models=ModelsApi())
+    adapter = OpenAIResponsesAdapter(client=client, model="response-model")
+
+    adapter.write_answer(
+        {
+            "user_query": "Please answer this question in English.",
+            "context_metadata": {"language": "zh-CN"},
+        }
+    )
+
+    instructions = responses.create_calls[-1]["instructions"]
+    assert "context_metadata.language is the UI locale only" in instructions
+    assert "The language of user_query controls the answer language" in instructions
+
+
 def test_chat_completions_adapter_supports_unified_planner_writer_list_and_probe():
     completions = ChatCompletionsApi()
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions), models=ModelsApi())

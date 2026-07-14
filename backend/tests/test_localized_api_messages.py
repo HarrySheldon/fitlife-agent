@@ -5,6 +5,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
+from backend.domain.errors import ApplicationError
+from backend.i18n import language_from_accept_language, translate_public_message
+from backend.infrastructure.settings.file_user_preferences_repository import (
+    FileUserPreferencesRepository,
+)
 from backend.main import create_app
 
 
@@ -179,3 +184,59 @@ def test_upload_messages_use_account_language_and_invalid_files_have_stable_code
         "code": "INVALID_UPLOAD_FILE",
         "message": invalid_message,
     }
+
+
+@pytest.mark.parametrize(
+    ("accept_language", "expected_language"),
+    [("zh-CN", "zh-CN"), (None, "en-US")],
+)
+def test_application_error_survives_preferences_read_failure(
+    monkeypatch, accept_language, expected_language
+):
+    client = build_client(monkeypatch)
+    headers = register(client)
+    fallback = "Configure and enable a model connection before using Agent features."
+
+    def fail_with_application_error():
+        raise ApplicationError(
+            code="AI_NOT_CONFIGURED",
+            message=fallback,
+            status_code=409,
+            processing_mode="agent",
+        )
+
+    client.app.add_api_route("/_test/application-error", fail_with_application_error)
+
+    def fail_preferences_read(_repository, _user_id):
+        raise OSError("preferences unavailable")
+
+    monkeypatch.setattr(FileUserPreferencesRepository, "get", fail_preferences_read)
+    if accept_language is not None:
+        headers["Accept-Language"] = accept_language
+
+    response = client.get("/_test/application-error", headers=headers)
+    expected = translate_public_message("AI_NOT_CONFIGURED", expected_language, fallback)
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "success": False,
+        "data": None,
+        "message": expected,
+        "processing_mode": "agent",
+        "error": {"code": "AI_NOT_CONFIGURED", "message": expected},
+    }
+
+
+@pytest.mark.parametrize(
+    ("accept_language", "expected"),
+    [
+        ("en;q=1.1,zh;q=0.5", "zh-CN"),
+        ("en;q=-0.1,zh;q=0.5", "zh-CN"),
+        ("en;q=inf,zh;q=0.5", "zh-CN"),
+        ("en;q=0,*;q=1", "zh-CN"),
+    ],
+)
+def test_accept_language_rejects_invalid_q_and_honors_explicit_exclusions(
+    accept_language, expected
+):
+    assert language_from_accept_language(accept_language) == expected

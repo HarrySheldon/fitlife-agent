@@ -99,13 +99,30 @@ def translate_public_message(key: str, language: AppLanguage, fallback: str = ""
 
 def language_from_accept_language(value: str | None) -> AppLanguage:
     ranked: list[tuple[float, int, AppLanguage]] = []
+    excluded: set[AppLanguage] = set()
+    wildcard: tuple[float, int] | None = None
     for index, item in enumerate((value or "").split(",")):
         tag, *parameters = (part.strip() for part in item.split(";"))
         quality = _quality(parameters)
+        if quality is None:
+            continue
+        if tag == "*":
+            if quality > 0:
+                candidate = (quality, -index)
+                wildcard = max(wildcard, candidate) if wildcard is not None else candidate
+            continue
         normalized = _supported_language(tag)
-        if normalized is not None and quality > 0:
+        if normalized is not None and quality == 0:
+            excluded.add(normalized)
+        elif normalized is not None:
             ranked.append((quality, -index, normalized))
-    return max(ranked)[2] if ranked else DEFAULT_LANGUAGE
+    if ranked:
+        return max(ranked)[2]
+    if wildcard is not None:
+        for language in (DEFAULT_LANGUAGE, "zh-CN"):
+            if language not in excluded:
+                return language
+    return DEFAULT_LANGUAGE
 
 
 def language_for_request(
@@ -129,14 +146,15 @@ def message_for_request(
     return translate_public_message(key, language_for_request(request, user), fallback)
 
 
-def _quality(parameters: Iterable[str]) -> float:
+def _quality(parameters: Iterable[str]) -> float | None:
     for parameter in parameters:
         name, _, raw_value = parameter.partition("=")
         if name.lower() == "q":
             try:
-                return float(raw_value)
+                quality = float(raw_value)
             except ValueError:
-                return 0
+                return None
+            return quality if 0 <= quality <= 1 else None
     return 1
 
 
@@ -144,7 +162,7 @@ def _supported_language(tag: str) -> AppLanguage | None:
     lowered = tag.lower()
     if lowered == "zh" or lowered.startswith("zh-"):
         return "zh-CN"
-    if lowered == "en" or lowered.startswith("en-") or lowered == "*":
+    if lowered == "en" or lowered.startswith("en-"):
         return "en-US"
     return None
 

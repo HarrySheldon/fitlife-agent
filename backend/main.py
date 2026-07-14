@@ -7,7 +7,11 @@ from backend.api import auth, calendar, chat, coach, dashboard, eval, health, pl
 from backend.api.utils import application_error_response
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
-from backend.i18n import language_for_request, translate_public_message
+from backend.i18n import (
+    language_for_request,
+    language_from_accept_language,
+    translate_public_message,
+)
 from backend.schemas import ApiError, ApiResponse
 
 
@@ -17,9 +21,13 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(ApplicationError)
     async def handle_application_error(request: Request, error: ApplicationError) -> JSONResponse:
+        try:
+            language = language_for_request(request)
+        except Exception:
+            language = language_from_accept_language(request.headers.get("accept-language"))
         return JSONResponse(
             status_code=error.status_code,
-            content=application_error_response(error, language_for_request(request)),
+            content=application_error_response(error, language),
         )
 
     @app.exception_handler(RequestValidationError)

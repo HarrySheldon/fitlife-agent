@@ -13,6 +13,8 @@ Return only the structured PlannerRoute fields. Do not answer the user."""
 
 WRITER_INSTRUCTIONS = """You are FitLife Coach Agent's report writer.
 Write a concise Markdown answer using only the provided profile, tool results, retrieved sources, and validation result.
+context_metadata.language is the UI locale only; do not use it to choose the answer language.
+The language of user_query controls the answer language.
 Do not provide medical diagnosis. If generating a personalized plan, include a short lifestyle disclaimer."""
 
 
