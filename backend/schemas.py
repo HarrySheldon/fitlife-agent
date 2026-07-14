@@ -1,6 +1,8 @@
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from backend.domain.user_preferences import AppLanguage, UnitSystem, validate_iana_timezone
 
 
 T = TypeVar("T")
@@ -92,6 +94,17 @@ class ModelSettingsUpdateRequest(BaseModel):
     model: str = Field(min_length=1, max_length=200)
     enabled: bool
     api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+
+
+class UserPreferencesUpdateRequest(BaseModel):
+    language: AppLanguage | None = None
+    unit_system: UnitSystem | None = None
+    timezone: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        return validate_iana_timezone(value) if value is not None else None
 
 
 class MealRecord(BaseModel):

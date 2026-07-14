@@ -24,12 +24,12 @@
 - Test: `backend/tests/application/test_user_preferences.py`
 - Test: `backend/tests/test_preferences_api.py`
 
-- [ ] Write failing tests for defaults, IANA timezone validation, per-user isolation, atomic persistence, GET/PATCH authentication, partial updates, and initialization from `X-Timezone`/`Accept-Language` only when no account preference exists.
-- [ ] Run the focused tests and confirm RED because preference types and endpoints do not exist.
-- [ ] Implement `UserPreferences(language, unit_system, timezone)`, repository and get/update use cases; reject unknown locales, unit systems, and timezones with stable validation errors.
-- [ ] Add `GET /settings/preferences` and `PATCH /settings/preferences`, returning only the current user's settings with `processing_mode=deterministic`.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add per-user general preferences`.
+- [x] Write failing tests for defaults, IANA timezone validation, per-user isolation, atomic persistence, GET/PATCH authentication, partial updates, and initialization from `X-Timezone`/`Accept-Language` only when no account preference exists.
+- [x] Run the focused tests and confirm RED because preference types and endpoints do not exist.
+- [x] Implement `UserPreferences(language, unit_system, timezone)`, repository and get/update use cases; reject unknown locales, unit systems, and timezones with stable validation errors.
+- [x] Add `GET /settings/preferences` and `PATCH /settings/preferences`, returning only the current user's settings with `processing_mode=deterministic`.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: add per-user general preferences`.
 
 ### Task 2: Account-local today and week boundaries
 
