@@ -1,4 +1,4 @@
-import { Activity, BarChart3, CalendarCheck, CalendarDays, LogOut, UserRound } from 'lucide-react'
+import { Activity, BarChart3, CalendarCheck, CalendarDays, LogOut, Settings, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 import { useAuth } from '../hooks/useAuth'
@@ -9,6 +9,7 @@ const items = [
   { to: '/review', label: 'Review', icon: BarChart3 },
   { to: '/plan', label: 'Plan', icon: Activity },
   { to: '/profile', label: 'Profile', icon: UserRound },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export function Sidebar() {

@@ -13,6 +13,9 @@ import type {
   EvalResult,
   GeneratedPlan,
   MealRecord,
+  ModelConnectionSettings,
+  ModelConnectionTestResult,
+  ModelSettingsUpdate,
   ProcessingMode,
   TodayOverview,
   UserProfile,
@@ -70,6 +73,12 @@ export const api = {
   dashboardForDate: (date: string) => request<DashboardSummary>(`/dashboard/summary?date=${encodeURIComponent(date)}`),
   profile: () => request<UserProfile>('/profile'),
   saveProfile: (profile: UserProfile) => request<UserProfile>('/profile', { method: 'POST', body: JSON.stringify(profile) }),
+  modelSettings: () => request<ModelConnectionSettings>('/settings/model'),
+  saveModelSettings: (settings: ModelSettingsUpdate) =>
+    request<ModelConnectionSettings>('/settings/model', { method: 'PUT', body: JSON.stringify(settings) }),
+  clearModelApiKey: () => request<ModelConnectionSettings>('/settings/model/api-key', { method: 'DELETE' }),
+  listModels: () => request<{ models: string[] }>('/settings/model/models', { method: 'POST' }),
+  testModelConnection: () => request<ModelConnectionTestResult>('/settings/model/test', { method: 'POST' }),
   chat: (question: string) => request<ChatResponse>('/chat', { method: 'POST', body: JSON.stringify({ question }) }),
   today: (date: string) => request<TodayOverview>(`/today?date=${encodeURIComponent(date)}`),
   coachAction: (payload: CoachActionRequest) =>

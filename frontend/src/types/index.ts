@@ -53,6 +53,43 @@ export interface AuthRequest {
   display_name?: string
 }
 
+export type ModelProvider = 'openai' | 'custom'
+export type ModelProtocol = 'responses' | 'chat_completions'
+export type ModelTestStatus = 'untested' | 'success' | 'failed'
+export type ModelConnectionState = 'unconfigured' | 'disabled' | 'untested' | 'success' | 'failed'
+
+export interface ModelConnectionSettings {
+  provider: ModelProvider
+  protocol: ModelProtocol
+  base_url: string | null
+  model: string
+  enabled: boolean
+  api_key_configured: boolean
+  api_key_hint: string | null
+  test_status: ModelTestStatus
+  test_error_code: string | null
+  tested_at: string | null
+  updated_at: string | null
+  state: ModelConnectionState
+}
+
+export interface ModelSettingsUpdate {
+  provider: ModelProvider
+  protocol: ModelProtocol
+  base_url: string | null
+  model: string
+  enabled: boolean
+  api_key?: string
+}
+
+export interface ModelConnectionTestResult {
+  status: 'success'
+  protocol: ModelProtocol
+  model: string
+  latency_ms: number
+  tested_at: string
+}
+
 export interface MealRecord {
   date: string
   meal: string

@@ -8,6 +8,8 @@ import { Logbook } from '../pages/Logbook'
 import { Plan } from '../pages/Plan'
 import { Profile } from '../pages/Profile'
 import { Review } from '../pages/Review'
+import { ModelSettings } from '../pages/settings/ModelSettings'
+import { SettingsHome } from '../pages/settings/SettingsHome'
 import { Today } from '../pages/Today'
 
 export function AppRoutes() {
@@ -21,6 +23,8 @@ export function AppRoutes() {
           <Route path="/review" element={<Review />} />
           <Route path="/plan" element={<Plan />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<SettingsHome />} />
+          <Route path="/settings/model" element={<ModelSettings />} />
           <Route path="/records" element={<Navigate to="/logbook" replace />} />
           <Route path="/dashboard" element={<Navigate to="/" replace />} />
           <Route path="/report" element={<Navigate to="/review" replace />} />

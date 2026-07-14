@@ -80,7 +80,7 @@
 - [x] Run tests and confirm RED.
 - [x] Resolve environment credentials only for unauthenticated/demo execution and resolve encrypted per-user settings for authenticated execution.
 - [x] Run tests and confirm GREEN.
-- [ ] Commit as `feat: connect agent execution to user model settings`.
+- [x] Commit as `feat: connect agent execution to user model settings`.
 
 ### Task 5: Settings navigation and isolated model page
 
@@ -94,10 +94,10 @@
 - Modify: `frontend/src/types/index.ts`
 - Modify: `frontend/src/styles/index.css`
 
-- [ ] Add frontend contract types and API methods without automatic model list or test calls.
-- [ ] Build `/settings` as navigation-only rows with title, description, and chevron only; add `/settings/model` as the dedicated form task.
-- [ ] Implement provider/protocol controls, manual model input, API-key retain/replace/clear states, explicit Save/Get models/Test buttons, disabled/loading/error/success states, and responsive layout.
-- [ ] Run `npm run build` and inspect desktop/mobile routes in the browser.
+- [x] Add frontend contract types and API methods without automatic model list or test calls.
+- [x] Build `/settings` as navigation-only rows with title, description, and chevron only; add `/settings/model` as the dedicated form task.
+- [x] Implement provider/protocol controls, manual model input, API-key retain/replace/clear states, explicit Save/Get models/Test buttons, disabled/loading/error/success states, and responsive layout.
+- [x] Run `npm run build` and inspect desktop/mobile routes in the browser.
 - [ ] Commit as `feat: add model settings task pages`.
 
 ### Task 6: Security regression and delivery verification
