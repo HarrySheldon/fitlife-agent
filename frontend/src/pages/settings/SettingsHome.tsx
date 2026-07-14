@@ -11,7 +11,7 @@ export function SettingsHome() {
         <h1>{t('settings.title')}</h1>
       </header>
 
-      <nav className="settings-list" aria-label="Settings tasks">
+      <nav className="settings-list" aria-label={t('settings.tasks')}>
         <Link className="settings-row" to="/settings/general">
           <span className="settings-row-icon" aria-hidden="true"><SlidersHorizontal size={20} /></span>
           <span className="settings-row-copy"><strong>{t('settings.general')}</strong><span>{t('settingsGeneral.description')}</span></span>
@@ -21,7 +21,7 @@ export function SettingsHome() {
           <span className="settings-row-icon" aria-hidden="true"><Cpu size={20} /></span>
           <span className="settings-row-copy">
             <strong>{t('settings.model')}</strong>
-            <span>Provider, protocol, model and API key</span>
+            <span>{t('settings.modelDescription')}</span>
           </span>
           <ChevronRight size={20} aria-hidden="true" />
         </Link>

@@ -24,6 +24,7 @@ import type {
   WeeklyReport,
   WorkoutRecord,
 } from '../types'
+import i18n from '../i18n'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const TOKEN_KEY = 'fitlife_access_token'
@@ -46,7 +47,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const payload = (await response.json().catch(() => ({}))) as Partial<ApiResponse<T>> & { detail?: string }
   if (!response.ok || !payload.success) {
-    const message = payload.error?.message || payload.message || payload.detail || `Request failed: ${response.status}`
+    const message = payload.error?.message
+      || payload.message
+      || payload.detail
+      || i18n.t('common.requestFailed', { lng: languageStorage.get(), status: response.status })
     throw new ApiRequestError(
       message,
       payload.error?.code,

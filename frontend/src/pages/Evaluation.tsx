@@ -1,15 +1,27 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ErrorState } from '../components/ErrorState'
 import { MetricCard } from '../components/MetricCard'
 import { api } from '../services/api'
 import type { EvalGroupMetric, EvalResult } from '../types'
-import { formatGroupKey, formatRate, summarizeFailures } from './evaluationViewModel'
+import { evaluationLabelKey, failureSummary, formatRate } from './evaluationViewModel'
 
 export function Evaluation() {
+  const { t } = useTranslation()
   const [result, setResult] = useState<EvalResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function evaluationLabel(value: string): string {
+    const key = evaluationLabelKey(value)
+    return key ? t(key) : value
+  }
+
+  function translatedFailureSummary(value: EvalResult): string {
+    const summary = failureSummary(value)
+    return t(summary.key, summary.values)
+  }
 
   async function runEval() {
     setLoading(true)
@@ -27,25 +39,29 @@ export function Evaluation() {
     <div className="page-stack">
       <header className="page-header inline-header">
         <div>
-          <span>Regression harness</span>
-          <h1>Agent evaluation</h1>
+          <span>{t('evaluation.eyebrow')}</span>
+          <h1>{t('evaluation.title')}</h1>
         </div>
         <button className="primary-button" type="button" onClick={() => void runEval()} disabled={loading}>
-          {loading ? 'Running...' : 'Run eval'}
+          {loading ? t('common.running') : t('evaluation.run')}
         </button>
       </header>
       {error ? <ErrorState message={error} /> : null}
       {result ? (
         <>
           <div className="metric-grid">
-            <MetricCard label="Total tests" value={result.total_tests} />
-            <MetricCard label="Pass rate" value={formatRate(result.pass_rate)} detail={summarizeFailures(result)} />
-            <MetricCard label="Tool success" value={formatRate(result.tool_call_success_rate)} />
-            <MetricCard label="Retrieval hit" value={formatRate(result.retrieval_hit_rate)} />
-            <MetricCard label="Format success" value={formatRate(result.structured_output_success_rate)} />
-            <MetricCard label="Keyword coverage" value={formatRate(result.preference_compliance_rate)} />
-            <MetricCard label="Validator pass" value={formatRate(result.validator_pass_rate)} />
-            <MetricCard label="Failed cases" value={result.failed_cases.length} />
+            <MetricCard label={t('evaluation.totalTests')} value={result.total_tests} />
+            <MetricCard
+              label={t('evaluation.passRate')}
+              value={formatRate(result.pass_rate)}
+              detail={translatedFailureSummary(result)}
+            />
+            <MetricCard label={t('evaluation.toolSuccess')} value={formatRate(result.tool_call_success_rate)} />
+            <MetricCard label={t('evaluation.retrievalHit')} value={formatRate(result.retrieval_hit_rate)} />
+            <MetricCard label={t('evaluation.formatSuccess')} value={formatRate(result.structured_output_success_rate)} />
+            <MetricCard label={t('evaluation.keywordCoverage')} value={formatRate(result.preference_compliance_rate)} />
+            <MetricCard label={t('evaluation.validatorPass')} value={formatRate(result.validator_pass_rate)} />
+            <MetricCard label={t('evaluation.failedCases')} value={result.failed_cases.length} />
           </div>
 
           <div className="evaluation-grid">
@@ -53,13 +69,13 @@ export function Evaluation() {
               const groupEntries = Object.entries(metrics as Record<string, EvalGroupMetric>)
               return (
                 <section className="content-panel evaluation-panel" key={groupName}>
-                  <h2>{formatGroupKey(groupName)}</h2>
+                  <h2>{evaluationLabel(groupName)}</h2>
                   <div className="evaluation-table">
                     {groupEntries.map(([key, value]) => (
                       <div className="evaluation-row" key={key}>
-                        <span>{formatGroupKey(key)}</span>
+                        <span>{evaluationLabel(key)}</span>
                         <strong>{formatRate(value.pass_rate)}</strong>
-                        <small>{value.total} cases</small>
+                        <small>{value.total} {t('common.cases')}</small>
                       </div>
                     ))}
                   </div>
@@ -69,16 +85,16 @@ export function Evaluation() {
           </div>
 
           <section className="content-panel">
-            <h2>Failed cases</h2>
+            <h2>{t('evaluation.failedCases')}</h2>
             {result.failed_cases.length === 0 ? (
-              <div className="state-box">No failed cases in the latest evaluation run.</div>
+              <div className="state-box">{t('evaluation.noFailures')}</div>
             ) : (
               <div className="failed-case-list">
                 {result.failed_cases.map((item) => (
                   <article className="failed-case" key={item.question}>
                     <div className="failed-case-header">
                       <strong>{item.question}</strong>
-                      <span>{item.expected_tool ?? 'No tool expected'}</span>
+                      <span>{item.expected_tool ? evaluationLabel(item.expected_tool) : t('evaluation.noTool')}</span>
                     </div>
                     <ul>
                       {item.failure_reasons.map((reason) => (
@@ -88,8 +104,8 @@ export function Evaluation() {
                     <div className="check-grid">
                       {item.checks.map((check) => (
                         <div className={check.passed ? 'check-chip passed' : 'check-chip failed'} key={check.name}>
-                          <span>{formatGroupKey(check.name)}</span>
-                          <strong>{check.passed ? 'Pass' : 'Fail'}</strong>
+                          <span>{evaluationLabel(check.name)}</span>
+                          <strong>{check.passed ? t('evaluation.pass') : t('evaluation.fail')}</strong>
                         </div>
                       ))}
                     </div>

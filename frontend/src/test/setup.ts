@@ -5,4 +5,13 @@ import { afterEach } from 'vitest'
 import '../i18n'
 
 
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+globalThis.ResizeObserver = ResizeObserverStub
+
+
 afterEach(() => cleanup())

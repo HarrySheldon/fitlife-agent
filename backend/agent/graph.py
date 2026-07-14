@@ -11,6 +11,7 @@ from backend.application.ports.model_gateway import ModelGateway
 from backend.application.use_cases.generate_plan import GeneratePlan
 from backend.application.use_cases.generate_weekly_report import GenerateWeeklyReport
 from backend.domain.errors import ApplicationError, ai_not_configured_error, model_gateway_error
+from backend.domain.user_preferences import UserPreferences
 from backend.infrastructure.model_gateway.factory import resolve_user_model_gateway
 from backend.infrastructure.model_gateway.openai_responses import build_model_gateway
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
@@ -30,6 +31,7 @@ def run_fitlife_agent(
     gateway: ModelGateway | None = None,
     initial_tool_results: dict | None = None,
     initial_tool_calls: list[str] | None = None,
+    preferences: UserPreferences | None = None,
 ) -> dict:
     repository = repository or FileFitnessRepository()
     if gateway is None:
@@ -48,6 +50,7 @@ def run_fitlife_agent(
             "messages": [{"role": "user", "content": question}],
             "user_query": question,
             "current_user_id": user_id,
+            "context_metadata": (preferences or UserPreferences()).model_dump(),
             "tool_calls": list(initial_tool_calls or []),
             "tool_results": dict(initial_tool_results or {}),
             "retrieved_docs": [],
@@ -65,6 +68,7 @@ def run_contextual_coach_action(
     *,
     repository: FitnessRepository | None = None,
     gateway: ModelGateway | None = None,
+    preferences: UserPreferences | None = None,
 ) -> dict:
     repository = repository or FileFitnessRepository()
     prompt = _coach_prompt(surface, action, date, question)
@@ -81,6 +85,7 @@ def run_contextual_coach_action(
         gateway=gateway,
         initial_tool_results=tool_results,
         initial_tool_calls=tool_calls,
+        preferences=preferences,
     )
     result["trace"] = {
         **result.get("trace", {}),

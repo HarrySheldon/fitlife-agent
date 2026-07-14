@@ -1,6 +1,7 @@
 import { Bot, CalendarDays, Dumbbell, Utensils } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ErrorState } from '../components/ErrorState'
 import { FileUploader } from '../components/FileUploader'
@@ -30,6 +31,7 @@ const emptyWorkout: Omit<WorkoutRecord, 'date'> = {
 }
 
 export function Records() {
+  const { t } = useTranslation()
   const [selectedDate, setSelectedDate] = useState(today())
   const [days, setDays] = useState<DailySummary[]>([])
   const [detail, setDetail] = useState<DailyDetail | null>(null)
@@ -114,8 +116,8 @@ export function Records() {
     <div className="page-stack">
       <header className="page-header inline-header">
         <div>
-          <span>Daily records</span>
-          <h1>Calendar-based intake and training</h1>
+          <span>{t('legacy.recordsEyebrow')}</span>
+          <h1>{t('legacy.recordsTitle')}</h1>
         </div>
         <label className="date-picker">
           <CalendarDays size={18} />
@@ -124,14 +126,14 @@ export function Records() {
       </header>
 
       {error ? <ErrorState message={error} /> : null}
-      {loading && !detail ? <LoadingState label="Loading records" /> : null}
+      {loading && !detail ? <LoadingState label={t('legacy.loadingRecords')} /> : null}
 
       {summary ? (
         <div className="metric-grid">
-          <MetricCard label="Day calories" value={`${summary.calories} kcal`} detail={selectedDate} />
-          <MetricCard label="Day protein" value={`${summary.protein} g`} />
-          <MetricCard label="Meals" value={summary.meal_count} />
-          <MetricCard label="Training" value={`${summary.training_sessions} sessions`} detail={`${summary.training_duration_min} min`} />
+          <MetricCard label={t('legacy.dayCalories')} value={`${summary.calories} kcal`} detail={selectedDate} />
+          <MetricCard label={t('legacy.dayProtein')} value={`${summary.protein} g`} />
+          <MetricCard label={t('today.meals')} value={summary.meal_count} />
+          <MetricCard label={t('today.training')} value={`${summary.training_sessions} ${t('auth.sessions')}`} detail={`${summary.training_duration_min} ${t('common.minutesShort')}`} />
         </div>
       ) : null}
 
@@ -145,34 +147,34 @@ export function Records() {
           >
             <span>{day.date.slice(5)}</span>
             <strong>{Math.round(day.calories)}</strong>
-            <small>{day.training_sessions} train</small>
+            <small>{day.training_sessions} {t('common.trainingShort')}</small>
           </button>
         ))}
       </div>
 
       <div className="split-grid">
         <section className="content-panel">
-          <h2>Meals</h2>
+          <h2>{t('today.meals')}</h2>
           <div className="record-list">
             {detail?.meals.map((row, index) => (
               <div className="record-row" key={`${row.date}-${row.meal}-${row.food}-${index}`}>
                 <Utensils size={16} />
                 <span>{row.meal}</span>
                 <strong>{row.food}</strong>
-                <small>{row.calories} kcal - {row.protein} g protein</small>
+                <small>{row.calories} kcal - {row.protein} {t('common.proteinUnit')}</small>
               </div>
             ))}
           </div>
         </section>
         <section className="content-panel">
-          <h2>Workouts</h2>
+          <h2>{t('legacy.workouts')}</h2>
           <div className="record-list">
             {detail?.workouts.map((row, index) => (
               <div className="record-row" key={`${row.date}-${row.exercise}-${index}`}>
                 <Dumbbell size={16} />
                 <span>{row.type}</span>
                 <strong>{row.exercise}</strong>
-                <small>{row.duration_min} min - {row.muscle_group}</small>
+                <small>{row.duration_min} {t('common.minutesShort')} - {row.muscle_group}</small>
               </div>
             ))}
           </div>
@@ -181,35 +183,35 @@ export function Records() {
 
       <div className="record-input-grid">
         <form className="content-panel record-form" onSubmit={(event) => void submitAgentEntry(event)}>
-          <h2><Bot size={18} /> Smart entry</h2>
+          <h2><Bot size={18} /> {t('legacy.smartEntry')}</h2>
           <textarea required value={agentText} onChange={(event) => setAgentText(event.target.value)} />
-          <button className="primary-button" type="submit" disabled={saving}>Parse entry</button>
+          <button className="primary-button" type="submit" disabled={saving}>{t('legacy.parseEntry')}</button>
         </form>
 
         <form className="content-panel record-form" onSubmit={(event) => void submitMeal(event)}>
-          <h2><Utensils size={18} /> Meal form</h2>
-          <input required placeholder="Food" value={meal.food} onChange={(event) => setMeal({ ...meal, food: event.target.value })} />
-          <input required placeholder="Amount" value={meal.amount} onChange={(event) => setMeal({ ...meal, amount: event.target.value })} />
+          <h2><Utensils size={18} /> {t('legacy.mealForm')}</h2>
+          <input required placeholder={t('today.food')} value={meal.food} onChange={(event) => setMeal({ ...meal, food: event.target.value })} />
+          <input required placeholder={t('today.amount')} value={meal.amount} onChange={(event) => setMeal({ ...meal, amount: event.target.value })} />
           <div className="compact-fields">
-            <input type="number" min="0" placeholder="Calories" value={meal.calories} onChange={(event) => setMeal({ ...meal, calories: Number(event.target.value) })} />
-            <input type="number" min="0" placeholder="Protein" value={meal.protein} onChange={(event) => setMeal({ ...meal, protein: Number(event.target.value) })} />
+            <input type="number" min="0" placeholder={t('logbook.calories')} value={meal.calories} onChange={(event) => setMeal({ ...meal, calories: Number(event.target.value) })} />
+            <input type="number" min="0" placeholder={t('logbook.protein')} value={meal.protein} onChange={(event) => setMeal({ ...meal, protein: Number(event.target.value) })} />
           </div>
-          <button className="primary-button" type="submit" disabled={saving}>Save meal</button>
+          <button className="primary-button" type="submit" disabled={saving}>{t('today.saveMeal')}</button>
         </form>
 
         <form className="content-panel record-form" onSubmit={(event) => void submitWorkout(event)}>
-          <h2><Dumbbell size={18} /> Workout form</h2>
-          <input required placeholder="Exercise" value={workout.exercise} onChange={(event) => setWorkout({ ...workout, exercise: event.target.value })} />
-          <input required placeholder="Muscle group" value={workout.muscle_group} onChange={(event) => setWorkout({ ...workout, muscle_group: event.target.value })} />
+          <h2><Dumbbell size={18} /> {t('legacy.workoutForm')}</h2>
+          <input required placeholder={t('today.exercise')} value={workout.exercise} onChange={(event) => setWorkout({ ...workout, exercise: event.target.value })} />
+          <input required placeholder={t('today.muscleGroup')} value={workout.muscle_group} onChange={(event) => setWorkout({ ...workout, muscle_group: event.target.value })} />
           <div className="compact-fields">
-            <input type="number" min="0" placeholder="Sets" value={workout.sets} onChange={(event) => setWorkout({ ...workout, sets: Number(event.target.value) })} />
-            <input type="number" min="0" placeholder="Minutes" value={workout.duration_min} onChange={(event) => setWorkout({ ...workout, duration_min: Number(event.target.value) })} />
+            <input type="number" min="0" placeholder={t('today.sets')} value={workout.sets} onChange={(event) => setWorkout({ ...workout, sets: Number(event.target.value) })} />
+            <input type="number" min="0" placeholder={t('today.minutes')} value={workout.duration_min} onChange={(event) => setWorkout({ ...workout, duration_min: Number(event.target.value) })} />
           </div>
-          <button className="primary-button" type="submit" disabled={saving}>Save workout</button>
+          <button className="primary-button" type="submit" disabled={saving}>{t('legacy.saveWorkout')}</button>
         </form>
 
         <section className="content-panel record-form">
-          <h2>CSV import</h2>
+          <h2>{t('logbook.csvImport')}</h2>
           <FileUploader label="meals.csv" onUpload={(file) => upload('meals', file)} />
           <FileUploader label="workouts.csv" onUpload={(file) => upload('workouts', file)} />
         </section>

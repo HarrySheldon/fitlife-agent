@@ -1,5 +1,5 @@
 import type { EvalResult } from '../types'
-import { formatGroupKey, formatRate, summarizeFailures } from './evaluationViewModel'
+import { evaluationLabelKey, failureSummary, formatRate } from './evaluationViewModel'
 
 // Included by tsconfig as a lightweight compile-time contract for Evaluation v2 fields.
 const sample: EvalResult = {
@@ -48,9 +48,9 @@ const sample: EvalResult = {
 }
 
 const passRateText: string = formatRate(sample.pass_rate)
-const groupLabel: string = formatGroupKey('requires_retrieval')
-const failureSummary: string = summarizeFailures(sample)
+const groupLabel: string | null = evaluationLabelKey('requires_retrieval')
+const summary = failureSummary(sample)
 
 void passRateText
 void groupLabel
-void failureSummary
+void summary

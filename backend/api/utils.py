@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from backend.domain.errors import ApplicationError
+from backend.i18n import translate_public_message
+from backend.domain.user_preferences import AppLanguage
 from backend.schemas import ApiError, ApiResponse, ProcessingMode
 
 
@@ -32,13 +34,14 @@ def fail(
     )
 
 
-def application_error_response(error: ApplicationError) -> dict:
+def application_error_response(error: ApplicationError, language: AppLanguage = "en-US") -> dict:
+    message = translate_public_message(error.message_key, language, error.message)
     response = ApiResponse(
         success=False,
         data=None,
-        message=error.message,
+        message=message,
         processing_mode=error.processing_mode,
-        error=ApiError(code=error.code, message=error.message),
+        error=ApiError(code=error.code, message=message),
     )
     return _dump_response(response)
 

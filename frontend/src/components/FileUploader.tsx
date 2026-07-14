@@ -1,5 +1,6 @@
 import { Upload } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface FileUploaderProps {
   label: string
@@ -7,16 +8,17 @@ interface FileUploaderProps {
 }
 
 export function FileUploader({ label, onUpload }: FileUploaderProps) {
-  const [status, setStatus] = useState<string>('No file selected')
+  const { t } = useTranslation()
+  const [status, setStatus] = useState<string>(() => t('components.noFile'))
   const [busy, setBusy] = useState(false)
 
   async function handleChange(file?: File) {
     if (!file) return
     setBusy(true)
-    setStatus(`Uploading ${file.name}`)
+    setStatus(t('components.uploadingFile', { name: file.name }))
     try {
       await onUpload(file)
-      setStatus(`Uploaded ${file.name}`)
+      setStatus(t('components.uploadedFile', { name: file.name }))
     } catch (err) {
       setStatus((err as Error).message)
     } finally {
@@ -28,7 +30,7 @@ export function FileUploader({ label, onUpload }: FileUploaderProps) {
     <label className="upload-box">
       <Upload size={20} />
       <span>{label}</span>
-      <small>{busy ? 'Working...' : status}</small>
+      <small>{busy ? t('components.working') : status}</small>
       <input type="file" accept=".csv" onChange={(event) => handleChange(event.target.files?.[0])} />
     </label>
   )

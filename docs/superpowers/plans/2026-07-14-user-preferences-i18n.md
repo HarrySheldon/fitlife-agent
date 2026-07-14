@@ -114,11 +114,12 @@
 - Test: `backend/tests/test_localized_api_messages.py`
 - Test: `backend/tests/application/test_agent_boundary.py`
 
-- [ ] Write route/API tests proving Chinese/English coverage for authentication, navigation, Today, Logbook, Review, Plan, Profile, Evaluation, settings, loading, empty, validation, and fixed API error states; Agent answer content remains untouched.
-- [ ] Run the route-level test and confirm RED on remaining literal UI strings.
-- [ ] Resolve authenticated backend messages from account language and unauthenticated messages from `Accept-Language`; keep stable error codes language-neutral and translate only public messages.
-- [ ] Add language, unit system, and timezone to Agent context metadata while leaving the user's question language as the answer-language signal.
-- [ ] Replace product-facing literals with translation keys while preserving structured record content and Agent output.
-- [ ] Add a tracked-string scan test that fails when untranslated literals are introduced in product components outside approved data values.
-- [ ] Run frontend tests and production build; inspect desktop/mobile `/settings/general` and one core page in both languages.
-- [ ] Commit as `feat: localize the complete product interface`.
+- [x] Write route/API tests proving Chinese/English coverage for authentication, navigation, Today, Logbook, Review, Plan, Profile, Evaluation, settings, loading, empty, validation, and fixed API error states; Agent answer content remains untouched. Evidence: the frontend route/state suite passes 30 tests, including real registration validation and rendered Evaluation results in both locales; the 47-test backend focused run includes localized upload success/error coverage and Agent boundary assertions.
+- [x] Run the route-level test and confirm RED on remaining literal UI strings. Evidence: the initial route run failed 11 of 24 cases and the tracked-string scan reported 215 literals; review regressions later produced 10 focused frontend failures and 2 localized-upload failures before the fixes.
+- [x] Resolve authenticated backend messages from account language and unauthenticated messages from `Accept-Language`; keep stable error codes language-neutral and translate only public messages. Evidence: `backend/tests/test_localized_api_messages.py` passes 10 tests, including authenticated upload messages in both locales and stable `INVALID_UPLOAD_FILE` errors.
+- [x] Add language, unit system, and timezone to Agent context metadata while leaving the user's question language as the answer-language signal. Evidence: `test_agent_adds_preferences_as_context_without_changing_question_or_answer` passes.
+- [x] Replace product-facing literals with translation keys while preserving structured record content and Agent output. Evidence: the complete frontend suite passes 46 tests, including localized Evaluation summaries/labels and exact Agent Markdown preservation.
+- [x] Add a tracked-string scan test that fails when untranslated literals are introduced in product components outside approved data values. Evidence: `frontend/src/i18n/trackedStrings.test.ts` passes 5 tests and explicitly detects the prior Evaluation helper strings, service fallback, and JSX expression literal patterns.
+- [x] Run frontend tests and production build. Evidence: Vitest passes 7 files/46 tests; Vite transforms 2438 modules and completes the production build.
+- [ ] Inspect desktop/mobile `/settings/general` and one core page in both languages. Blocked evidence: local services started successfully, but the in-app Browser reported no connectable browser backend, so no visual inspection is claimed.
+- [x] Commit as `feat: localize the complete product interface`.

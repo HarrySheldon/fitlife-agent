@@ -99,6 +99,7 @@ def _extract_parsed_output(response: Any) -> Any | None:
 def _writer_payload(state: dict) -> dict:
     return {
         "user_query": state.get("user_query", ""),
+        "context_metadata": state.get("context_metadata", {}),
         "intent": state.get("intent", ""),
         "profile": state.get("profile", {}),
         "tool_results": state.get("tool_results", {}),

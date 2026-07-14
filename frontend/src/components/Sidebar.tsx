@@ -1,19 +1,21 @@
 import { Activity, BarChart3, CalendarCheck, CalendarDays, LogOut, Settings, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 import { useAuth } from '../hooks/useAuth'
 
 const items = [
-  { to: '/', label: 'Today', icon: CalendarCheck },
-  { to: '/logbook', label: 'Logbook', icon: CalendarDays },
-  { to: '/review', label: 'Review', icon: BarChart3 },
-  { to: '/plan', label: 'Plan', icon: Activity },
-  { to: '/profile', label: 'Profile', icon: UserRound },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/', labelKey: 'navigation.today', icon: CalendarCheck },
+  { to: '/logbook', labelKey: 'navigation.logbook', icon: CalendarDays },
+  { to: '/review', labelKey: 'navigation.review', icon: BarChart3 },
+  { to: '/plan', labelKey: 'navigation.plan', icon: Activity },
+  { to: '/profile', labelKey: 'navigation.profile', icon: UserRound },
+  { to: '/settings', labelKey: 'navigation.settings', icon: Settings },
 ]
 
 export function Sidebar() {
   const { user, logout } = useAuth()
+  const { t } = useTranslation()
   const identity = user?.username || user?.email || user?.phone || ''
 
   return (
@@ -23,14 +25,14 @@ export function Sidebar() {
           <div className="brand-mark">FL</div>
           <div>
             <h1>FitLife Agent</h1>
-            <p>Daily fitness log</p>
+            <p>{t('navigation.tagline')}</p>
           </div>
         </div>
         <nav>
-          {items.map(({ to, label, icon: Icon }) => (
+          {items.map(({ to, labelKey, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Icon size={18} />
-              <span>{label}</span>
+              <span>{t(labelKey)}</span>
             </NavLink>
           ))}
         </nav>
@@ -40,7 +42,7 @@ export function Sidebar() {
           <strong>{user?.display_name}</strong>
           <span>{identity}</span>
         </div>
-        <button type="button" onClick={logout} aria-label="Log out">
+        <button type="button" onClick={logout} aria-label={t('navigation.logout')}>
           <LogOut size={18} />
         </button>
       </div>

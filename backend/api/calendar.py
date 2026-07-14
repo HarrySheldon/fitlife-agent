@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from backend.api.dependencies import optional_current_user
 from backend.api.utils import ok
+from backend.i18n import message_for_request
 from backend.schemas import AgentEntryRequest, AuthenticatedUser, MealRecord, WorkoutRecord
 from backend.tools.calendar_store import create_agent_entry, create_meal, create_workout, get_daily_detail, list_daily_summaries
 
@@ -31,28 +32,28 @@ def day_detail(day: str, user: AuthenticatedUser | None = Depends(optional_curre
 
 
 @router.post("/meals")
-def add_meal(record: MealRecord, user: AuthenticatedUser | None = Depends(optional_current_user)):
+def add_meal(request: Request, record: MealRecord, user: AuthenticatedUser | None = Depends(optional_current_user)):
     return ok(
         create_meal(record, _user_id(user)).model_dump(),
-        "Meal saved",
+        message_for_request("MEAL_SAVED", request, user),
         processing_mode="deterministic",
     )
 
 
 @router.post("/workouts")
-def add_workout(record: WorkoutRecord, user: AuthenticatedUser | None = Depends(optional_current_user)):
+def add_workout(request: Request, record: WorkoutRecord, user: AuthenticatedUser | None = Depends(optional_current_user)):
     return ok(
         create_workout(record, _user_id(user)).model_dump(),
-        "Workout saved",
+        message_for_request("WORKOUT_SAVED", request, user),
         processing_mode="deterministic",
     )
 
 
 @router.post("/agent-entry")
-def add_agent_entry(request: AgentEntryRequest, user: AuthenticatedUser | None = Depends(optional_current_user)):
+def add_agent_entry(http_request: Request, request: AgentEntryRequest, user: AuthenticatedUser | None = Depends(optional_current_user)):
     return ok(
         create_agent_entry(request, _user_id(user)).model_dump(),
-        "Entry parsed",
+        message_for_request("ENTRY_PARSED", http_request, user),
         processing_mode="deterministic",
     )
 

@@ -11,12 +11,14 @@ class ApplicationError(Exception):
         message: str,
         status_code: int,
         processing_mode: ProcessingMode | None = None,
+        message_key: str | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.status_code = status_code
         self.processing_mode = processing_mode
+        self.message_key = message_key or code
 
 
 def ai_not_configured_error() -> ApplicationError:
@@ -55,6 +57,15 @@ def invalid_model_endpoint_error() -> ApplicationError:
         message="The custom model endpoint is not allowed by the server security policy.",
         status_code=422,
         processing_mode="agent",
+    )
+
+
+def invalid_upload_file_error() -> ApplicationError:
+    return ApplicationError(
+        code="INVALID_UPLOAD_FILE",
+        message="Only CSV files are supported.",
+        status_code=422,
+        processing_mode="deterministic",
     )
 
 

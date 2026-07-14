@@ -4,23 +4,25 @@ import { LoadingState } from '../components/LoadingState'
 import { ProfileForm } from '../components/ProfileForm'
 import { useProfile } from '../hooks/useProfile'
 import { usePreferences } from '../hooks/usePreferences'
+import { useTranslation } from 'react-i18next'
 
 export function Profile() {
+  const { t } = useTranslation()
   const { preferences } = usePreferences()
   const { profile, setProfile, loading, saving, error, save } = useProfile()
-  if (loading) return <LoadingState label="Loading profile" />
+  if (loading) return <LoadingState label={t('profile.loading')} />
   if (error) return <ErrorState message={error} />
   if (!profile) return null
 
   return (
     <div className="page-stack">
       <header className="page-header">
-        <span>Personalization</span>
-        <h1>Profile</h1>
+        <span>{t('profile.eyebrow')}</span>
+        <h1>{t('profile.title')}</h1>
       </header>
       <div className="profile-layout">
         <ProfileForm profile={profile} unitSystem={preferences.unit_system} saving={saving} onChange={setProfile} onSave={save} />
-        <CoachPanel surface="profile" actions={[{ action: 'suggest_targets', label: 'Analyze my targets' }]} />
+        <CoachPanel surface="profile" actions={[{ action: 'suggest_targets', label: t('profile.analyzeTargets') }]} />
       </div>
     </div>
   )

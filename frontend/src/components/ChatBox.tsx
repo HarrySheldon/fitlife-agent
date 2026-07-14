@@ -1,6 +1,7 @@
 import { Send } from 'lucide-react'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { useTranslation } from 'react-i18next'
 
 import type { ChatMessage } from '../hooks/useChat'
 
@@ -11,6 +12,7 @@ interface ChatBoxProps {
 }
 
 export function ChatBox({ messages, loading, onSend }: ChatBoxProps) {
+  const { t } = useTranslation()
   const [question, setQuestion] = useState('')
 
   async function submit() {
@@ -26,10 +28,10 @@ export function ChatBox({ messages, loading, onSend }: ChatBoxProps) {
         {messages.map((message, index) => (
           <article key={index} className={`message ${message.role}`}>
             <ReactMarkdown>{message.content}</ReactMarkdown>
-            {message.trace ? <small>tools: {message.trace.tool_calls.join(', ')}</small> : null}
+            {message.trace ? <small>{t('components.tools')} {message.trace.tool_calls.join(', ')}</small> : null}
           </article>
         ))}
-        {loading ? <article className="message agent">FitLife Coach Agent is thinking...</article> : null}
+        {loading ? <article className="message agent">{t('components.agentThinking')}</article> : null}
       </div>
       <div className="composer">
         <input
@@ -38,9 +40,9 @@ export function ChatBox({ messages, loading, onSend }: ChatBoxProps) {
           onKeyDown={(event) => {
             if (event.key === 'Enter') void submit()
           }}
-          placeholder="Ask about protein, calories, workouts, substitutions, or next-week plans"
+          placeholder={t('components.chatPlaceholder')}
         />
-        <button type="button" onClick={() => void submit()} aria-label="Send question">
+        <button type="button" onClick={() => void submit()} aria-label={t('components.sendQuestion')}>
           <Send size={18} />
         </button>
       </div>

@@ -1,11 +1,13 @@
 import { ArrowRight, Bot, CalendarDays, Dumbbell, Eye, EyeOff, Flame, Sparkles, Utensils } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../hooks/useAuth'
 
 export function Auth() {
+  const { t } = useTranslation()
   const { user, login, register } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('register')
   const [registerIdentifierType, setRegisterIdentifierType] = useState<'username' | 'email' | 'phone'>('email')
@@ -31,7 +33,7 @@ export function Auth() {
     try {
       if (mode === 'register') {
         if (!registerIdentifier.trim()) {
-          throw new Error('Username, email, or phone is required')
+          throw new Error(t('auth.identifierRequired'))
         }
         await register({
           username: registerIdentifierType === 'username' ? registerIdentifier.trim() : undefined,
@@ -57,6 +59,12 @@ export function Auth() {
     setPassword('')
   }
 
+  const identifierTypeLabels = {
+    username: t('auth.username'),
+    email: t('auth.email'),
+    phone: t('auth.phone'),
+  }
+
   return (
     <main className="auth-shell">
       <section className="auth-hero">
@@ -64,20 +72,20 @@ export function Auth() {
           <div className="brand-mark large">FL</div>
           <div className="auth-brand-copy">
             <strong>FitLife Agent</strong>
-            <span>AI fitness logbook</span>
+            <span>{t('auth.tagline')}</span>
           </div>
         </div>
 
         <div className="auth-hero-copy">
-          <span>Training data becomes action</span>
-          <h1>Plan, record, and review every fitness day.</h1>
+          <span>{t('auth.heroEyebrow')}</span>
+          <h1>{t('auth.heroTitle')}</h1>
         </div>
 
-        <div className="auth-preview-grid" aria-label="FitLife Agent preview">
+        <div className="auth-preview-grid" aria-label={t('auth.previewLabel')}>
           <article className="auth-preview-card auth-status-card">
             <div className="auth-card-heading">
               <Flame size={18} />
-              <span>Today</span>
+              <span>{t('auth.today')}</span>
             </div>
             <div className="auth-metric-row">
               <div>
@@ -86,11 +94,11 @@ export function Auth() {
               </div>
               <div>
                 <strong>2</strong>
-                <span>sessions</span>
+                <span>{t('auth.sessions')}</span>
               </div>
               <div>
                 <strong>96g</strong>
-                <span>protein</span>
+                <span>{t('auth.protein')}</span>
               </div>
             </div>
           </article>
@@ -98,12 +106,12 @@ export function Auth() {
           <article className="auth-preview-card auth-calendar-card">
             <div className="auth-card-heading">
               <CalendarDays size={18} />
-              <span>Week log</span>
+              <span>{t('auth.weekLog')}</span>
             </div>
             <div className="auth-mini-calendar">
               {weekPreview.map((day) => (
-                <div className={day.hasData ? 'filled' : ''} key={day.label}>
-                  <span>{day.label}</span>
+                <div className={day.hasData ? 'filled' : ''} key={day.key}>
+                  <span>{t(`auth.weekdays.${day.key}`)}</span>
                   <strong>{day.value}</strong>
                 </div>
               ))}
@@ -113,37 +121,37 @@ export function Auth() {
           <article className="auth-preview-card auth-agent-card">
             <div className="auth-card-heading">
               <Bot size={18} />
-              <span>Agent entry</span>
+              <span>{t('auth.agentEntry')}</span>
             </div>
             <div className="auth-agent-message">
               <Sparkles size={16} />
-              <p>Lunch beef rice 650 kcal, evening run 30 min</p>
+              <p>{t('auth.exampleEntry')}</p>
             </div>
             <div className="auth-agent-result">
-              <span><Utensils size={15} /> Meal saved</span>
-              <span><Dumbbell size={15} /> Workout saved</span>
+              <span><Utensils size={15} /> {t('auth.mealSaved')}</span>
+              <span><Dumbbell size={15} /> {t('auth.workoutSaved')}</span>
             </div>
           </article>
         </div>
       </section>
       <section className="auth-panel">
         <div className="auth-panel-header">
-          <span>Account access</span>
-          <h2>{mode === 'login' ? 'Log in to FitLife Agent' : 'Create your fitness workspace'}</h2>
+          <span>{t('auth.access')}</span>
+          <h2>{mode === 'login' ? t('auth.loginTitle') : t('auth.registerTitle')}</h2>
         </div>
         <div className="auth-mode">
           <button className={mode === 'login' ? 'active' : ''} type="button" onClick={() => switchMode('login')}>
-            Login
+            {t('auth.login')}
           </button>
           <button className={mode === 'register' ? 'active' : ''} type="button" onClick={() => switchMode('register')}>
-            Register
+            {t('auth.register')}
           </button>
         </div>
         <form className="auth-form" onSubmit={(event) => void submit(event)}>
           {mode === 'register' ? (
             <>
               <label>
-                Display name
+                {t('auth.displayName')}
                 <input
                   required
                   autoComplete="name"
@@ -152,7 +160,7 @@ export function Auth() {
                   onChange={(event) => setDisplayName(event.target.value)}
                 />
               </label>
-              <div className="auth-identifier-picker" role="group" aria-label="Registration identifier type">
+              <div className="auth-identifier-picker" role="group" aria-label={t('auth.identifierType')}>
                 {(['email', 'phone', 'username'] as const).map((type) => (
                   <button
                     key={type}
@@ -181,7 +189,7 @@ export function Auth() {
             </>
           ) : (
             <label>
-              Username / email / phone
+              {t('auth.identifier')}
               <input
                 required
                 autoComplete="username"
@@ -192,7 +200,7 @@ export function Auth() {
             </label>
           )}
           <label>
-            Password
+            {t('auth.password')}
             <div className="password-field">
               <input
                 required
@@ -206,7 +214,7 @@ export function Auth() {
               <button
                 type="button"
                 onClick={() => setPasswordVisible((visible) => !visible)}
-                aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                aria-label={passwordVisible ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -215,19 +223,13 @@ export function Auth() {
           {error ? <div className="inline-error">{error}</div> : null}
           <button className="primary-button auth-submit" type="submit" disabled={submitting}>
             <Dumbbell size={18} />
-            <span>{submitting ? 'Submitting...' : mode === 'login' ? 'Login' : 'Create account'}</span>
+            <span>{submitting ? t('common.submitting') : mode === 'login' ? t('auth.login') : t('auth.createAccount')}</span>
             <ArrowRight size={18} />
           </button>
         </form>
       </section>
     </main>
   )
-}
-
-const identifierTypeLabels = {
-  username: 'Username',
-  email: 'Email',
-  phone: 'Phone',
 }
 
 const identifierAutocomplete = {
@@ -243,11 +245,11 @@ const identifierInputTypes = {
 }
 
 const weekPreview = [
-  { label: 'Mon', value: '1.8k', hasData: true },
-  { label: 'Tue', value: '2.1k', hasData: true },
-  { label: 'Wed', value: '-', hasData: false },
-  { label: 'Thu', value: '1.9k', hasData: true },
-  { label: 'Fri', value: '2.0k', hasData: true },
-  { label: 'Sat', value: '-', hasData: false },
-  { label: 'Sun', value: '1.7k', hasData: true },
+  { key: 'mon', value: '1.8k', hasData: true },
+  { key: 'tue', value: '2.1k', hasData: true },
+  { key: 'wed', value: '-', hasData: false },
+  { key: 'thu', value: '1.9k', hasData: true },
+  { key: 'fri', value: '2.0k', hasData: true },
+  { key: 'sat', value: '-', hasData: false },
+  { key: 'sun', value: '1.7k', hasData: true },
 ]

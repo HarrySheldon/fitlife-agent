@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 
 from backend.api.dependencies import require_current_user
 from backend.api.utils import ok
@@ -18,6 +18,7 @@ from backend.infrastructure.model_gateway.factory import create_model_gateway
 from backend.infrastructure.settings.fernet_cipher import FernetCredentialCipher
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.infrastructure.settings.file_user_preferences_repository import FileUserPreferencesRepository
+from backend.i18n import message_for_request
 from backend.schemas import AuthenticatedUser, ModelSettingsUpdateRequest, UserPreferencesUpdateRequest
 
 
@@ -40,14 +41,19 @@ def get_preferences(
 
 @router.patch("/preferences")
 def update_preferences(
-    request: UserPreferencesUpdateRequest,
+    request: Request,
+    payload: UserPreferencesUpdateRequest,
     user: AuthenticatedUser = Depends(require_current_user),
 ):
     result = UpdateUserPreferences(_preferences_repository()).execute(
         user.user_id,
-        **request.model_dump(exclude_unset=True),
+        **payload.model_dump(exclude_unset=True),
     )
-    return ok(result.model_dump(), "Preferences saved", processing_mode="deterministic")
+    return ok(
+        result.model_dump(),
+        message_for_request("PREFERENCES_SAVED", request, user),
+        processing_mode="deterministic",
+    )
 
 
 @router.get("/model")
@@ -59,21 +65,22 @@ def get_model_settings(user: AuthenticatedUser = Depends(require_current_user)):
 
 @router.put("/model")
 def save_model_settings(
-    request: ModelSettingsUpdateRequest,
+    request: Request,
+    payload: ModelSettingsUpdateRequest,
     user: AuthenticatedUser = Depends(require_current_user),
 ):
     repository = _repository()
     result = SaveModelSettings(repository, _cipher()).execute(
         user.user_id,
-        ModelSettingsUpdate(**request.model_dump()),
+        ModelSettingsUpdate(**payload.model_dump()),
     )
-    return ok(result.model_dump(), "Model settings saved", processing_mode="deterministic")
+    return ok(result.model_dump(), message_for_request("MODEL_SETTINGS_SAVED", request, user), processing_mode="deterministic")
 
 
 @router.delete("/model/api-key")
-def clear_model_api_key(user: AuthenticatedUser = Depends(require_current_user)):
+def clear_model_api_key(request: Request, user: AuthenticatedUser = Depends(require_current_user)):
     result = ClearModelApiKey(_repository()).execute(user.user_id)
-    return ok(result.model_dump(), "API key cleared", processing_mode="deterministic")
+    return ok(result.model_dump(), message_for_request("API_KEY_CLEARED", request, user), processing_mode="deterministic")
 
 
 @router.post("/model/models")
@@ -83,9 +90,9 @@ def list_model_options(user: AuthenticatedUser = Depends(require_current_user)):
 
 
 @router.post("/model/test")
-def test_model_connection(user: AuthenticatedUser = Depends(require_current_user)):
+def test_model_connection(request: Request, user: AuthenticatedUser = Depends(require_current_user)):
     result = TestModelConnection(_repository(), _cipher(), create_model_gateway).execute(user.user_id)
-    return ok(result.model_dump(), "Model connection verified", processing_mode="agent")
+    return ok(result.model_dump(), message_for_request("MODEL_CONNECTION_VERIFIED", request, user), processing_mode="agent")
 
 
 def _repository() -> FileModelConnectionRepository:

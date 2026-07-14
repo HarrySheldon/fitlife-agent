@@ -131,7 +131,7 @@ def test_login_failure_uses_generic_account_error(monkeypatch):
     response = client.post("/auth/login", json={"identifier": "missing-user", "password": "password123"})
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid account or password"
+    assert response.json()["error"]["code"] == "AUTH_INVALID_CREDENTIALS"
 
 
 def test_calendar_records_drive_day_detail_and_dashboard_summary(monkeypatch):

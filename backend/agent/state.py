@@ -10,6 +10,7 @@ class AgentState(TypedDict, total=False):
     surface: str | None
     coach_action: str | None
     context_date: str | None
+    context_metadata: dict
     intent: str
     profile: dict
     tool_requests: dict

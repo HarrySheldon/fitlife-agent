@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
+import i18n from '../i18n'
 import { api } from './api'
 
 
@@ -26,3 +27,13 @@ it('sends cached language and browser timezone on preference initialization', as
   expect(headers.get('X-Timezone')).toBe('Asia/Shanghai')
 })
 
+it.each([
+  ['en-US' as const, 'Request failed (503).'],
+  ['zh-CN' as const, '请求失败（503）。'],
+])('localizes an empty API failure in %s', async (language, expected) => {
+  window.localStorage.setItem('fitlife_language', language)
+  await i18n.changeLanguage(language)
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 503 }))
+
+  await expect(api.preferences()).rejects.toMatchObject({ message: expected, status: 503 })
+})

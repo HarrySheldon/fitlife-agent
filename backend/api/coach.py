@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from backend.agent.graph import run_contextual_coach_action
 from backend.api.dependencies import optional_current_user
+from backend.api.preference_context import preferences_for
 from backend.api.utils import ok
 from backend.schemas import AuthenticatedUser, CoachActionRequest, CoachActionResponse
 
@@ -20,6 +21,7 @@ def coach_action(
         date=request.date,
         question=request.question,
         user_id=user.user_id if user else None,
+        preferences=preferences_for(user),
     )
     response = CoachActionResponse(
         surface=request.surface,

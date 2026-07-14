@@ -7,6 +7,7 @@ from backend.agent.planner import PlannerRoute
 from backend.config import Settings
 from backend.domain.errors import ApplicationError
 from backend.domain.model_connection import ModelConnection
+from backend.domain.user_preferences import UserPreferences
 from backend.infrastructure.model_gateway.factory import resolve_user_model_gateway
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
 from backend.tools.data_access import DEFAULT_PROFILE, MEAL_COLUMNS, WORKOUT_COLUMNS
@@ -197,6 +198,44 @@ def test_contextual_coach_keeps_model_answer_instead_of_replacing_it():
 
     assert result["answer_markdown"] == "## Personalized interpretation"
     assert result["trace"]["coach_action"] == "explain_today"
+
+
+def test_agent_adds_preferences_as_context_without_changing_question_or_answer():
+    class CapturingGateway(FakeGateway):
+        planned_question: str | None = None
+        writer_state: dict | None = None
+
+        def plan_route(self, question: str) -> PlannerRoute:
+            self.planned_question = question
+            return super().plan_route(question)
+
+        def write_answer(self, state: dict) -> str:
+            self.writer_state = state
+            return "## 原样保留的 Agent 回答"
+
+    gateway = CapturingGateway()
+    question = "Answer this in the language I used, not the interface language."
+
+    result = run_fitlife_agent(
+        question,
+        repository=FileFitnessRepository(),
+        gateway=gateway,
+        preferences=UserPreferences(
+            language="zh-CN",
+            unit_system="imperial",
+            timezone="Asia/Shanghai",
+        ),
+    )
+
+    assert gateway.planned_question == question
+    assert gateway.writer_state is not None
+    assert gateway.writer_state["user_query"] == question
+    assert gateway.writer_state["context_metadata"] == {
+        "language": "zh-CN",
+        "unit_system": "imperial",
+        "timezone": "Asia/Shanghai",
+    }
+    assert result["answer_markdown"] == "## 原样保留的 Agent 回答"
 
 
 def test_contextual_coach_receives_selected_day_deterministic_context():

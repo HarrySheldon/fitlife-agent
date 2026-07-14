@@ -1,6 +1,8 @@
 import type { WeeklyReport } from '../types'
+import { useTranslation } from 'react-i18next'
 
 export function ReportViewer({ report }: { report: WeeklyReport }) {
+  const { t } = useTranslation()
   return (
     <section className="content-panel">
       <h2>{report.title}</h2>
@@ -10,7 +12,7 @@ export function ReportViewer({ report }: { report: WeeklyReport }) {
           <p>{section.content}</p>
         </article>
       ))}
-      <h3>Checklist</h3>
+      <h3>{t('components.checklist')}</h3>
       <ul>{report.checklist.map((item) => <li key={item}>{item}</li>)}</ul>
     </section>
   )
