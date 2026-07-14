@@ -1,0 +1,105 @@
+# Account and Data Controls Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add isolated password, session, export, and account-deletion workflows with immediate session invalidation and secret-free portable exports.
+
+**Architecture:** Account commands are independent application use cases over a locked file-backed identity store. Signed tokens carry `token_version`; password change and session revocation rotate it and issue a replacement token. Export builds an in-memory ZIP from an explicit allowlist, while deletion removes user-owned resources idempotently before deleting identity last.
+
+**Tech Stack:** FastAPI, Pydantic v2, PBKDF2-HMAC, HMAC-signed bearer tokens, Python `zipfile`, React Router, Vitest.
+
+**Practice references:** Django session-auth-hash invalidation (`django/contrib/auth/__init__.py`, `base_user.py`) and Immich's separate user-deletion service/API boundary.
+
+---
+
+### Task 1: Versioned identity store and session invalidation
+
+**Files:**
+- Create: `backend/application/ports/identity_repository.py`
+- Create: `backend/infrastructure/auth/file_identity_repository.py`
+- Modify: `backend/tools/auth_store.py`
+- Modify: `backend/api/dependencies.py`
+- Modify: `backend/schemas.py`
+- Test: `backend/tests/infrastructure/test_identity_repository.py`
+- Test: `backend/tests/test_session_versioning.py`
+
+- [ ] Write failing tests for locked atomic identity writes, legacy-user `token_version=0` migration, token-version validation, and rejection of older tokens after rotation.
+- [ ] Run focused tests and confirm RED.
+- [ ] Implement a repository that owns users.json reads/writes and exposes authenticate, password replacement, version rotation, and identity deletion operations.
+- [ ] Add `ver` to newly issued tokens and compare it with the stored user on every authenticated request.
+- [ ] Preserve username/email/phone login and existing password hash compatibility.
+- [ ] Run focused tests and confirm GREEN.
+- [ ] Commit as `refactor: add versioned identity sessions`.
+
+### Task 2: Password change and revoke-other-session use cases
+
+**Files:**
+- Create: `backend/application/use_cases/account_security.py`
+- Create: `backend/api/account.py`
+- Modify: `backend/main.py`
+- Modify: `backend/schemas.py`
+- Test: `backend/tests/application/test_account_security.py`
+- Test: `backend/tests/test_account_security_api.py`
+
+- [ ] Write failing tests proving current-password verification, new-password policy, version rotation, replacement token issuance, old-token rejection, and independent `POST /account/password/change` and `POST /account/sessions/revoke-others` handlers.
+- [ ] Run focused tests and confirm RED.
+- [ ] Implement separate change-password and revoke-other-session use cases; never accept a user ID from the request body.
+- [ ] Return a replacement `AuthSession` so the current browser remains signed in while all earlier tokens become invalid.
+- [ ] Run focused tests and confirm GREEN.
+- [ ] Commit as `feat: add password and session controls`.
+
+### Task 3: Secret-free account export
+
+**Files:**
+- Create: `backend/application/use_cases/export_account_data.py`
+- Modify: `backend/api/account.py`
+- Modify: `backend/infrastructure/settings/file_model_connection_repository.py`
+- Test: `backend/tests/application/test_export_account_data.py`
+- Test: `backend/tests/test_account_export_api.py`
+
+- [ ] Write failing tests that open the returned ZIP and assert it contains identity metadata, profile, preferences, meals, workouts, public model configuration, and existing plan/report files but no password hash, token secret, API key plaintext, or `encrypted_api_key`.
+- [ ] Run focused tests and confirm RED.
+- [ ] Build the ZIP from an explicit filename/field allowlist using public model projection only; use deterministic archive paths and UTF-8 JSON.
+- [ ] Add authenticated `GET /account/export` with attachment headers and no temporary plaintext archive on disk.
+- [ ] Run focused tests and confirm GREEN.
+- [ ] Commit as `feat: add private account data export`.
+
+### Task 4: Idempotent account deletion
+
+**Files:**
+- Create: `backend/application/use_cases/delete_account.py`
+- Modify: `backend/api/account.py`
+- Modify: `backend/schemas.py`
+- Test: `backend/tests/application/test_delete_account.py`
+- Test: `backend/tests/test_account_delete_api.py`
+
+- [ ] Write failing tests for password re-entry, exact confirmation phrase, cross-user isolation, missing-file retries, model/data removal, identity-last ordering, and immediate rejection of the deleted user's token.
+- [ ] Run focused tests and confirm RED.
+- [ ] Implement an account deletion use case that verifies credentials, removes only the authenticated user's directory, tolerates already-missing owned files, and deletes identity last.
+- [ ] Add authenticated `DELETE /account` without accepting target identity from the client.
+- [ ] Run focused tests and confirm GREEN.
+- [ ] Commit as `feat: add confirmed account deletion`.
+
+### Task 5: Isolated security and privacy pages
+
+**Files:**
+- Create: `frontend/src/pages/settings/SecuritySettings.tsx`
+- Create: `frontend/src/pages/settings/ChangePassword.tsx`
+- Create: `frontend/src/pages/settings/SessionSettings.tsx`
+- Create: `frontend/src/pages/settings/PrivacySettings.tsx`
+- Create: `frontend/src/pages/settings/DeleteAccount.tsx`
+- Modify: `frontend/src/pages/settings/SettingsHome.tsx`
+- Modify: `frontend/src/routes/AppRoutes.tsx`
+- Modify: `frontend/src/hooks/useAuth.tsx`
+- Modify: `frontend/src/services/api.ts`
+- Modify: `frontend/src/types/index.ts`
+- Modify: `frontend/src/styles/index.css`
+- Test: `frontend/src/pages/settings/AccountSettings.test.tsx`
+
+- [ ] Write route-level tests proving each task has isolated loading/error/success state, password inputs never persist, export downloads a ZIP, token replacement updates the current session, and account deletion clears auth only after success.
+- [ ] Run focused tests and confirm RED.
+- [ ] Build navigation-only `/settings/security`, dedicated password and session pages, `/settings/privacy` with export, and dedicated `/settings/privacy/delete` with password plus confirmation phrase.
+- [ ] Add localized API methods and auth-session replacement/logout behavior.
+- [ ] Run frontend tests/build and inspect desktop/mobile task routes.
+- [ ] Commit as `feat: add account security and privacy tasks`.
+
