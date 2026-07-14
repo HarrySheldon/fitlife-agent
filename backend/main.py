@@ -7,6 +7,7 @@ from backend.api import auth, calendar, chat, coach, dashboard, eval, health, pl
 from backend.api.utils import application_error_response
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
+from backend.domain.user_preferences import AppLanguage
 from backend.i18n import (
     language_for_request,
     language_from_accept_language,
@@ -15,24 +16,29 @@ from backend.i18n import (
 from backend.schemas import ApiError, ApiResponse
 
 
+def _safe_language_for_request(request: Request) -> AppLanguage:
+    try:
+        return language_for_request(request)
+    except Exception:
+        return language_from_accept_language(request.headers.get("accept-language"))
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="FitLife Agent API", version="0.1.0")
 
     @app.exception_handler(ApplicationError)
     async def handle_application_error(request: Request, error: ApplicationError) -> JSONResponse:
-        try:
-            language = language_for_request(request)
-        except Exception:
-            language = language_from_accept_language(request.headers.get("accept-language"))
         return JSONResponse(
             status_code=error.status_code,
-            content=application_error_response(error, language),
+            content=application_error_response(error, _safe_language_for_request(request)),
         )
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(request: Request, _error: RequestValidationError) -> JSONResponse:
-        message = translate_public_message("VALIDATION_ERROR", language_for_request(request))
+        message = translate_public_message(
+            "VALIDATION_ERROR", _safe_language_for_request(request)
+        )
         response = ApiResponse(
             success=False,
             data=None,

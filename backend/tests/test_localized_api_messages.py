@@ -228,6 +228,39 @@ def test_application_error_survives_preferences_read_failure(
 
 
 @pytest.mark.parametrize(
+    ("accept_language", "expected_language"),
+    [("zh-CN", "zh-CN"), (None, "en-US")],
+)
+def test_validation_error_survives_preferences_read_failure(
+    monkeypatch, accept_language, expected_language
+):
+    client = build_client(monkeypatch)
+    headers = register(client)
+
+    def fail_preferences_read(_repository, _user_id):
+        raise OSError("preferences unavailable")
+
+    monkeypatch.setattr(FileUserPreferencesRepository, "get", fail_preferences_read)
+    if accept_language is not None:
+        headers["Accept-Language"] = accept_language
+
+    response = client.patch(
+        "/settings/preferences",
+        headers=headers,
+        json={"language": "invalid"},
+    )
+    expected = translate_public_message("VALIDATION_ERROR", expected_language)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "success": False,
+        "data": None,
+        "message": expected,
+        "error": {"code": "VALIDATION_ERROR", "message": expected},
+    }
+
+
+@pytest.mark.parametrize(
     ("accept_language", "expected"),
     [
         ("en;q=1.1,zh;q=0.5", "zh-CN"),
