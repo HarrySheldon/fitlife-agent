@@ -28,6 +28,18 @@ def ai_not_configured_error() -> ApplicationError:
     )
 
 
+def credential_store_unavailable_error(
+    *,
+    processing_mode: ProcessingMode | None = None,
+) -> ApplicationError:
+    return ApplicationError(
+        code="CREDENTIAL_STORE_UNAVAILABLE",
+        message="Secure credential storage is unavailable. Configure SETTINGS_ENCRYPTION_KEY.",
+        status_code=503,
+        processing_mode=processing_mode,
+    )
+
+
 def model_gateway_error(error: Exception) -> ApplicationError:
     error_name = type(error).__name__.lower()
     if isinstance(error, TimeoutError) or "timeout" in error_name:

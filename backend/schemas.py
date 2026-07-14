@@ -18,6 +18,8 @@ CoachAction = Literal[
     "adjust_next_plan",
     "suggest_targets",
 ]
+ModelProvider = Literal["openai", "custom"]
+ModelProtocol = Literal["responses", "chat_completions"]
 
 
 class ApiError(BaseModel):
@@ -81,6 +83,15 @@ class AuthSession(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     user: AuthenticatedUser
+
+
+class ModelSettingsUpdateRequest(BaseModel):
+    provider: ModelProvider
+    protocol: ModelProtocol
+    base_url: str | None = Field(default=None, max_length=2048)
+    model: str = Field(min_length=1, max_length=200)
+    enabled: bool
+    api_key: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
 class MealRecord(BaseModel):

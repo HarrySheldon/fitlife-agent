@@ -28,7 +28,7 @@
 - [x] Run the focused test and confirm RED because the domain model, cipher, and repository do not exist.
 - [x] Add `SETTINGS_ENCRYPTION_KEY`, strict Fernet key construction, a per-path process lock, temporary-file plus `os.replace` writes, and a stored/public model split.
 - [x] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add encrypted per-user model connection storage`.
+- [x] Commit as `feat: add encrypted per-user model connection storage`.
 
 ### Task 2: Model settings application use cases and API
 
@@ -40,10 +40,10 @@
 - Test: `backend/tests/application/test_model_settings.py`
 - Test: `backend/tests/test_model_settings_api.py`
 
-- [ ] Write failing tests for GET, PUT, key deletion, authenticated user isolation, retaining omitted keys, resetting test state after material changes, and saving without any provider request.
-- [ ] Run tests and confirm RED.
-- [ ] Implement separate get/save/clear use cases and authenticated API handlers; saving a new key without a deployment cipher must return `CREDENTIAL_STORE_UNAVAILABLE`.
-- [ ] Run tests and confirm GREEN.
+- [x] Write failing tests for GET, PUT, key deletion, authenticated user isolation, retaining omitted keys, resetting test state after material changes, and saving without any provider request.
+- [x] Run tests and confirm RED.
+- [x] Implement separate get/save/clear use cases and authenticated API handlers; saving a new key without a deployment cipher must return `CREDENTIAL_STORE_UNAVAILABLE`.
+- [x] Run tests and confirm GREEN.
 - [ ] Commit as `feat: add per-user model settings api`.
 
 ### Task 3: Provider adapters, explicit test/list operations, and endpoint policy
