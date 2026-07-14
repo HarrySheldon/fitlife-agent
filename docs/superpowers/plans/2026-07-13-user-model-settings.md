@@ -24,10 +24,10 @@
 - Create: `backend/infrastructure/settings/file_model_connection_repository.py`
 - Test: `backend/tests/infrastructure/test_model_connection_storage.py`
 
-- [ ] Write failing tests proving per-user isolation, atomic JSON persistence, authenticated encryption, key retention, explicit key clearing, and zero plaintext/ciphertext in public views.
-- [ ] Run the focused test and confirm RED because the domain model, cipher, and repository do not exist.
-- [ ] Add `SETTINGS_ENCRYPTION_KEY`, strict Fernet key construction, a per-path process lock, temporary-file plus `os.replace` writes, and a stored/public model split.
-- [ ] Run focused tests and confirm GREEN.
+- [x] Write failing tests proving per-user isolation, atomic JSON persistence, authenticated encryption, key retention, explicit key clearing, and zero plaintext/ciphertext in public views.
+- [x] Run the focused test and confirm RED because the domain model, cipher, and repository do not exist.
+- [x] Add `SETTINGS_ENCRYPTION_KEY`, strict Fernet key construction, a per-path process lock, temporary-file plus `os.replace` writes, and a stored/public model split.
+- [x] Run focused tests and confirm GREEN.
 - [ ] Commit as `feat: add encrypted per-user model connection storage`.
 
 ### Task 2: Model settings application use cases and API
@@ -113,4 +113,3 @@
 - [ ] Run all backend tests and the frontend production build.
 - [ ] Exercise save, fetch, clear, disabled Agent, and missing-cipher API flows with TestClient.
 - [ ] Commit as `docs: document secure user model settings`.
-
