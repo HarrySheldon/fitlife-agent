@@ -4,10 +4,13 @@ import { expect, it } from 'vitest'
 
 const sources = import.meta.glob(
   [
-    '../pages/**/*.{ts,tsx}',
-    '../components/**/*.{ts,tsx}',
-    '../hooks/**/*.{ts,tsx}',
-    '../services/**/*.ts',
+    '../**/*.{ts,tsx}',
+    '!../**/*.test.{ts,tsx}',
+    '!../**/*.contract.{ts,tsx}',
+    '!../**/*.d.ts',
+    '!../i18n/resources/**',
+    '!../test/**',
+    '!../types/**',
   ],
   { eager: true, query: '?raw', import: 'default' },
 ) as Record<string, string>
@@ -33,7 +36,7 @@ const approvedDataValues = new Set([
 
 function hasProductText(value: string): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim()
-  return /[A-Za-z]/.test(normalized)
+  return /[A-Za-z\u3400-\u9fff]/.test(normalized)
     && !approvedDataValues.has(normalized)
 }
 
@@ -71,11 +74,38 @@ function isTranslationKeyInPageHelper(node: ts.StringLiteralLike, path: string):
 }
 
 function isVisibleJsxExpression(node: ts.Node): boolean {
-  const expression = node.parent
-  if (!ts.isJsxExpression(expression)) return false
-  const parent = expression.parent
-  if (!ts.isJsxAttribute(parent)) return true
-  return ['aria-label', 'placeholder', 'title'].includes(parent.name.getText())
+  let candidate = node
+  let parent = node.parent
+
+  while (parent) {
+    if (ts.isJsxExpression(parent)) {
+      const container = parent.parent
+      return !ts.isJsxAttribute(container)
+        || ['aria-label', 'placeholder', 'title'].includes(container.name.getText())
+    }
+    if (ts.isConditionalExpression(parent)) {
+      if (parent.condition === candidate) return false
+    } else if (ts.isBinaryExpression(parent)) {
+      const operator = parent.operatorToken.kind
+      const isRenderedOperand = operator === ts.SyntaxKind.PlusToken
+        || (parent.right === candidate && [
+          ts.SyntaxKind.AmpersandAmpersandToken,
+          ts.SyntaxKind.BarBarToken,
+          ts.SyntaxKind.QuestionQuestionToken,
+        ].includes(operator))
+      if (!isRenderedOperand) return false
+    } else if (
+      !ts.isParenthesizedExpression(parent)
+      && !ts.isAsExpression(parent)
+      && !ts.isNonNullExpression(parent)
+    ) {
+      return false
+    }
+    candidate = parent
+    parent = parent.parent
+  }
+
+  return false
 }
 
 function isTranslationTemplateArgument(node: ts.TemplateExpression): boolean {
@@ -153,6 +183,20 @@ it('contains no untranslated tracked product literals', () => {
   expect(failures, failures.join('\n')).toEqual([])
 })
 
+it('scans root application and route production sources', () => {
+  const paths = Object.keys(sources)
+  expect(paths).toEqual(expect.arrayContaining([
+    '../App.tsx',
+    '../routes/AppRoutes.tsx',
+  ]))
+  expect(paths.some((path) =>
+    path.includes('.test.')
+    || path.includes('.contract.')
+    || path.includes('/i18n/resources/')
+    || path.includes('/types/'),
+  )).toBe(false)
+})
+
 it.each([
   [
     '../pages/evaluationViewModel.ts',
@@ -173,6 +217,16 @@ it.each([
     'Example.tsx',
     "const view = <div>{'Visible fallback'}</div>",
     'Visible fallback',
+  ],
+  [
+    'Example.tsx',
+    "const view = <div>{flag ? 'English fallback' : '中文回退'}</div>",
+    '中文回退',
+  ],
+  [
+    'Example.tsx',
+    'const view = <div>{flag ? `Welcome ${name}` : null}</div>',
+    'Welcome',
   ],
 ])('detects user-visible literals in %s', (path, source, expected) => {
   expect(trackedLiterals(path, source).join('\n')).toContain(expected)
