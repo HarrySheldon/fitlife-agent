@@ -88,13 +88,13 @@
 - Test: `frontend/src/domain/units.test.ts`
 - Test: `frontend/src/pages/settings/GeneralSettings.test.tsx`
 
-- [ ] Write failing tests for kg/lb, cm/ft-in, and km/mi round trips; prove saving converted profile/workout inputs sends metric values and switching units does not mutate stored source records.
-- [ ] Run focused tests and confirm RED.
-- [ ] Implement pure conversion/format helpers with explicit rounding at display boundaries only.
-- [ ] Build `/settings/general` with immediate language selection, descriptive metric/imperial radio rows, and IANA timezone selection; keep request state isolated from `/settings/model`.
-- [ ] Apply unit-aware inputs and displays to profile, meal/workout records, target progress, Today, and Logbook.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add general settings and unit conversion`.
+- [x] Write failing tests for kg/lb, cm/ft-in, and km/mi round trips; prove saving converted profile/workout inputs sends metric values and switching units does not mutate stored source records.
+- [x] Run focused tests and confirm RED.
+- [x] Implement pure conversion/format helpers with explicit rounding at display boundaries only.
+- [x] Build `/settings/general` with immediate language selection, descriptive metric/imperial radio rows, and IANA timezone selection; keep request state isolated from `/settings/model`.
+- [x] Apply unit-aware inputs and displays to profile, meal/workout records, target progress, Today, and Logbook.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: add general settings and unit conversion`.
 
 ### Task 5: Translate the complete product shell
 

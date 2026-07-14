@@ -7,6 +7,8 @@ import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { TargetProgress } from '../components/TargetProgress'
+import { displayWeight, metricWeight, weightUnit } from '../domain/units'
+import { usePreferences } from '../hooks/usePreferences'
 import { useToday } from '../hooks/useToday'
 import { api } from '../services/api'
 import type { MealRecord, WorkoutRecord } from '../types'
@@ -22,7 +24,8 @@ const emptyWorkout: Omit<WorkoutRecord, 'date'> = {
 }
 
 export function Today() {
-  const [selectedDate, setSelectedDate] = useState(today())
+  const { preferences, localDate } = usePreferences()
+  const [selectedDate, setSelectedDate] = useState(localDate())
   const [entryMode, setEntryMode] = useState<EntryMode>('smart')
   const [agentText, setAgentText] = useState('')
   const [meal, setMeal] = useState(emptyMeal)
@@ -120,7 +123,7 @@ export function Today() {
                   {data.workouts.length ? data.workouts.map((row, index) => (
                     <div className="record-row" key={`${row.exercise}-${index}`}>
                       <Dumbbell size={16} /><span>{row.type}</span><strong>{row.exercise}</strong>
-                      <small>{row.duration_min} min · {row.muscle_group}</small>
+                      <small>{row.duration_min} min · {row.muscle_group}{row.weight ? ` · ${displayWeight(row.weight, preferences.unit_system)} ${weightUnit(preferences.unit_system)}` : ''}</small>
                     </div>
                   )) : <EmptyState label="No training recorded" />}
                 </div>
@@ -157,6 +160,7 @@ export function Today() {
                   <input required placeholder="Exercise" value={workout.exercise} onChange={(event) => setWorkout({ ...workout, exercise: event.target.value })} />
                   <input required placeholder="Muscle group" value={workout.muscle_group} onChange={(event) => setWorkout({ ...workout, muscle_group: event.target.value })} />
                   <input type="number" min="0" placeholder="Sets" value={workout.sets} onChange={(event) => setWorkout({ ...workout, sets: Number(event.target.value) })} />
+                  <input type="number" min="0" step="0.1" placeholder={`Weight (${weightUnit(preferences.unit_system)})`} value={displayWeight(workout.weight, preferences.unit_system)} onChange={(event) => setWorkout({ ...workout, weight: metricWeight(Number(event.target.value), preferences.unit_system) })} />
                   <input type="number" min="0" placeholder="Minutes" value={workout.duration_min} onChange={(event) => setWorkout({ ...workout, duration_min: Number(event.target.value) })} />
                   <button className="primary-button" type="submit" disabled={saving}>Save training</button>
                 </form>
@@ -168,8 +172,4 @@ export function Today() {
       ) : null}
     </div>
   )
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
 }

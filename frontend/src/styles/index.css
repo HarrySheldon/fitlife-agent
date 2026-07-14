@@ -1518,6 +1518,11 @@ pre {
   font-size: 16px;
 }
 
+.settings-section-heading > svg {
+  color: #216869;
+  margin-bottom: 10px;
+}
+
 .settings-section-heading p {
   margin: 7px 0 0;
   max-width: 330px;
@@ -1581,6 +1586,61 @@ pre {
   padding: 9px 11px;
   background: #fffdf8;
   color: #17211d;
+}
+
+.settings-field select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #b7aa97;
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: #fffdf8;
+  color: #17211d;
+}
+
+.unit-choice-list {
+  width: min(100%, 560px);
+}
+
+.unit-choice {
+  width: 100%;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  border: 1px solid #b7aa97;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #fffdf8;
+  cursor: pointer;
+}
+
+.unit-choice.selected {
+  border-color: #216869;
+  background: #eef5f1;
+}
+
+.unit-choice input {
+  accent-color: #216869;
+}
+
+.unit-choice span,
+.unit-choice strong,
+.unit-choice small {
+  display: block;
+}
+
+.unit-choice small {
+  margin-top: 4px;
+  color: #68776d;
+}
+
+.height-imperial {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .settings-field input:focus,
