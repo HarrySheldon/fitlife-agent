@@ -64,7 +64,7 @@
 - [x] Run tests and confirm RED.
 - [x] Implement request-time DNS/IP validation, redirect-disabled bounded clients, Responses and Chat Completions adapters, and independent list/test use cases that store only normalized status.
 - [x] Run tests and confirm GREEN.
-- [ ] Commit as `feat: add explicit model connection operations`.
+- [x] Commit as `feat: add explicit model connection operations`.
 
 ### Task 4: Resolve Agent gateways per authenticated user
 
@@ -76,10 +76,10 @@
 - Modify: `backend/tests/test_chat_api.py`
 - Modify: `backend/tests/test_coach_api.py`
 
-- [ ] Write failing tests proving a logged-in Agent uses only that user's enabled connection, ignores deployment credentials, returns `AI_DISABLED` for disabled settings, and returns `CREDENTIAL_STORE_UNAVAILABLE` when stored credentials cannot be decrypted.
-- [ ] Run tests and confirm RED.
-- [ ] Resolve environment credentials only for unauthenticated/demo execution and resolve encrypted per-user settings for authenticated execution.
-- [ ] Run tests and confirm GREEN.
+- [x] Write failing tests proving a logged-in Agent uses only that user's enabled connection, ignores deployment credentials, returns `AI_DISABLED` for disabled settings, and returns `CREDENTIAL_STORE_UNAVAILABLE` when stored credentials cannot be decrypted.
+- [x] Run tests and confirm RED.
+- [x] Resolve environment credentials only for unauthenticated/demo execution and resolve encrypted per-user settings for authenticated execution.
+- [x] Run tests and confirm GREEN.
 - [ ] Commit as `feat: connect agent execution to user model settings`.
 
 ### Task 5: Settings navigation and isolated model page

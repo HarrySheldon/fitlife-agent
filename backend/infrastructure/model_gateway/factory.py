@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import httpx
 
+from backend.application.ports.credential_cipher import CredentialCipher
+from backend.application.ports.model_connection_repository import ModelConnectionRepository
 from backend.application.ports.model_gateway import ConfigurableModelGateway
+from backend.config import Settings, get_settings
+from backend.domain.errors import ai_disabled_error, ai_not_configured_error, credential_store_unavailable_error
 from backend.domain.model_connection import ModelConnection
 from backend.domain.model_endpoint_policy import ModelEndpointPolicy
 from backend.infrastructure.model_gateway.openai_chat_completions import OpenAIChatCompletionsAdapter
 from backend.infrastructure.model_gateway.openai_responses import OpenAIResponsesAdapter
+from backend.infrastructure.settings.fernet_cipher import FernetCredentialCipher
+from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
+
+
+ModelGatewayFactory = Callable[[ModelConnection, str], ConfigurableModelGateway]
 
 
 class EndpointPolicyTransport(httpx.BaseTransport):
@@ -57,3 +67,42 @@ def create_model_gateway(
     if connection.protocol == "chat_completions":
         return OpenAIChatCompletionsAdapter(client=client, model=connection.model)
     return OpenAIResponsesAdapter(client=client, model=connection.model)
+
+
+def resolve_user_model_gateway(
+    user_id: str,
+    *,
+    repository: ModelConnectionRepository | None = None,
+    cipher: CredentialCipher | None = None,
+    settings: Settings | None = None,
+    gateway_factory: ModelGatewayFactory | None = None,
+) -> ConfigurableModelGateway:
+    settings = settings or get_settings()
+    repository = repository or FileModelConnectionRepository(settings.data_dir)
+    connection = repository.get(user_id)
+    if connection is None:
+        raise ai_not_configured_error()
+    if not connection.enabled:
+        raise ai_disabled_error()
+    if not connection.encrypted_api_key:
+        raise ai_not_configured_error()
+
+    cipher = cipher or _settings_cipher(settings)
+    if cipher is None:
+        raise credential_store_unavailable_error(processing_mode="agent")
+    try:
+        api_key = cipher.decrypt(connection.encrypted_api_key)
+    except Exception:
+        raise credential_store_unavailable_error(processing_mode="agent") from None
+
+    factory = gateway_factory or create_model_gateway
+    return factory(connection, api_key)
+
+
+def _settings_cipher(settings: Settings) -> FernetCredentialCipher | None:
+    if not settings.settings_encryption_key:
+        return None
+    try:
+        return FernetCredentialCipher(settings.settings_encryption_key)
+    except ValueError:
+        return None

@@ -28,6 +28,15 @@ def ai_not_configured_error() -> ApplicationError:
     )
 
 
+def ai_disabled_error() -> ApplicationError:
+    return ApplicationError(
+        code="AI_DISABLED",
+        message="Enable the saved model connection before using Agent features.",
+        status_code=409,
+        processing_mode="agent",
+    )
+
+
 def credential_store_unavailable_error(
     *,
     processing_mode: ProcessingMode | None = None,

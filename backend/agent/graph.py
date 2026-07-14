@@ -11,6 +11,7 @@ from backend.application.ports.model_gateway import ModelGateway
 from backend.application.use_cases.generate_plan import GeneratePlan
 from backend.application.use_cases.generate_weekly_report import GenerateWeeklyReport
 from backend.domain.errors import ApplicationError, ai_not_configured_error, model_gateway_error
+from backend.infrastructure.model_gateway.factory import resolve_user_model_gateway
 from backend.infrastructure.model_gateway.openai_responses import build_model_gateway
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
 from backend.rag.retriever import retrieve_knowledge
@@ -33,7 +34,7 @@ def run_fitlife_agent(
     repository = repository or FileFitnessRepository()
     if gateway is None:
         try:
-            gateway = build_model_gateway()
+            gateway = resolve_user_model_gateway(user_id) if user_id else build_model_gateway()
         except ApplicationError:
             raise
         except Exception as error:
