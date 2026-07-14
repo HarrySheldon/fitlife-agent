@@ -44,6 +44,24 @@ class OpenAIResponsesAdapter:
             raise ValueError("Writer response did not contain text")
         return text
 
+    def list_models(self) -> list[str]:
+        return _model_ids(self.client.models.list())
+
+    def probe_tool_call(self) -> None:
+        response = self.client.responses.create(
+            model=self.model,
+            instructions="Call connection_probe with ok=true.",
+            input="Test the configured Agent tool-calling capability.",
+            tools=[{"type": "function", **_probe_tool()}],
+            tool_choice={"type": "function", "name": "connection_probe"},
+        )
+        if not any(
+            getattr(item, "type", None) == "function_call"
+            and getattr(item, "name", None) == "connection_probe"
+            for item in getattr(response, "output", [])
+        ):
+            raise ValueError("Model did not return the required tool call")
+
 
 def build_model_gateway(
     *,
@@ -86,4 +104,28 @@ def _writer_payload(state: dict) -> dict:
         "tool_results": state.get("tool_results", {}),
         "retrieved_docs": state.get("retrieved_docs", []),
         "validation_result": state.get("validation_result", {}),
+    }
+
+
+def _model_ids(response: Any) -> list[str]:
+    return sorted(
+        {
+            str(item.id).strip()
+            for item in getattr(response, "data", [])
+            if getattr(item, "id", None)
+        }
+    )
+
+
+def _probe_tool() -> dict:
+    return {
+        "name": "connection_probe",
+        "description": "Confirm that required Agent tool calls are supported.",
+        "parameters": {
+            "type": "object",
+            "properties": {"ok": {"type": "boolean"}},
+            "required": ["ok"],
+            "additionalProperties": False,
+        },
+        "strict": True,
     }

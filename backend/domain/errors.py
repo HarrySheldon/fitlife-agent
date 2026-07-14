@@ -40,6 +40,15 @@ def credential_store_unavailable_error(
     )
 
 
+def invalid_model_endpoint_error() -> ApplicationError:
+    return ApplicationError(
+        code="INVALID_MODEL_ENDPOINT",
+        message="The custom model endpoint is not allowed by the server security policy.",
+        status_code=422,
+        processing_mode="agent",
+    )
+
+
 def model_gateway_error(error: Exception) -> ApplicationError:
     error_name = type(error).__name__.lower()
     if isinstance(error, TimeoutError) or "timeout" in error_name:

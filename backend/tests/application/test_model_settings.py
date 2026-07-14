@@ -5,8 +5,10 @@ import pytest
 from backend.application.use_cases.model_settings import (
     ClearModelApiKey,
     GetModelSettings,
+    ListAvailableModels,
     ModelSettingsUpdate,
     SaveModelSettings,
+    TestModelConnection,
 )
 from backend.domain.errors import ApplicationError
 from backend.domain.model_connection import ModelConnection
@@ -29,6 +31,20 @@ class ReversibleCipher:
 
     def decrypt(self, ciphertext: str) -> str:
         return ciphertext.removeprefix("encrypted:")[::-1]
+
+
+class FakeGateway:
+    model = "configured-model"
+
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.error = error
+
+    def list_models(self) -> list[str]:
+        return ["model-a", "model-b"]
+
+    def probe_tool_call(self) -> None:
+        if self.error:
+            raise self.error
 
 
 def update(**changes) -> ModelSettingsUpdate:
@@ -134,3 +150,87 @@ def test_saving_new_key_requires_deployment_cipher():
 
     assert raised.value.code == "CREDENTIAL_STORE_UNAVAILABLE"
     assert repository.connections == {}
+
+
+def test_model_list_is_an_explicit_operation_and_does_not_change_test_state():
+    repository = MemoryRepository()
+    repository.connections["user-a"] = ModelConnection(
+        model="configured-model",
+        encrypted_api_key="encrypted:terces",
+        api_key_hint="********cret",
+        enabled=True,
+        test_status="untested",
+    )
+
+    result = ListAvailableModels(
+        repository,
+        ReversibleCipher(),
+        lambda connection, api_key: FakeGateway(),
+    ).execute("user-a")
+
+    assert result == ["model-a", "model-b"]
+    assert repository.connections["user-a"].test_status == "untested"
+
+
+def test_model_list_normalizes_gateway_factory_failure():
+    repository = MemoryRepository()
+    repository.connections["user-a"] = ModelConnection(
+        encrypted_api_key="encrypted:terces",
+        api_key_hint="********cret",
+        enabled=True,
+    )
+
+    with pytest.raises(ApplicationError) as raised:
+        ListAvailableModels(
+            repository,
+            ReversibleCipher(),
+            lambda connection, api_key: (_ for _ in ()).throw(RuntimeError("SDK internals")),
+        ).execute("user-a")
+
+    assert raised.value.code == "MODEL_PROTOCOL_ERROR"
+    assert "SDK internals" not in raised.value.message
+
+
+def test_connection_probe_saves_only_normalized_success_status():
+    repository = MemoryRepository()
+    repository.connections["user-a"] = ModelConnection(
+        model="configured-model",
+        encrypted_api_key="encrypted:terces",
+        api_key_hint="********cret",
+        enabled=True,
+    )
+
+    result = TestModelConnection(
+        repository,
+        ReversibleCipher(),
+        lambda connection, api_key: FakeGateway(),
+    ).execute("user-a")
+
+    assert result.status == "success"
+    assert result.model == "configured-model"
+    stored = repository.connections["user-a"]
+    assert stored.test_status == "success"
+    assert stored.test_error_code is None
+    assert stored.tested_at is not None
+
+
+def test_connection_probe_normalizes_failure_without_storing_provider_details():
+    repository = MemoryRepository()
+    repository.connections["user-a"] = ModelConnection(
+        encrypted_api_key="encrypted:terces",
+        api_key_hint="********cret",
+        enabled=True,
+    )
+
+    with pytest.raises(ApplicationError) as raised:
+        TestModelConnection(
+            repository,
+            ReversibleCipher(),
+            lambda connection, api_key: FakeGateway(error=TimeoutError("provider body secret")),
+        ).execute("user-a")
+
+    assert raised.value.code == "MODEL_TIMEOUT"
+    stored = repository.connections["user-a"]
+    assert stored.test_status == "failed"
+    assert stored.test_error_code == "MODEL_TIMEOUT"
+    assert "provider body secret" not in stored.model_dump_json()

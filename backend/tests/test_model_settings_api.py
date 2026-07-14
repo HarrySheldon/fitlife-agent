@@ -130,3 +130,41 @@ def test_missing_cipher_rejects_only_new_key_writes(monkeypatch):
     assert with_key.status_code == 503
     assert with_key.json()["error"]["code"] == "CREDENTIAL_STORE_UNAVAILABLE"
     assert "sk-user-secret" not in with_key.text
+
+
+def test_model_list_and_connection_test_require_explicit_requests(monkeypatch):
+    client = build_client(monkeypatch)
+    headers = register(client, "operations-user")
+    calls: list[str] = []
+
+    class FakeGateway:
+        model = "gpt-5.5"
+
+        def list_models(self):
+            calls.append("list")
+            return ["gpt-5.5", "gpt-5-mini"]
+
+        def probe_tool_call(self):
+            calls.append("test")
+
+    monkeypatch.setattr(
+        "backend.api.settings.create_model_gateway",
+        lambda connection, api_key: FakeGateway(),
+    )
+    saved = client.put(
+        "/settings/model",
+        headers=headers,
+        json=model_payload(api_key="sk-user-secret"),
+    )
+
+    assert saved.status_code == 200
+    assert calls == []
+
+    listed = client.post("/settings/model/models", headers=headers)
+    tested = client.post("/settings/model/test", headers=headers)
+
+    assert listed.status_code == 200
+    assert listed.json()["data"]["models"] == ["gpt-5.5", "gpt-5-mini"]
+    assert tested.status_code == 200
+    assert tested.json()["data"]["status"] == "success"
+    assert calls == ["list", "test"]

@@ -44,7 +44,7 @@
 - [x] Run tests and confirm RED.
 - [x] Implement separate get/save/clear use cases and authenticated API handlers; saving a new key without a deployment cipher must return `CREDENTIAL_STORE_UNAVAILABLE`.
 - [x] Run tests and confirm GREEN.
-- [ ] Commit as `feat: add per-user model settings api`.
+- [x] Commit as `feat: add per-user model settings api`.
 
 ### Task 3: Provider adapters, explicit test/list operations, and endpoint policy
 
@@ -60,10 +60,10 @@
 - Test: `backend/tests/test_model_protocol_adapters.py`
 - Modify: `backend/tests/test_model_settings_api.py`
 
-- [ ] Write failing tests for HTTPS-only custom URLs, blocked credentials/query/fragment/private/metadata addresses, explicit protocol selection, unified planner/writer behavior, manual model listing, and a minimum tool-call connection probe.
-- [ ] Run tests and confirm RED.
-- [ ] Implement request-time DNS/IP validation, redirect-disabled bounded clients, Responses and Chat Completions adapters, and independent list/test use cases that store only normalized status.
-- [ ] Run tests and confirm GREEN.
+- [x] Write failing tests for HTTPS-only custom URLs, blocked credentials/query/fragment/private/metadata addresses, explicit protocol selection, unified planner/writer behavior, manual model listing, and a minimum tool-call connection probe.
+- [x] Run tests and confirm RED.
+- [x] Implement request-time DNS/IP validation, redirect-disabled bounded clients, Responses and Chat Completions adapters, and independent list/test use cases that store only normalized status.
+- [x] Run tests and confirm GREEN.
 - [ ] Commit as `feat: add explicit model connection operations`.
 
 ### Task 4: Resolve Agent gateways per authenticated user

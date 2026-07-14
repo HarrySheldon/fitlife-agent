@@ -66,3 +66,11 @@ class ModelConnection(BaseModel):
             updated_at=self.updated_at,
             state=state,
         )
+
+
+class ModelConnectionTestResult(BaseModel):
+    status: Literal["success"] = "success"
+    protocol: ModelProtocol
+    model: str
+    latency_ms: int = Field(ge=0)
+    tested_at: str
