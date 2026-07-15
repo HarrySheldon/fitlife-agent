@@ -81,6 +81,12 @@ class AuthenticatedUser(BaseModel):
     display_name: str
 
 
+class AuthTokenClaims(BaseModel):
+    sub: str
+    exp: int = Field(strict=True)
+    ver: int = Field(default=0, strict=True, ge=0)
+
+
 class AuthSession(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
