@@ -267,6 +267,10 @@ def test_validation_error_survives_preferences_read_failure(
         ("en;q=-0.1,zh;q=0.5", "zh-CN"),
         ("en;q=inf,zh;q=0.5", "zh-CN"),
         ("en;q=0,*;q=1", "zh-CN"),
+        ("en;q=0.5,*;q=1", "zh-CN"),
+        ("en;q=1,en-US;q=0,zh;q=0.5", "zh-CN"),
+        ("en;q=0.1234,zh;q=0.1", "zh-CN"),
+        ("en;q=1e-1,zh;q=0.05", "zh-CN"),
     ],
 )
 def test_accept_language_rejects_invalid_q_and_honors_explicit_exclusions(

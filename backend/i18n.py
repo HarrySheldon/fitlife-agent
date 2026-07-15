@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
 from fastapi import Request
@@ -14,6 +15,8 @@ from backend.tools.auth_store import user_from_token
 
 
 DEFAULT_LANGUAGE: AppLanguage = "en-US"
+SUPPORTED_LANGUAGES: tuple[AppLanguage, ...] = (DEFAULT_LANGUAGE, "zh-CN")
+QUALITY_VALUE_PATTERN = re.compile(r"(?:0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)\Z")
 
 PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
     "INVALID_UPLOAD_FILE": {
@@ -98,31 +101,28 @@ def translate_public_message(key: str, language: AppLanguage, fallback: str = ""
 
 
 def language_from_accept_language(value: str | None) -> AppLanguage:
-    ranked: list[tuple[float, int, AppLanguage]] = []
-    excluded: set[AppLanguage] = set()
-    wildcard: tuple[float, int] | None = None
+    preferences: list[tuple[str, float, int]] = []
     for index, item in enumerate((value or "").split(",")):
         tag, *parameters = (part.strip() for part in item.split(";"))
         quality = _quality(parameters)
         if quality is None:
             continue
-        if tag == "*":
-            if quality > 0:
-                candidate = (quality, -index)
-                wildcard = max(wildcard, candidate) if wildcard is not None else candidate
+        preferences.append((tag, quality, index))
+
+    ranked: list[tuple[float, int, int, AppLanguage]] = []
+    for language_index, language in enumerate(SUPPORTED_LANGUAGES):
+        matches = [
+            (specificity, quality, -index)
+            for tag, quality, index in preferences
+            if (specificity := _match_specificity(tag, language)) is not None
+        ]
+        if not matches:
             continue
-        normalized = _supported_language(tag)
-        if normalized is not None and quality == 0:
-            excluded.add(normalized)
-        elif normalized is not None:
-            ranked.append((quality, -index, normalized))
-    if ranked:
-        return max(ranked)[2]
-    if wildcard is not None:
-        for language in (DEFAULT_LANGUAGE, "zh-CN"):
-            if language not in excluded:
-                return language
-    return DEFAULT_LANGUAGE
+        _, quality, negative_index = max(matches)
+        if quality > 0:
+            ranked.append((quality, negative_index, -language_index, language))
+
+    return max(ranked)[3] if ranked else DEFAULT_LANGUAGE
 
 
 def language_for_request(
@@ -150,12 +150,18 @@ def _quality(parameters: Iterable[str]) -> float | None:
     for parameter in parameters:
         name, _, raw_value = parameter.partition("=")
         if name.lower() == "q":
-            try:
-                quality = float(raw_value)
-            except ValueError:
+            if QUALITY_VALUE_PATTERN.fullmatch(raw_value) is None:
                 return None
-            return quality if 0 <= quality <= 1 else None
+            return float(raw_value)
     return 1
+
+
+def _match_specificity(tag: str, language: AppLanguage) -> int | None:
+    if tag == "*":
+        return 0
+    if _supported_language(tag) != language:
+        return None
+    return tag.count("-") + 1
 
 
 def _supported_language(tag: str) -> AppLanguage | None:
