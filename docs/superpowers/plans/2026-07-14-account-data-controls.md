@@ -23,13 +23,13 @@
 - Test: `backend/tests/infrastructure/test_identity_repository.py`
 - Test: `backend/tests/test_session_versioning.py`
 
-- [ ] Write failing tests for locked atomic identity writes, legacy-user `token_version=0` migration, token-version validation, and rejection of older tokens after rotation.
-- [ ] Run focused tests and confirm RED.
-- [ ] Implement a repository that owns users.json reads/writes and exposes authenticate, password replacement, version rotation, and identity deletion operations.
-- [ ] Add `ver` to newly issued tokens and compare it with the stored user on every authenticated request.
-- [ ] Preserve username/email/phone login and existing password hash compatibility.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `refactor: add versioned identity sessions`.
+- [x] Write failing tests for locked atomic identity writes, legacy-user `token_version=0` migration, token-version validation, and rejection of older tokens after rotation. Evidence: vertical RED slices failed on missing repository, version, authentication, lifecycle, and token-claim behavior; replacement failure and malformed-hash cases were added during review.
+- [x] Run focused tests and confirm RED. Evidence: each behavior failed before its implementation, including `KeyError: 'ver'`, rejected repository calls, six expiration/hash boundary failures, and the missing atomic replacement seam.
+- [x] Implement a repository that owns users.json reads/writes and exposes authenticate, password replacement, version rotation, and identity deletion operations. Evidence: `FileIdentityRepository` serializes read-modify-replace operations with a per-path lock and same-directory atomic replacement; deployment remains constrained to one Uvicorn worker.
+- [x] Add `ver` to newly issued tokens and compare it with the stored user on every authenticated request. Evidence: legacy tokens default to version zero, rotated identities reject earlier tokens, malformed claims fail closed, and `exp <= now` is rejected.
+- [x] Preserve username/email/phone login and existing password hash compatibility. Evidence: existing 120,000-iteration PBKDF2 hashes remain valid while malformed and resource-abusive hashes fail safely.
+- [x] Run focused tests and confirm GREEN. Evidence: 21 focused tests, 42 relevant auth/settings tests, and the complete backend suite of 167 tests pass; spec and code-quality reviews approved the result.
+- [x] Commit as `refactor: add versioned identity sessions`. Evidence: implementation commit `1134e6a`, atomic-write test commit `20b6acf`, and hardening commit `4337cfb`.
 
 ### Task 2: Password change and revoke-other-session use cases
 
@@ -102,4 +102,3 @@
 - [ ] Add localized API methods and auth-session replacement/logout behavior.
 - [ ] Run frontend tests/build and inspect desktop/mobile task routes.
 - [ ] Commit as `feat: add account security and privacy tasks`.
-
