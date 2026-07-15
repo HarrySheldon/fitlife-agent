@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import inspect
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -49,6 +50,15 @@ def test_export_contains_only_allowlisted_identity_metadata_as_stable_json():
         json.dumps(identity, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     ).encode("utf-8")
     assert list(data_dir.rglob("*.zip")) == []
+
+
+def test_export_constructor_does_not_accept_additional_sources():
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+
+    assert "additional_sources" not in inspect.signature(ExportAccountData).parameters
+    with pytest.raises(TypeError, match="additional_sources"):
+        ExportAccountData(data_dir, identities, additional_sources=())
 
 
 def test_export_includes_only_fixed_user_sources_and_sanitized_fields():

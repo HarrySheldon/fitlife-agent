@@ -4,12 +4,11 @@ import csv
 import io
 import json
 import re
-from dataclasses import asdict, dataclass
-from pathlib import Path, PurePosixPath
-from typing import Protocol, Sequence
+from dataclasses import asdict
+from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from backend.application.ports.identity_repository import IdentityExportMetadata, IdentityRepository
+from backend.application.ports.identity_repository import IdentityRepository
 from backend.application.ports.model_connection_repository import ModelConnectionRepository
 
 
@@ -62,28 +61,16 @@ _RECORD_EXPORTS = (
 )
 
 
-@dataclass(frozen=True)
-class AccountExportEntry:
-    archive_path: str
-    content: bytes
-
-
-class AccountExportSource(Protocol):
-    def export_entries(self, user_id: str) -> Sequence[AccountExportEntry]: ...
-
-
 class ExportAccountData:
     def __init__(
         self,
         data_dir: Path,
         identities: IdentityRepository,
         model_connections: ModelConnectionRepository | None = None,
-        additional_sources: Sequence[AccountExportSource] = (),
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
         self.model_connections = model_connections
-        self.additional_sources = tuple(additional_sources)
 
     def execute(self, user_id: str) -> bytes:
         if not _USER_ID_PATTERN.fullmatch(user_id):
@@ -116,12 +103,6 @@ class ExportAccountData:
                                 _MODEL_CONNECTION_FIELDS,
                             )
                         )
-        for source in self.additional_sources:
-            for entry in source.export_entries(user_id):
-                archive_path = _validated_archive_path(entry.archive_path, identity)
-                if archive_path in entries:
-                    raise ValueError(f"Duplicate account export path: {archive_path}")
-                entries[archive_path] = bytes(entry.content)
         archive = io.BytesIO()
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as exported:
             for path in sorted(entries):
@@ -171,23 +152,3 @@ def _validated_optional_file(user_root: Path, filename: str) -> Path | None:
     if not source.is_file() or not source.resolve().is_relative_to(user_root.resolve()):
         raise ValueError("Export source must be a regular file under the user root")
     return source
-
-
-def _validated_archive_path(path: str, identity: IdentityExportMetadata) -> str:
-    archive_path = PurePosixPath(path)
-    if (
-        not path
-        or "\\" in path
-        or archive_path.is_absolute()
-        or str(archive_path) != path
-        or any(part in {"", ".", ".."} for part in archive_path.parts)
-    ):
-        raise ValueError("Account export paths must be safe relative POSIX paths")
-    identifiers = {
-        value
-        for value in (identity.user_id, identity.username, identity.email, identity.phone)
-        if value
-    }
-    if any(part in identifiers for part in archive_path.parts):
-        raise ValueError("Account export paths cannot contain account identifiers")
-    return path
