@@ -34,6 +34,31 @@ def test_concurrent_registrations_are_atomic_and_do_not_lose_users():
     assert len(stored) == 8
 
 
+def test_identity_write_replaces_from_same_directory_temporary_file(monkeypatch):
+    data_dir = Path(".tmp") / "pytest-identity" / uuid4().hex
+    repository = FileIdentityRepository(data_dir)
+    replace_file = repository.replace_file
+    replacements: list[tuple[Path, Path]] = []
+
+    def observe_replace(source: Path, destination: Path) -> None:
+        replacements.append((source, destination))
+        replace_file(source, destination)
+
+    monkeypatch.setattr(repository, "replace_file", observe_replace)
+
+    repository.register("atomic-user", None, None, "password123", "Atomic User")
+
+    assert len(replacements) == 1
+    source, destination = replacements[0]
+    assert destination == data_dir / "users.json"
+    assert source.parent == destination.parent
+    assert source != destination
+    assert source.name.startswith("users.json.")
+    assert source.suffix == ".tmp"
+    assert not source.exists()
+    assert json.loads(destination.read_text(encoding="utf-8"))[0]["username"] == "atomic-user"
+
+
 def test_legacy_user_missing_token_version_is_migrated_as_version_zero():
     data_dir = Path(".tmp") / "pytest-identity" / uuid4().hex
     data_dir.mkdir(parents=True)

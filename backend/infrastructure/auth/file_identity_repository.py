@@ -141,10 +141,13 @@ class FileIdentityRepository:
         payload = json.dumps(users, ensure_ascii=False, indent=2)
         try:
             temporary.write_text(payload, encoding="utf-8")
-            os.replace(temporary, self.path)
+            self.replace_file(temporary, self.path)
         finally:
             if temporary.exists():
                 temporary.unlink()
+
+    def replace_file(self, source: Path, destination: Path) -> None:
+        os.replace(source, destination)
 
 
 def normalize_email(email: str) -> str:
