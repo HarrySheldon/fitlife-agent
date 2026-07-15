@@ -41,12 +41,12 @@
 - Test: `backend/tests/application/test_account_security.py`
 - Test: `backend/tests/test_account_security_api.py`
 
-- [ ] Write failing tests proving current-password verification, new-password policy, version rotation, replacement token issuance, old-token rejection, and independent `POST /account/password/change` and `POST /account/sessions/revoke-others` handlers.
-- [ ] Run focused tests and confirm RED.
-- [ ] Implement separate change-password and revoke-other-session use cases; never accept a user ID from the request body.
-- [ ] Return a replacement `AuthSession` so the current browser remains signed in while all earlier tokens become invalid.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add password and session controls`.
+- [x] Write failing tests proving current-password verification, new-password policy, version rotation, replacement token issuance, old-token rejection, and independent `POST /account/password/change` and `POST /account/sessions/revoke-others` handlers. Evidence: RED covered missing use cases/routes/localization, stale-principal races, and issuer failures before mutation.
+- [x] Run focused tests and confirm RED. Evidence: missing routes returned 404, stale operations failed to raise, and account wiring initially lacked the authenticated claim version.
+- [x] Implement separate change-password and revoke-other-session use cases; never accept a user ID from the request body. Evidence: both commands use an internal authenticated principal and atomic expected-version comparison; request schemas forbid extra identity fields.
+- [x] Return a replacement `AuthSession` so the current browser remains signed in while all earlier tokens become invalid. Evidence: replacement sessions are pre-issued for the next version, committed only by successful compare-and-mutate, and stale requests receive 401 without resurrecting a session.
+- [x] Run focused tests and confirm GREEN. Evidence: 47 focused tests and the full backend suite of 193 tests pass; spec and code-quality reviews approved the result.
+- [x] Commit as `feat: add password and session controls`. Evidence: implementation commit `713ab75` and concurrency hardening commit `2b59998`.
 
 ### Task 3: Secret-free account export
 
