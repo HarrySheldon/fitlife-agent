@@ -68,7 +68,7 @@ def user_from_token(token: str) -> AuthenticatedUser | None:
         claims = AuthTokenClaims.model_validate(payload)
     except (json.JSONDecodeError, UnicodeDecodeError, ValidationError, ValueError):
         return None
-    if claims.exp < int(datetime.now(timezone.utc).timestamp()):
+    if claims.exp <= int(datetime.now(timezone.utc).timestamp()):
         return None
 
     return _repository().validate_token_version(claims.sub, claims.ver)

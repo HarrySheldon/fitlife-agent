@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from fastapi.testclient import TestClient
 from backend.config import get_settings
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository, hash_password
 from backend.main import create_app
+from backend.tools import auth_store as auth_store_module
 from backend.tools.auth_store import authenticate_user, create_access_token, register_user, user_from_token
 
 
@@ -114,6 +116,27 @@ def test_signed_token_with_non_integer_version_is_rejected(monkeypatch):
     payload["ver"] = "0"
 
     token = _sign_payload(payload, get_settings().auth_secret)
+
+    assert user_from_token(token) is None
+
+
+def test_token_expiring_at_current_second_is_rejected(monkeypatch):
+    data_dir = Path(".tmp") / "pytest-session-versioning" / uuid4().hex
+    monkeypatch.setenv("DATA_DIR", str(data_dir))
+    get_settings.cache_clear()
+    user = register_user("expiration-boundary", None, None, "password123", "Expiration Boundary")
+    current_timestamp = 1_800_000_000
+    token = _sign_payload(
+        {"sub": user.user_id, "exp": current_timestamp, "ver": 0},
+        get_settings().auth_secret,
+    )
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls.fromtimestamp(current_timestamp, tz)
+
+    monkeypatch.setattr(auth_store_module, "datetime", FrozenDateTime)
 
     assert user_from_token(token) is None
 

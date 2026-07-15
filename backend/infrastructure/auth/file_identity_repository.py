@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -16,6 +17,11 @@ from backend.schemas import AuthenticatedUser
 
 
 PASSWORD_ITERATIONS = 120_000
+MIN_PASSWORD_ITERATIONS = 100_000
+MAX_PASSWORD_ITERATIONS = 1_000_000
+MAX_PASSWORD_HASH_LENGTH = 512
+MAX_PASSWORD_SALT_BYTES = 64
+PASSWORD_DIGEST_BYTES = hashlib.sha256().digest_size
 
 _LOCKS: dict[Path, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
@@ -176,17 +182,26 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
+    if not isinstance(password_hash, str) or len(password_hash) > MAX_PASSWORD_HASH_LENGTH:
+        return False
     try:
         algorithm, iterations_raw, salt_raw, digest_raw = password_hash.split("$", 3)
+        if not iterations_raw.isascii() or not iterations_raw.isdecimal():
+            return False
         iterations = int(iterations_raw)
-        salt = _b64decode(salt_raw)
-        expected = _b64decode(digest_raw)
-    except (ValueError, TypeError):
+        if not MIN_PASSWORD_ITERATIONS <= iterations <= MAX_PASSWORD_ITERATIONS:
+            return False
+        salt = _decode_hash_field(salt_raw, MAX_PASSWORD_SALT_BYTES)
+        expected = _decode_hash_field(digest_raw, PASSWORD_DIGEST_BYTES)
+    except (binascii.Error, UnicodeEncodeError, ValueError):
         return False
-    if algorithm != "pbkdf2_sha256":
+    if algorithm != "pbkdf2_sha256" or not salt or len(expected) != PASSWORD_DIGEST_BYTES:
         return False
 
-    actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    try:
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    except (OverflowError, ValueError):
+        return False
     return hmac.compare_digest(actual, expected)
 
 
@@ -235,3 +250,14 @@ def _b64encode(data: bytes) -> str:
 def _b64decode(data: str) -> bytes:
     padding = "=" * (-len(data) % 4)
     return base64.urlsafe_b64decode(data + padding)
+
+
+def _decode_hash_field(data: str, max_decoded_bytes: int) -> bytes:
+    max_encoded_length = ((max_decoded_bytes + 2) // 3) * 4
+    if not data or len(data) > max_encoded_length:
+        raise ValueError("Invalid password hash field length")
+    padding = "=" * (-len(data) % 4)
+    decoded = base64.b64decode((data + padding).encode("ascii"), altchars=b"-_", validate=True)
+    if len(decoded) > max_decoded_bytes:
+        raise ValueError("Invalid password hash field length")
+    return decoded
