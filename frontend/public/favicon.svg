@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#17211d" />
+  <rect x="7" y="7" width="50" height="50" fill="none" stroke="#d7b377" stroke-width="2" />
+  <text
+    x="32"
+    y="40"
+    fill="#d7b377"
+    font-family="Arial, sans-serif"
+    font-size="24"
+    font-weight="800"
+    letter-spacing="0"
+    text-anchor="middle"
+  >FL</text>
+</svg>
