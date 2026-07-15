@@ -3,7 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import auth, calendar, chat, coach, dashboard, eval, health, plan, profile, report, settings as settings_api, today, upload
+from backend.api import account, auth, calendar, chat, coach, dashboard, eval, health, plan, profile, report, settings as settings_api, today, upload
 from backend.api.utils import application_error_response
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(account.router)
     app.include_router(settings_api.router)
     app.include_router(profile.router)
     app.include_router(upload.router)

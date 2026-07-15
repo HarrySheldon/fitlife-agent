@@ -46,6 +46,26 @@ PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
     },
     "AUTH_REGISTERED": {"en-US": "Registered.", "zh-CN": "注册成功。"},
     "AUTH_LOGGED_IN": {"en-US": "Logged in.", "zh-CN": "登录成功。"},
+    "ACCOUNT_PASSWORD_CHANGED": {
+        "en-US": "Password changed.",
+        "zh-CN": "密码已更新。",
+    },
+    "ACCOUNT_SESSIONS_REVOKED": {
+        "en-US": "Other sessions revoked.",
+        "zh-CN": "其他会话已撤销。",
+    },
+    "ACCOUNT_CURRENT_PASSWORD_INVALID": {
+        "en-US": "The current password is incorrect.",
+        "zh-CN": "当前密码不正确。",
+    },
+    "ACCOUNT_PASSWORD_POLICY": {
+        "en-US": "The new password must be between 8 and 128 characters.",
+        "zh-CN": "新密码长度必须为 8 到 128 个字符。",
+    },
+    "ACCOUNT_PASSWORD_UNCHANGED": {
+        "en-US": "The new password must differ from the current password.",
+        "zh-CN": "新密码必须与当前密码不同。",
+    },
     "PREFERENCES_SAVED": {"en-US": "Preferences saved.", "zh-CN": "偏好设置已保存。"},
     "MODEL_SETTINGS_SAVED": {"en-US": "Model settings saved.", "zh-CN": "模型设置已保存。"},
     "API_KEY_CLEARED": {"en-US": "API key cleared.", "zh-CN": "API 密钥已清除。"},

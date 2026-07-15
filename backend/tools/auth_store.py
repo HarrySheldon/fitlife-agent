@@ -38,9 +38,13 @@ def authenticate_user(identifier: str, password: str) -> AuthenticatedUser | Non
     return _repository().authenticate(identifier, password)
 
 
-def create_access_token(user: AuthenticatedUser) -> str:
+def create_access_token(user: AuthenticatedUser, token_version: int | None = None) -> str:
     expires_at = datetime.now(timezone.utc) + timedelta(hours=TOKEN_TTL_HOURS)
-    token_version = _repository().get_token_version(user.user_id)
+    current_version = (
+        token_version
+        if token_version is not None
+        else _repository().get_token_version(user.user_id)
+    )
     payload = {
         "sub": user.user_id,
         "username": user.username,
@@ -48,7 +52,7 @@ def create_access_token(user: AuthenticatedUser) -> str:
         "phone": user.phone,
         "display_name": user.display_name,
         "exp": int(expires_at.timestamp()),
-        "ver": token_version if token_version is not None else 0,
+        "ver": current_version if current_version is not None else 0,
     }
     payload_part = _b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     signature = _sign(payload_part)

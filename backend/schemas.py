@@ -1,6 +1,6 @@
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.domain.user_preferences import AppLanguage, UnitSystem, validate_iana_timezone
 
@@ -91,6 +91,13 @@ class AuthSession(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     user: AuthenticatedUser
+
+
+class AccountPasswordChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class ModelSettingsUpdateRequest(BaseModel):

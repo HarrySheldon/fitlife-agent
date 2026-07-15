@@ -92,6 +92,24 @@ class FileIdentityRepository:
             self._write_users_unlocked(users)
         return True
 
+    def change_password_and_rotate_version(
+        self,
+        user_id: str,
+        current_password: str,
+        new_password: str,
+    ) -> int | None:
+        password_hash = hash_password(new_password)
+        with _lock_for(self.path):
+            users = self._read_users_unlocked()
+            user = _find_user(users, user_id)
+            if user is None or not verify_password(current_password, user["password_hash"]):
+                return None
+            token_version = int(user.get("token_version", 0)) + 1
+            user["password_hash"] = password_hash
+            user["token_version"] = token_version
+            self._write_users_unlocked(users)
+        return token_version
+
     def get_token_version(self, user_id: str) -> int | None:
         with _lock_for(self.path):
             users = self._read_users_unlocked()

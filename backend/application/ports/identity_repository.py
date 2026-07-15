@@ -24,6 +24,13 @@ class IdentityRepository(Protocol):
 
     def replace_password(self, user_id: str, password: str) -> bool: ...
 
+    def change_password_and_rotate_version(
+        self,
+        user_id: str,
+        current_password: str,
+        new_password: str,
+    ) -> int | None: ...
+
     def get_token_version(self, user_id: str) -> int | None: ...
 
     def rotate_token_version(self, user_id: str) -> int | None: ...
