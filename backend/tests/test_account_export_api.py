@@ -88,6 +88,8 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
     disposition = response.headers["content-disposition"]
     assert disposition == 'attachment; filename="account-data-export.zip"'
     assert current_id not in disposition
@@ -110,6 +112,40 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
     assert b"encrypted-secret" not in contents
     assert b"api_key_hint" not in contents
     assert list(data_dir.rglob("*.zip")) == archives_before == []
+
+
+@pytest.mark.parametrize(
+    ("language", "expected_message"),
+    [
+        ("en-US", "Account data could not be exported. Please try again."),
+        ("zh-CN", "无法导出账户数据，请重试。"),
+    ],
+)
+def test_account_export_failure_is_stable_and_localized(
+    monkeypatch, language, expected_message
+):
+    client, data_dir = build_client(monkeypatch)
+    session = register(client, f"failed-export-{language.lower()}")
+    user_id = session["user"]["user_id"]
+    user_root = data_dir / "users" / user_id
+    (user_root / "preferences.json").write_text(
+        json.dumps(
+            {"language": language, "unit_system": "metric", "timezone": "Asia/Shanghai"}
+        ),
+        encoding="utf-8",
+    )
+    (user_root / "user_profile.json").write_bytes(b"\xffuser_profile.json parser detail")
+
+    response = client.get("/account/export", headers=authorization(session))
+
+    assert response.status_code == 500
+    assert response.json()["error"] == {
+        "code": "ACCOUNT_EXPORT_FAILED",
+        "message": expected_message,
+    }
+    assert response.json()["message"] == expected_message
+    assert "user_profile" not in response.text
+    assert "UTF" not in response.text
 
 
 def test_account_export_openapi_has_no_client_supplied_target(monkeypatch):

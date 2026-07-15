@@ -27,9 +27,11 @@ class FileModelConnectionRepository:
             payload = json.loads(path.read_text(encoding="utf-8"))
         return ModelConnection.model_validate(payload)
 
-    def get_public(self, user_id: str) -> PublicModelConnection | None:
-        connection = self.get(user_id)
-        return connection.to_public() if connection is not None else None
+    def project_public(self, snapshot: bytes) -> PublicModelConnection:
+        payload = json.loads(snapshot.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Model connection source must contain an object")
+        return ModelConnection.model_validate(payload).to_public()
 
     def save(self, user_id: str, connection: ModelConnection) -> None:
         path = self._path(user_id)

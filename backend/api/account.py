@@ -36,7 +36,11 @@ def export_account_data(
     return Response(
         content=archive,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{_EXPORT_FILENAME}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{_EXPORT_FILENAME}"',
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        },
     )
 
 

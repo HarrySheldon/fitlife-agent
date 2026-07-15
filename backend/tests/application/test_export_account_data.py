@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import io
 import inspect
 import json
@@ -9,7 +10,9 @@ from zipfile import ZipFile
 
 import pytest
 
+import backend.application.use_cases.export_account_data as export_module
 from backend.application.use_cases.export_account_data import ExportAccountData
+from backend.domain.errors import ApplicationError
 from backend.domain.model_connection import ModelConnection
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
@@ -17,6 +20,11 @@ from backend.infrastructure.settings.file_model_connection_repository import Fil
 
 def make_data_dir() -> Path:
     return Path(".tmp") / "pytest-account-export" / uuid4().hex
+
+
+def assert_export_failed(error: ApplicationError) -> None:
+    assert error.code == "ACCOUNT_EXPORT_FAILED"
+    assert error.message == "Account data could not be exported. Please try again."
 
 
 def test_export_contains_only_allowlisted_identity_metadata_as_stable_json():
@@ -59,6 +67,116 @@ def test_export_constructor_does_not_accept_additional_sources():
     assert "additional_sources" not in inspect.signature(ExportAccountData).parameters
     with pytest.raises(TypeError, match="additional_sources"):
         ExportAccountData(data_dir, identities, additional_sources=())
+
+
+def test_export_rejects_a_source_larger_than_the_explicit_limit(monkeypatch):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register("oversized-source", None, None, "password123", "Oversized")
+    user_root = data_dir / "users" / user.user_id
+    user_root.mkdir(parents=True)
+    monkeypatch.setattr(export_module, "MAX_SOURCE_BYTES", 1024, raising=False)
+    (user_root / "user_profile.json").write_text(
+        json.dumps({"display_padding": "x" * 2048}), encoding="utf-8"
+    )
+
+    with pytest.raises(ApplicationError) as raised:
+        ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
+    assert "user_profile" not in raised.value.message
+
+
+def test_export_rejects_sources_that_exceed_the_aggregate_limit(monkeypatch):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register("aggregate-limit", None, None, "password123", "Aggregate")
+    user_root = data_dir / "users" / user.user_id
+    user_root.mkdir(parents=True)
+    meals = (
+        "date,meal,food,amount,calories,protein,carbs,fat\n"
+        f"2026-07-15,lunch,{'m' * 300},1,1,1,1,1\n"
+    ).encode()
+    workouts = (
+        "date,type,exercise,muscle_group,sets,reps,weight,duration_min\n"
+        f"2026-07-15,strength,{'w' * 300},legs,1,1,1,1\n"
+    ).encode()
+    (user_root / "meals.csv").write_bytes(meals)
+    (user_root / "workouts.csv").write_bytes(workouts)
+    identity_size = (data_dir / "users.json").stat().st_size
+    monkeypatch.setattr(export_module, "MAX_SOURCE_BYTES", 4096)
+    monkeypatch.setattr(
+        export_module,
+        "MAX_EXPORT_BYTES",
+        identity_size + len(meals) + len(workouts) - 1,
+    )
+
+    with pytest.raises(ApplicationError) as raised:
+        ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "include_models"),
+    [
+        ("user_profile.json", b"\xff", False),
+        ("user_profile.json", b"{", False),
+        ("user_profile.json", b"[]", False),
+        ("model_connection.json", b'{"provider":"invalid"}', True),
+        (
+            "meals.csv",
+            b'date,meal,food,amount,calories,protein,carbs,fat\n'
+            b'2026-07-15,lunch,"unterminated',
+            False,
+        ),
+    ],
+)
+def test_export_sanitizes_malformed_source_failures(filename, content, include_models):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register("malformed-export", None, None, "password123", "Malformed")
+    source = data_dir / "users" / user.user_id / filename
+    source.parent.mkdir(parents=True)
+    source.write_bytes(content)
+    models = FileModelConnectionRepository(data_dir) if include_models else None
+
+    with pytest.raises(ApplicationError) as raised:
+        ExportAccountData(data_dir, identities, models).execute(user.user_id)
+
+    assert_export_failed(raised.value)
+    assert filename not in raised.value.message
+    assert "JSON" not in raised.value.message
+    assert "UTF" not in raised.value.message
+    assert "CSV" not in raised.value.message
+
+
+@pytest.mark.parametrize("dangerous_prefix", ["=", "+", "-", "@", "\t", "\r"])
+def test_export_escapes_csv_cells_that_spreadsheet_apps_can_execute(dangerous_prefix):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register("csv-injection", None, None, "password123", "CSV")
+    user_root = data_dir / "users" / user.user_id
+    user_root.mkdir(parents=True)
+    dangerous_cell = f"{dangerous_prefix}cmd|' /C calc'!A0"
+    source = io.StringIO(newline="")
+    writer = csv.writer(source, lineterminator="\n")
+    writer.writerow(("date", "meal", "food", "amount", "calories", "protein", "carbs", "fat"))
+    writer.writerow(("2026-07-15", "lunch", dangerous_cell, "1", "1", "1", "1", "1"))
+    (user_root / "meals.csv").write_text(
+        source.getvalue(),
+        encoding="utf-8",
+    )
+
+    archive = ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    with ZipFile(io.BytesIO(archive)) as exported:
+        rows = list(
+            csv.DictReader(
+                io.StringIO(exported.read("records/meals.csv").decode("utf-8"))
+            )
+        )
+    assert rows[0]["food"] == f"'{dangerous_cell}"
 
 
 def test_export_includes_only_fixed_user_sources_and_sanitized_fields():
@@ -178,8 +296,10 @@ def test_export_rejects_a_symlinked_user_root(monkeypatch):
         lambda path: path == user_root or original_is_symlink(path),
     )
 
-    with pytest.raises(ValueError, match="Symbolic links are not allowed"):
+    with pytest.raises(ApplicationError) as raised:
         ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
 
 
 def test_export_rejects_an_included_file_symlink(monkeypatch):
@@ -196,8 +316,10 @@ def test_export_rejects_an_included_file_symlink(monkeypatch):
         lambda path: path == meals_path or original_is_symlink(path),
     )
 
-    with pytest.raises(ValueError, match="Symbolic links are not allowed"):
+    with pytest.raises(ApplicationError) as raised:
         ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
 
 
 def test_export_rejects_a_symlinked_identity_source(monkeypatch):
@@ -211,13 +333,54 @@ def test_export_rejects_a_symlinked_identity_source(monkeypatch):
         lambda path: path == identities.path or original_is_symlink(path),
     )
 
-    with pytest.raises(ValueError, match="Symbolic links are not allowed"):
+    with pytest.raises(ApplicationError) as raised:
         ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
+
+
+def test_export_validates_opened_snapshot_before_reading_changed_content(monkeypatch):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register("changed-source", None, None, "password123", "Changed")
+    source = data_dir / "users" / user.user_id / "user_profile.json"
+    source.parent.mkdir(parents=True)
+    source.write_text('{"height_cm":170}', encoding="utf-8")
+    real_open = export_module.os.open
+    real_read = export_module.os.read
+    target_descriptor = None
+    source_was_read = False
+
+    def change_before_open(path, flags):
+        nonlocal target_descriptor
+        if Path(path) == source:
+            source.write_text('{"height_cm":170,"weight_kg":70}', encoding="utf-8")
+        descriptor = real_open(path, flags)
+        if Path(path) == source:
+            target_descriptor = descriptor
+        return descriptor
+
+    def observe_read(descriptor, size):
+        nonlocal source_was_read
+        if descriptor == target_descriptor:
+            source_was_read = True
+        return real_read(descriptor, size)
+
+    monkeypatch.setattr(export_module.os, "open", change_before_open)
+    monkeypatch.setattr(export_module.os, "read", observe_read)
+
+    with pytest.raises(ApplicationError) as raised:
+        ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
+    assert source_was_read is False
 
 
 @pytest.mark.parametrize("user_id", ["../other", "user/other", "user\\other", ""])
 def test_export_rejects_user_id_path_traversal(user_id: str):
     data_dir = make_data_dir()
 
-    with pytest.raises(ValueError, match="Invalid user id"):
+    with pytest.raises(ApplicationError) as raised:
         ExportAccountData(data_dir, FileIdentityRepository(data_dir)).execute(user_id)
+
+    assert_export_failed(raised.value)

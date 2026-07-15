@@ -19,6 +19,10 @@ SUPPORTED_LANGUAGES: tuple[AppLanguage, ...] = (DEFAULT_LANGUAGE, "zh-CN")
 QUALITY_VALUE_PATTERN = re.compile(r"(?:0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)\Z")
 
 PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
+    "ACCOUNT_EXPORT_FAILED": {
+        "en-US": "Account data could not be exported. Please try again.",
+        "zh-CN": "无法导出账户数据，请重试。",
+    },
     "INVALID_UPLOAD_FILE": {
         "en-US": "Only CSV files are supported.",
         "zh-CN": "仅支持 CSV 文件。",
