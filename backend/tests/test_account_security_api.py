@@ -4,8 +4,11 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.api.dependencies import require_current_principal
 from backend.config import get_settings
+from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
 from backend.main import create_app
+from backend.tools.auth_store import principal_from_token
 
 
 @pytest.fixture(autouse=True)
@@ -32,6 +35,21 @@ def register(client: TestClient, username: str, password: str = "password123") -
 
 def authorization(session: dict) -> dict[str, str]:
     return {"Authorization": f"Bearer {session['access_token']}"}
+
+
+def test_validated_token_version_is_preserved_only_in_internal_principal(monkeypatch):
+    client = build_client(monkeypatch)
+    session = register(client, "principal-user")
+
+    principal = principal_from_token(session["access_token"])
+    public_response = client.get("/auth/me", headers=authorization(session))
+
+    assert principal is not None
+    assert principal.token_version == 0
+    assert principal.user.model_dump() == session["user"]
+    assert public_response.status_code == 200
+    assert public_response.json()["data"] == session["user"]
+    assert "token_version" not in public_response.json()["data"]
 
 
 def test_password_change_returns_replacement_session_and_invalidates_old_credentials(monkeypatch):
@@ -236,3 +254,47 @@ def test_success_messages_use_authenticated_account_language(
 
     assert response.status_code == 200
     assert response.json()["message"] == expected
+
+
+def test_stale_password_principal_is_rejected_without_resurrecting_request(monkeypatch):
+    client = build_client(monkeypatch)
+    session = register(client, "stale-password-api")
+    stale_principal = principal_from_token(session["access_token"])
+    assert stale_principal is not None
+    repository = FileIdentityRepository(get_settings().data_dir)
+    assert repository.rotate_token_version(stale_principal.user.user_id) == 1
+    client.app.dependency_overrides[require_current_principal] = lambda: stale_principal
+
+    response = client.post(
+        "/account/password/change",
+        headers=authorization(session),
+        json={"current_password": "password123", "new_password": "replacement123"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["data"] is None
+    assert response.json()["error"]["code"] == "AUTH_TOKEN_INVALID"
+    assert repository.get_token_version(stale_principal.user.user_id) == 1
+    assert repository.authenticate("stale-password-api", "password123") == stale_principal.user
+    assert repository.authenticate("stale-password-api", "replacement123") is None
+
+
+def test_stale_revoke_principal_is_rejected_without_second_rotation(monkeypatch):
+    client = build_client(monkeypatch)
+    session = register(client, "stale-revoke-api")
+    stale_principal = principal_from_token(session["access_token"])
+    assert stale_principal is not None
+    repository = FileIdentityRepository(get_settings().data_dir)
+    assert repository.rotate_token_version(stale_principal.user.user_id) == 1
+    client.app.dependency_overrides[require_current_principal] = lambda: stale_principal
+
+    response = client.post(
+        "/account/sessions/revoke-others",
+        headers=authorization(session),
+    )
+
+    assert response.status_code == 401
+    assert response.json()["data"] is None
+    assert response.json()["error"]["code"] == "AUTH_TOKEN_INVALID"
+    assert repository.get_token_version(stale_principal.user.user_id) == 1
+    assert repository.authenticate("stale-revoke-api", "password123") == stale_principal.user

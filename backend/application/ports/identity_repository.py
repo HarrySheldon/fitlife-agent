@@ -1,8 +1,23 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass
+from typing import Literal, Protocol, runtime_checkable
 
 from backend.schemas import AuthenticatedUser
+
+
+PasswordChangeStatus = Literal[
+    "changed",
+    "current_password_invalid",
+    "password_unchanged",
+    "token_invalid",
+]
+
+
+@dataclass(frozen=True)
+class PasswordChangeResult:
+    status: PasswordChangeStatus
+    token_version: int | None = None
 
 
 @runtime_checkable
@@ -27,13 +42,18 @@ class IdentityRepository(Protocol):
     def change_password_and_rotate_version(
         self,
         user_id: str,
+        expected_token_version: int,
         current_password: str,
         new_password: str,
-    ) -> int | None: ...
+    ) -> PasswordChangeResult: ...
 
     def get_token_version(self, user_id: str) -> int | None: ...
 
-    def rotate_token_version(self, user_id: str) -> int | None: ...
+    def rotate_token_version(
+        self,
+        user_id: str,
+        expected_token_version: int | None = None,
+    ) -> int | None: ...
 
     def validate_token_version(self, user_id: str, token_version: int) -> AuthenticatedUser | None: ...
 

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from backend.application.ports.identity_repository import PasswordChangeResult
 from backend.schemas import AuthenticatedUser
 
 
@@ -95,20 +96,26 @@ class FileIdentityRepository:
     def change_password_and_rotate_version(
         self,
         user_id: str,
+        expected_token_version: int,
         current_password: str,
         new_password: str,
-    ) -> int | None:
-        password_hash = hash_password(new_password)
+    ) -> PasswordChangeResult:
+        password_hash = hash_password(new_password) if current_password != new_password else None
         with _lock_for(self.path):
             users = self._read_users_unlocked()
             user = _find_user(users, user_id)
-            if user is None or not verify_password(current_password, user["password_hash"]):
-                return None
-            token_version = int(user.get("token_version", 0)) + 1
+            if user is None or int(user.get("token_version", 0)) != expected_token_version:
+                return PasswordChangeResult(status="token_invalid")
+            if not verify_password(current_password, user["password_hash"]):
+                return PasswordChangeResult(status="current_password_invalid")
+            if current_password == new_password:
+                return PasswordChangeResult(status="password_unchanged")
+            assert password_hash is not None
+            token_version = expected_token_version + 1
             user["password_hash"] = password_hash
             user["token_version"] = token_version
             self._write_users_unlocked(users)
-        return token_version
+        return PasswordChangeResult(status="changed", token_version=token_version)
 
     def get_token_version(self, user_id: str) -> int | None:
         with _lock_for(self.path):
@@ -122,13 +129,20 @@ class FileIdentityRepository:
                 return int(user["token_version"])
         return None
 
-    def rotate_token_version(self, user_id: str) -> int | None:
+    def rotate_token_version(
+        self,
+        user_id: str,
+        expected_token_version: int | None = None,
+    ) -> int | None:
         with _lock_for(self.path):
             users = self._read_users_unlocked()
             user = _find_user(users, user_id)
             if user is None:
                 return None
-            token_version = int(user.get("token_version", 0)) + 1
+            current_version = int(user.get("token_version", 0))
+            if expected_token_version is not None and current_version != expected_token_version:
+                return None
+            token_version = current_version + 1
             user["token_version"] = token_version
             self._write_users_unlocked(users)
         return token_version

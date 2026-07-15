@@ -18,7 +18,7 @@ from backend.infrastructure.auth.file_identity_repository import (
     normalize_username,
     verify_password,
 )
-from backend.schemas import AuthTokenClaims, AuthenticatedUser
+from backend.schemas import AuthTokenClaims, AuthenticatedPrincipal, AuthenticatedUser
 
 
 TOKEN_TTL_HOURS = 24 * 14
@@ -59,7 +59,7 @@ def create_access_token(user: AuthenticatedUser, token_version: int | None = Non
     return f"{payload_part}.{signature}"
 
 
-def user_from_token(token: str) -> AuthenticatedUser | None:
+def principal_from_token(token: str) -> AuthenticatedPrincipal | None:
     try:
         payload_part, signature = token.split(".", 1)
     except ValueError:
@@ -75,7 +75,15 @@ def user_from_token(token: str) -> AuthenticatedUser | None:
     if claims.exp <= int(datetime.now(timezone.utc).timestamp()):
         return None
 
-    return _repository().validate_token_version(claims.sub, claims.ver)
+    user = _repository().validate_token_version(claims.sub, claims.ver)
+    if user is None:
+        return None
+    return AuthenticatedPrincipal(user=user, token_version=claims.ver)
+
+
+def user_from_token(token: str) -> AuthenticatedUser | None:
+    principal = principal_from_token(token)
+    return principal.user if principal is not None else None
 
 
 def _sign(payload_part: str) -> str:

@@ -81,6 +81,11 @@ class AuthenticatedUser(BaseModel):
     display_name: str
 
 
+class AuthenticatedPrincipal(BaseModel):
+    user: AuthenticatedUser
+    token_version: int = Field(strict=True, ge=0)
+
+
 class AuthTokenClaims(BaseModel):
     sub: str
     exp: int = Field(strict=True)
