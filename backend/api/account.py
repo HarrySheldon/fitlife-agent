@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from backend.api.dependencies import require_current_principal
 from backend.api.utils import ok
 from backend.application.use_cases.account_security import ChangePassword, RevokeOtherSessions
+from backend.application.use_cases.export_account_data import ExportAccountData
 from backend.config import get_settings
 from backend.i18n import message_for_request
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.schemas import (
     AccountPasswordChangeRequest,
     AuthSession,
@@ -18,6 +20,24 @@ from backend.tools.auth_store import create_access_token
 
 
 router = APIRouter(prefix="/account")
+_EXPORT_FILENAME = "account-data-export.zip"
+
+
+@router.get("/export")
+def export_account_data(
+    principal: AuthenticatedPrincipal = Depends(require_current_principal),
+):
+    settings = get_settings()
+    archive = ExportAccountData(
+        settings.data_dir,
+        FileIdentityRepository(settings.data_dir),
+        FileModelConnectionRepository(settings.data_dir),
+    ).execute(principal.user.user_id)
+    return Response(
+        content=archive,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{_EXPORT_FILENAME}"'},
+    )
 
 
 @router.post("/password/change")

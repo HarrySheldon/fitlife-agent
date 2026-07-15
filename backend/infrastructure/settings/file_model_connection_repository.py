@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 from uuid import uuid4
 
-from backend.domain.model_connection import ModelConnection
+from backend.domain.model_connection import ModelConnection, PublicModelConnection
 
 
 _LOCKS: dict[Path, threading.Lock] = {}
@@ -26,6 +26,10 @@ class FileModelConnectionRepository:
         with _lock_for(path):
             payload = json.loads(path.read_text(encoding="utf-8"))
         return ModelConnection.model_validate(payload)
+
+    def get_public(self, user_id: str) -> PublicModelConnection | None:
+        connection = self.get(user_id)
+        return connection.to_public() if connection is not None else None
 
     def save(self, user_id: str, connection: ModelConnection) -> None:
         path = self._path(user_id)

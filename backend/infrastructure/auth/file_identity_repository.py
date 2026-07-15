@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from backend.application.ports.identity_repository import PasswordChangeResult
+from backend.application.ports.identity_repository import IdentityExportMetadata, PasswordChangeResult
 from backend.schemas import AuthenticatedUser
 
 
@@ -76,6 +76,22 @@ class FileIdentityRepository:
         with _lock_for(self.path):
             user = _find_user(self._read_users_unlocked(), user_id)
             return _public_user(user) if user is not None else None
+
+    def get_export_metadata(self, user_id: str) -> IdentityExportMetadata | None:
+        if self.path.is_symlink():
+            raise ValueError("Symbolic links are not allowed in account exports")
+        with _lock_for(self.path):
+            user = _find_user(self._read_users_unlocked(), user_id)
+            if user is None:
+                return None
+            return IdentityExportMetadata(
+                user_id=user["user_id"],
+                username=user.get("username"),
+                email=user.get("email"),
+                phone=user.get("phone"),
+                display_name=user["display_name"],
+                created_at=user["created_at"],
+            )
 
     def verify_user_password(self, user_id: str, password: str) -> bool:
         with _lock_for(self.path):

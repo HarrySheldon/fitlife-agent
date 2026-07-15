@@ -20,6 +20,16 @@ class PasswordChangeResult:
     token_version: int | None = None
 
 
+@dataclass(frozen=True)
+class IdentityExportMetadata:
+    user_id: str
+    username: str | None
+    email: str | None
+    phone: str | None
+    display_name: str
+    created_at: str
+
+
 @runtime_checkable
 class IdentityRepository(Protocol):
     def register(
@@ -34,6 +44,8 @@ class IdentityRepository(Protocol):
     def authenticate(self, identifier: str, password: str) -> AuthenticatedUser | None: ...
 
     def get_by_id(self, user_id: str) -> AuthenticatedUser | None: ...
+
+    def get_export_metadata(self, user_id: str) -> IdentityExportMetadata | None: ...
 
     def verify_user_password(self, user_id: str, password: str) -> bool: ...
 
