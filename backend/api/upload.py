@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, Request, UploadFile
 
 from backend.api.dependencies import optional_current_user
@@ -7,7 +5,7 @@ from backend.api.utils import ok
 from backend.domain.errors import invalid_upload_file_error
 from backend.i18n import message_for_request
 from backend.schemas import AuthenticatedUser
-from backend.tools.data_access import data_path
+from backend.tools.data_access import write_data_bytes
 
 
 router = APIRouter(prefix="/upload")
@@ -21,7 +19,8 @@ async def upload_meals(
 ):
     return await _save_csv_upload(
         file,
-        data_path("meals.csv", _user_id(user)),
+        "meals.csv",
+        _user_id(user),
         message_for_request("UPLOAD_SAVED", request, user),
     )
 
@@ -34,17 +33,22 @@ async def upload_workouts(
 ):
     return await _save_csv_upload(
         file,
-        data_path("workouts.csv", _user_id(user)),
+        "workouts.csv",
+        _user_id(user),
         message_for_request("UPLOAD_SAVED", request, user),
     )
 
 
-async def _save_csv_upload(file: UploadFile, destination: Path, success_message: str):
+async def _save_csv_upload(
+    file: UploadFile,
+    filename: str,
+    user_id: str | None,
+    success_message: str,
+):
     if not file.filename or not file.filename.endswith(".csv"):
         raise invalid_upload_file_error()
     content = await file.read()
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(content)
+    write_data_bytes(filename, content, user_id)
     return ok(
         {"filename": file.filename, "bytes": len(content)},
         success_message,

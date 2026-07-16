@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from backend.domain.model_connection import ModelConnection, PublicModelConnection
+from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 
 
 _LOCKS: dict[Path, threading.Lock] = {}
@@ -35,16 +36,17 @@ class FileModelConnectionRepository:
 
     def save(self, user_id: str, connection: ModelConnection) -> None:
         path = self._path(user_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
-        payload = json.dumps(connection.model_dump(mode="json"), ensure_ascii=False, indent=2)
-        with _lock_for(path):
-            try:
-                temporary.write_text(payload, encoding="utf-8")
-                self.replace_file(temporary, path)
-            finally:
-                if temporary.exists():
-                    temporary.unlink()
+        with user_lifecycle_guard(self.data_dir, user_id):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
+            payload = json.dumps(connection.model_dump(mode="json"), ensure_ascii=False, indent=2)
+            with _lock_for(path):
+                try:
+                    temporary.write_text(payload, encoding="utf-8")
+                    self.replace_file(temporary, path)
+                finally:
+                    if temporary.exists():
+                        temporary.unlink()
 
     def replace_file(self, source: Path, destination: Path) -> None:
         os.replace(source, destination)

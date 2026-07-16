@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
@@ -10,6 +11,11 @@ PasswordChangeStatus = Literal[
     "changed",
     "current_password_invalid",
     "password_unchanged",
+    "token_invalid",
+]
+AccountDeletionStatus = Literal[
+    "deleted",
+    "current_password_invalid",
     "token_invalid",
 ]
 
@@ -74,3 +80,11 @@ class IdentityRepository(Protocol):
     def validate_token_version(self, user_id: str, token_version: int) -> AuthenticatedUser | None: ...
 
     def delete_identity(self, user_id: str) -> bool: ...
+
+    def confirm_and_delete_account(
+        self,
+        user_id: str,
+        expected_token_version: int,
+        password: str,
+        cleanup: Callable[[], None],
+    ) -> AccountDeletionStatus: ...

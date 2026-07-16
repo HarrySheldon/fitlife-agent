@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from backend.config import get_settings
+from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import EvalCase, MealRecord, UserProfile, WorkoutRecord
 from backend.tools.profile_loader import load_profile, save_profile
 
@@ -41,7 +42,13 @@ def data_path(filename: str, user_id: str | None = None) -> Path:
 
 
 def ensure_user_data(user_id: str) -> Path:
-    root = get_settings().data_dir / "users" / user_id
+    data_dir = get_settings().data_dir
+    with user_lifecycle_guard(data_dir, user_id):
+        return _ensure_user_data_unlocked(data_dir, user_id)
+
+
+def _ensure_user_data_unlocked(data_dir: Path, user_id: str) -> Path:
+    root = data_dir / "users" / user_id
     root.mkdir(parents=True, exist_ok=True)
     _ensure_profile(root / "user_profile.json")
     _ensure_csv(root / "meals.csv", MEAL_COLUMNS)
@@ -68,10 +75,22 @@ def read_profile(user_id: str | None = None) -> UserProfile:
 
 
 def write_profile(profile: UserProfile, user_id: str | None = None) -> None:
-    save_profile(data_path("user_profile.json", user_id), profile)
+    if user_id is None:
+        save_profile(data_path("user_profile.json"), profile)
+        return
+    with user_lifecycle_guard(get_settings().data_dir, user_id):
+        save_profile(data_path("user_profile.json", user_id), profile)
 
 
 def append_meal(record: MealRecord, user_id: str | None = None) -> None:
+    if user_id is None:
+        _append_meal_unlocked(record, user_id)
+        return
+    with user_lifecycle_guard(get_settings().data_dir, user_id):
+        _append_meal_unlocked(record, user_id)
+
+
+def _append_meal_unlocked(record: MealRecord, user_id: str | None) -> None:
     path = data_path("meals.csv", user_id)
     frame = read_meals(user_id)
     frame = pd.concat([frame, pd.DataFrame([record.model_dump()])], ignore_index=True)
@@ -79,10 +98,31 @@ def append_meal(record: MealRecord, user_id: str | None = None) -> None:
 
 
 def append_workout(record: WorkoutRecord, user_id: str | None = None) -> None:
+    if user_id is None:
+        _append_workout_unlocked(record, user_id)
+        return
+    with user_lifecycle_guard(get_settings().data_dir, user_id):
+        _append_workout_unlocked(record, user_id)
+
+
+def _append_workout_unlocked(record: WorkoutRecord, user_id: str | None) -> None:
     path = data_path("workouts.csv", user_id)
     frame = read_workouts(user_id)
     frame = pd.concat([frame, pd.DataFrame([record.model_dump()])], ignore_index=True)
     frame.to_csv(path, index=False)
+
+
+def write_data_bytes(filename: str, content: bytes, user_id: str | None = None) -> Path:
+    if user_id is None:
+        destination = data_path(filename)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+        return destination
+    with user_lifecycle_guard(get_settings().data_dir, user_id):
+        destination = data_path(filename, user_id)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+        return destination
 
 
 def read_eval_cases() -> list[EvalCase]:

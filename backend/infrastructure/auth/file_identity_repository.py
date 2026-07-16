@@ -9,11 +9,16 @@ import os
 import re
 import secrets
 import threading
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from backend.application.ports.identity_repository import IdentityExportMetadata, PasswordChangeResult
+from backend.application.ports.identity_repository import (
+    AccountDeletionStatus,
+    IdentityExportMetadata,
+    PasswordChangeResult,
+)
 from backend.schemas import AuthenticatedUser
 
 
@@ -187,6 +192,25 @@ class FileIdentityRepository:
                 return False
             self._write_users_unlocked(retained)
         return True
+
+    def confirm_and_delete_account(
+        self,
+        user_id: str,
+        expected_token_version: int,
+        password: str,
+        cleanup: Callable[[], None],
+    ) -> AccountDeletionStatus:
+        with _lock_for(self.path):
+            users = self._read_users_unlocked()
+            user = _find_user(users, user_id)
+            if user is None or int(user.get("token_version", 0)) != expected_token_version:
+                return "token_invalid"
+            if not verify_password(password, user["password_hash"]):
+                return "current_password_invalid"
+            cleanup()
+            retained = [candidate for candidate in users if candidate["user_id"] != user_id]
+            self._write_users_unlocked(retained)
+        return "deleted"
 
     def _read_users_unlocked(self) -> list[dict]:
         if not self.path.exists():

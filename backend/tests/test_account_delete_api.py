@@ -92,11 +92,11 @@ def test_identity_failure_is_localized_and_can_retry_after_storage_is_missing(mo
         json={"language": "zh-CN"},
     ).status_code == 200
 
-    def fail_identity_delete(_repository, _user_id: str) -> bool:
+    def fail_identity_write(_repository, _source: Path, _destination: Path) -> None:
         raise OSError("private identity write detail")
 
     with monkeypatch.context() as deletion_patch:
-        deletion_patch.setattr(FileIdentityRepository, "delete_identity", fail_identity_delete)
+        deletion_patch.setattr(FileIdentityRepository, "replace_file", fail_identity_write)
         failed = client.request(
             "DELETE",
             "/account",
