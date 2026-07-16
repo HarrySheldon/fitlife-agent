@@ -5,12 +5,19 @@ from fastapi import APIRouter, Depends, Request, Response
 from backend.api.dependencies import require_current_principal
 from backend.api.utils import ok
 from backend.application.use_cases.account_security import ChangePassword, RevokeOtherSessions
+from backend.application.use_cases.delete_account import DeleteAccount
 from backend.application.use_cases.export_account_data import ExportAccountData
 from backend.config import get_settings
-from backend.i18n import message_for_request
+from backend.i18n import (
+    REQUEST_LANGUAGE_STATE_KEY,
+    language_for_request,
+    message_for_request,
+    translate_public_message,
+)
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.schemas import (
+    AccountDeleteRequest,
     AccountPasswordChangeRequest,
     AuthSession,
     AuthenticatedPrincipal,
@@ -21,6 +28,29 @@ from backend.tools.auth_store import create_access_token
 
 router = APIRouter(prefix="/account")
 _EXPORT_FILENAME = "account-data-export.zip"
+
+
+@router.delete("")
+def delete_account(
+    request: Request,
+    payload: AccountDeleteRequest,
+    principal: AuthenticatedPrincipal = Depends(require_current_principal),
+):
+    settings = get_settings()
+    language = language_for_request(request, principal.user)
+    setattr(request.state, REQUEST_LANGUAGE_STATE_KEY, language)
+    DeleteAccount(
+        settings.data_dir,
+        FileIdentityRepository(settings.data_dir),
+    ).execute(
+        principal,
+        password=payload.password,
+        confirmation=payload.confirmation,
+    )
+    return ok(
+        None,
+        translate_public_message("ACCOUNT_DELETED", language),
+    )
 
 
 @router.get("/export")

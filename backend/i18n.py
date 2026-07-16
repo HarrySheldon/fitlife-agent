@@ -16,12 +16,25 @@ from backend.tools.auth_store import user_from_token
 
 DEFAULT_LANGUAGE: AppLanguage = "en-US"
 SUPPORTED_LANGUAGES: tuple[AppLanguage, ...] = (DEFAULT_LANGUAGE, "zh-CN")
+REQUEST_LANGUAGE_STATE_KEY = "public_message_language"
 QUALITY_VALUE_PATTERN = re.compile(r"(?:0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)\Z")
 
 PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
     "ACCOUNT_EXPORT_FAILED": {
         "en-US": "Account data could not be exported. Please try again.",
         "zh-CN": "无法导出账户数据，请重试。",
+    },
+    "ACCOUNT_DELETED": {
+        "en-US": "Account deleted.",
+        "zh-CN": "账户已删除。",
+    },
+    "ACCOUNT_DELETE_CONFIRMATION_INVALID": {
+        "en-US": 'Enter "DELETE" to confirm account deletion.',
+        "zh-CN": "请输入“DELETE”以确认删除账户。",
+    },
+    "ACCOUNT_DELETE_FAILED": {
+        "en-US": "Account could not be deleted. Please try again.",
+        "zh-CN": "无法删除账户，请重试。",
     },
     "INVALID_UPLOAD_FILE": {
         "en-US": "Only CSV files are supported.",
@@ -153,6 +166,9 @@ def language_for_request(
     request: Request,
     user: AuthenticatedUser | None = None,
 ) -> AppLanguage:
+    captured = getattr(request.state, REQUEST_LANGUAGE_STATE_KEY, None)
+    if captured in SUPPORTED_LANGUAGES:
+        return captured
     authenticated = user or _user_from_request(request)
     if authenticated is not None:
         repository = FileUserPreferencesRepository(get_settings().data_dir)

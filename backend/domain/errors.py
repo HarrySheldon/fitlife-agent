@@ -78,6 +78,15 @@ def account_export_failed_error() -> ApplicationError:
     )
 
 
+def account_delete_failed_error() -> ApplicationError:
+    return ApplicationError(
+        code="ACCOUNT_DELETE_FAILED",
+        message="Account could not be deleted. Please try again.",
+        status_code=500,
+        processing_mode="deterministic",
+    )
+
+
 def model_gateway_error(error: Exception) -> ApplicationError:
     error_name = type(error).__name__.lower()
     if isinstance(error, TimeoutError) or "timeout" in error_name:
