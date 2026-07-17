@@ -1,4 +1,7 @@
 import type {
+  AccountDeleteRequest,
+  AccountPasswordChangeRequest,
+  AccountDataExport,
   AgentEntryResponse,
   ApiResponse,
   AuthRequest,
@@ -28,18 +31,10 @@ import i18n from '../i18n'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const TOKEN_KEY = 'fitlife_access_token'
+const ACCOUNT_EXPORT_FILENAME = 'account-data-export.zip'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = tokenStorage.get()
-  const headers = new Headers(init?.headers)
-  headers.set('Accept-Language', languageStorage.get())
-  headers.set('X-Timezone', browserTimezone())
-  if (!(init?.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json')
-  }
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
+  const headers = requestHeaders(init)
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -47,18 +42,45 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const payload = (await response.json().catch(() => ({}))) as Partial<ApiResponse<T>> & { detail?: string }
   if (!response.ok || !payload.success) {
-    const message = payload.error?.message
-      || payload.message
-      || payload.detail
-      || i18n.t('common.requestFailed', { lng: languageStorage.get(), status: response.status })
-    throw new ApiRequestError(
-      message,
-      payload.error?.code,
-      payload.processing_mode,
-      response.status,
-    )
+    throw responseError(response, payload)
   }
   return payload.data as T
+}
+
+async function requestAccountExport(): Promise<AccountDataExport> {
+  const response = await fetch(`${API_BASE}/account/export`, { headers: requestHeaders() })
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as Partial<ApiResponse<unknown>> & { detail?: string }
+    throw responseError(response, payload)
+  }
+
+  const disposition = response.headers.get('Content-Disposition')
+  const serverFilename = disposition?.match(/filename="?([^";]+)"?/i)?.[1]
+  return {
+    blob: await response.blob(),
+    filename: serverFilename === ACCOUNT_EXPORT_FILENAME ? serverFilename : ACCOUNT_EXPORT_FILENAME,
+  }
+}
+
+function requestHeaders(init?: RequestInit): Headers {
+  const token = tokenStorage.get()
+  const headers = new Headers(init?.headers)
+  headers.set('Accept-Language', languageStorage.get())
+  headers.set('X-Timezone', browserTimezone())
+  if (!(init?.body instanceof FormData)) headers.set('Content-Type', 'application/json')
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  return headers
+}
+
+function responseError(
+  response: Response,
+  payload: Partial<ApiResponse<unknown>> & { detail?: string },
+): ApiRequestError {
+  const message = payload.error?.message
+    || payload.message
+    || payload.detail
+    || i18n.t('common.requestFailed', { lng: languageStorage.get(), status: response.status })
+  return new ApiRequestError(message, payload.error?.code, payload.processing_mode, response.status)
 }
 
 export class ApiRequestError extends Error {
@@ -77,6 +99,13 @@ export const api = {
   register: (payload: AuthRequest) => request<AuthSession>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   login: (payload: AuthRequest) => request<AuthSession>('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
   me: () => request<AuthenticatedUser>('/auth/me'),
+  changePassword: (payload: AccountPasswordChangeRequest) =>
+    request<AuthSession>('/account/password/change', { method: 'POST', body: JSON.stringify(payload) }),
+  revokeOtherSessions: () => request<AuthSession>('/account/sessions/revoke-others', { method: 'POST' }),
+  exportAccountData: requestAccountExport,
+  deleteAccount: async (payload: AccountDeleteRequest) => {
+    await request<null>('/account', { method: 'DELETE', body: JSON.stringify(payload) })
+  },
   preferences: () => request<UserPreferences>('/settings/preferences'),
   updatePreferences: (preferences: UserPreferencesUpdate) =>
     request<UserPreferences>('/settings/preferences', { method: 'PATCH', body: JSON.stringify(preferences) }),

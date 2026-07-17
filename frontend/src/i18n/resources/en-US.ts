@@ -76,6 +76,7 @@ export const enUS = {
     settings: {
       title: 'Settings', tasks: 'Settings tasks', general: 'General', model: 'Model connection', security: 'Security',
       privacy: 'Privacy and data', modelDescription: 'Provider, protocol, model and API key',
+      securityDescription: 'Password and signed-in device access', privacyDescription: 'Account export and permanent deletion',
     },
     settingsGeneral: {
       title: 'General settings', loading: 'Loading general settings', language: 'Language',
@@ -84,6 +85,40 @@ export const enUS = {
       metric: 'Metric', imperial: 'Imperial', timezone: 'Time zone',
       timezoneDescription: 'Controls Today and weekly boundaries without rewriting historical dates.',
       description: 'Language, measurement units and local date boundaries',
+    },
+    settingsSecurity: {
+      title: 'Security', tasks: 'Security tasks', password: 'Change password',
+      passwordDescription: 'Update your password and replace the current access session.',
+      sessions: 'Other sessions', sessionsDescription: 'Revoke access on every other signed-in device.',
+    },
+    settingsPassword: {
+      title: 'Change password', credentials: 'Password credentials',
+      description: 'Use at least 8 characters. Changing the password revokes every existing session and keeps this device signed in with a replacement session.',
+      current: 'Current password', new: 'New password', confirm: 'Confirm new password',
+      submit: 'Change password', changing: 'Changing password...', changed: 'Password changed.',
+      mismatch: 'The new password confirmation does not match.', failed: 'Password could not be changed.',
+    },
+    settingsSessions: {
+      title: 'Other sessions', otherDevices: 'Signed-in devices',
+      description: 'Revoke every session except this device. Other devices must sign in again before accessing your account.',
+      currentDevice: 'This device receives a replacement session and remains signed in.',
+      submit: 'Revoke other sessions', revoking: 'Revoking sessions...',
+      revoked: 'Other sessions revoked.', failed: 'Other sessions could not be revoked.',
+    },
+    settingsPrivacy: {
+      title: 'Privacy and data', exportTitle: 'Account data export',
+      exportDescription: 'Download a ZIP archive of the account data stored by FitLife Agent.',
+      export: 'Download account export', exporting: 'Preparing export...',
+      exported: 'Account export downloaded.', exportFailed: 'Account data could not be exported.',
+      accountActions: 'Account data actions', deleteTitle: 'Delete account',
+      deleteDescription: 'Permanently remove your identity and all stored account data.',
+    },
+    settingsDelete: {
+      title: 'Delete account', permanent: 'Permanent account deletion',
+      description: 'This removes your identity, fitness records, preferences, profile, and saved model connection settings.',
+      warning: 'This action cannot be undone. Export any data you want to keep before continuing.',
+      password: 'Current password', confirmation: 'Type DELETE to confirm',
+      submit: 'Delete account permanently', deleting: 'Deleting account...', failed: 'Account could not be deleted.',
     },
     settingsModel: {
       title: 'Model connection', loading: 'Loading model settings', loadError: 'Model settings could not be loaded.',

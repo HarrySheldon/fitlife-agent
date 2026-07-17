@@ -53,6 +53,21 @@ export interface AuthRequest {
   display_name?: string
 }
 
+export interface AccountPasswordChangeRequest {
+  current_password: string
+  new_password: string
+}
+
+export interface AccountDataExport {
+  blob: Blob
+  filename: string
+}
+
+export interface AccountDeleteRequest {
+  password: string
+  confirmation: 'DELETE'
+}
+
 export type AppLanguage = 'en-US' | 'zh-CN'
 export type UnitSystem = 'metric' | 'imperial'
 

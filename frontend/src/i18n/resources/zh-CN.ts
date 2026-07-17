@@ -65,11 +65,46 @@ export const zhCN = {
     settings: {
       title: '设置', tasks: '设置任务', general: '通用设置', model: '模型连接', security: '账号安全', privacy: '隐私与数据',
       modelDescription: '提供商、协议、模型和 API 密钥',
+      securityDescription: '密码和已登录设备访问权限', privacyDescription: '账户导出和永久删除',
     },
     settingsGeneral: {
       title: '通用设置', loading: '正在加载通用设置', language: '语言', languageDescription: '切换产品界面语言；Agent 回答仍跟随你的提问语言。',
       units: '计量单位', unitsDescription: '控制输入和展示方式，历史记录仍以公制标准值保存。', metric: '公制', imperial: '英制', timezone: '时区',
       timezoneDescription: '控制“今天”和每周边界，不改写历史记录日期。', description: '语言、计量单位和本地日期边界',
+    },
+    settingsSecurity: {
+      title: '账号安全', tasks: '安全任务', password: '更改密码',
+      passwordDescription: '更新密码并替换当前访问会话。',
+      sessions: '其他会话', sessionsDescription: '撤销所有其他已登录设备的访问权限。',
+    },
+    settingsPassword: {
+      title: '更改密码', credentials: '密码凭据',
+      description: '请使用至少 8 个字符。更改密码会撤销所有现有会话，并用替换会话保持此设备登录。',
+      current: '当前密码', new: '新密码', confirm: '确认新密码',
+      submit: '更改密码', changing: '正在更改密码...', changed: '密码已更改。',
+      mismatch: '两次输入的新密码不一致。', failed: '无法更改密码。',
+    },
+    settingsSessions: {
+      title: '其他会话', otherDevices: '已登录设备',
+      description: '撤销除此设备之外的所有会话。其他设备必须重新登录才能访问你的账户。',
+      currentDevice: '此设备会获得替换会话并保持登录。',
+      submit: '撤销其他会话', revoking: '正在撤销会话...',
+      revoked: '其他会话已撤销。', failed: '无法撤销其他会话。',
+    },
+    settingsPrivacy: {
+      title: '隐私与数据', exportTitle: '账户数据导出',
+      exportDescription: '下载 FitLife Agent 保存的账户数据 ZIP 归档。',
+      export: '下载账户数据', exporting: '正在准备导出...',
+      exported: '账户数据已下载。', exportFailed: '无法导出账户数据。',
+      accountActions: '账户数据操作', deleteTitle: '删除账户',
+      deleteDescription: '永久删除你的身份和所有已保存的账户数据。',
+    },
+    settingsDelete: {
+      title: '删除账户', permanent: '永久删除账户',
+      description: '这会删除你的身份、健身记录、偏好设置、个人资料和已保存的模型连接设置。',
+      warning: '此操作无法撤销。继续前，请先导出需要保留的数据。',
+      password: '当前密码', confirmation: '输入 DELETE 以确认',
+      submit: '永久删除账户', deleting: '正在删除账户...', failed: '无法删除账户。',
     },
     settingsModel: {
       title: '模型连接', loading: '正在加载模型设置', loadError: '无法加载模型设置。', back: '返回设置',

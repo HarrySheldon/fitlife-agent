@@ -1,4 +1,4 @@
-import { ChevronRight, Cpu, SlidersHorizontal } from 'lucide-react'
+import { ChevronRight, Cpu, Database, Shield, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
@@ -22,6 +22,22 @@ export function SettingsHome() {
           <span className="settings-row-copy">
             <strong>{t('settings.model')}</strong>
             <span>{t('settings.modelDescription')}</span>
+          </span>
+          <ChevronRight size={20} aria-hidden="true" />
+        </Link>
+        <Link className="settings-row" to="/settings/security">
+          <span className="settings-row-icon" aria-hidden="true"><Shield size={20} /></span>
+          <span className="settings-row-copy">
+            <strong>{t('settings.security')}</strong>
+            <span>{t('settings.securityDescription')}</span>
+          </span>
+          <ChevronRight size={20} aria-hidden="true" />
+        </Link>
+        <Link className="settings-row" to="/settings/privacy">
+          <span className="settings-row-icon" aria-hidden="true"><Database size={20} /></span>
+          <span className="settings-row-copy">
+            <strong>{t('settings.privacy')}</strong>
+            <span>{t('settings.privacyDescription')}</span>
           </span>
           <ChevronRight size={20} aria-hidden="true" />
         </Link>

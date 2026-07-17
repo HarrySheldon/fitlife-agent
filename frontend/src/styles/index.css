@@ -1435,6 +1435,10 @@ pre {
   display: block;
 }
 
+.settings-row-copy {
+  min-width: 0;
+}
+
 .settings-row-copy strong {
   font-size: 15px;
 }
@@ -1443,6 +1447,11 @@ pre {
   margin-top: 3px;
   color: #68776d;
   font-size: 13px;
+}
+
+.settings-row-copy strong,
+.settings-row-copy span {
+  overflow-wrap: anywhere;
 }
 
 .settings-task-header {
@@ -1650,6 +1659,23 @@ pre {
   outline-offset: 2px;
 }
 
+.settings-row:focus-visible,
+.icon-button:focus-visible,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.danger-button:focus-visible,
+.settings-field select:focus-visible {
+  outline: 2px solid #216869;
+  outline-offset: 2px;
+}
+
+.settings-inline-error {
+  color: #923a2b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .settings-model-control,
 .settings-key-control {
   display: grid;
@@ -1788,6 +1814,37 @@ pre {
   color: #923a2b;
 }
 
+.settings-feedback:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.settings-note,
+.settings-danger-note {
+  width: min(100%, 560px);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border-left: 3px solid #216869;
+  padding: 10px 12px;
+  background: #eef5f1;
+  color: #40584c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-danger-section .settings-section-heading > svg {
+  color: #a3402d;
+}
+
+.settings-danger-note {
+  border-left-color: #a3402d;
+  background: #fff3ef;
+  color: #843b2e;
+}
+
 .settings-actions {
   display: flex;
   justify-content: flex-end;
@@ -1857,5 +1914,10 @@ pre {
   .settings-model-control button,
   .settings-key-control button {
     width: 100%;
+  }
+
+  .settings-row {
+    grid-template-columns: 40px minmax(0, 1fr) 20px;
+    gap: 11px;
   }
 }

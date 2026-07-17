@@ -8,8 +8,13 @@ import { Logbook } from '../pages/Logbook'
 import { Plan } from '../pages/Plan'
 import { Profile } from '../pages/Profile'
 import { Review } from '../pages/Review'
+import { ChangePassword } from '../pages/settings/ChangePassword'
+import { DeleteAccount } from '../pages/settings/DeleteAccount'
 import { ModelSettings } from '../pages/settings/ModelSettings'
+import { PrivacySettings } from '../pages/settings/PrivacySettings'
 import { GeneralSettings } from '../pages/settings/GeneralSettings'
+import { SecuritySettings } from '../pages/settings/SecuritySettings'
+import { SessionSettings } from '../pages/settings/SessionSettings'
 import { SettingsHome } from '../pages/settings/SettingsHome'
 import { Today } from '../pages/Today'
 
@@ -27,6 +32,11 @@ export function AppRoutes() {
           <Route path="/settings" element={<SettingsHome />} />
           <Route path="/settings/general" element={<GeneralSettings />} />
           <Route path="/settings/model" element={<ModelSettings />} />
+          <Route path="/settings/security" element={<SecuritySettings />} />
+          <Route path="/settings/security/password" element={<ChangePassword />} />
+          <Route path="/settings/security/sessions" element={<SessionSettings />} />
+          <Route path="/settings/privacy" element={<PrivacySettings />} />
+          <Route path="/settings/privacy/delete" element={<DeleteAccount />} />
           <Route path="/records" element={<Navigate to="/logbook" replace />} />
           <Route path="/dashboard" element={<Navigate to="/" replace />} />
           <Route path="/report" element={<Navigate to="/review" replace />} />
