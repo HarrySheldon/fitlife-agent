@@ -73,12 +73,12 @@
 - Test: `backend/tests/application/test_delete_account.py`
 - Test: `backend/tests/test_account_delete_api.py`
 
-- [ ] Write failing tests for password re-entry, exact confirmation phrase, cross-user isolation, missing-file retries, model/data removal, identity-last ordering, and immediate rejection of the deleted user's token.
-- [ ] Run focused tests and confirm RED.
-- [ ] Implement an account deletion use case that verifies credentials, removes only the authenticated user's directory, tolerates already-missing owned files, and deletes identity last.
-- [ ] Add authenticated `DELETE /account` without accepting target identity from the client.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add confirmed account deletion`.
+- [x] Write failing tests for password re-entry, exact confirmation phrase, cross-user isolation, missing-file retries, model/data removal, identity-last ordering, and immediate rejection of the deleted user's token. Evidence: RED also covered stale principals, queued writer recreation, quarantine/reparse handling, nested cleanup failures, and invalid optional-token downgrade.
+- [x] Run focused tests and confirm RED. Evidence: missing route returned 404, permission errors leaked, stale requests could delete, and deleted tokens initially mutated anonymous storage.
+- [x] Implement an account deletion use case that verifies credentials, removes only the authenticated user's directory, tolerates already-missing owned files, and deletes identity last. Evidence: one repository transaction compares version/password, executes guarded quarantine cleanup, then atomically deletes identity; lifecycle tombstones block queued writers.
+- [x] Add authenticated `DELETE /account` without accepting target identity from the client. Evidence: request extras are forbidden and the exact `DELETE` phrase is required.
+- [x] Run focused tests and confirm GREEN. Evidence: 38 final targeted tests and the full backend suite of 260 tests pass; spec and code-quality reviews approved the result.
+- [x] Commit as `feat: add confirmed account deletion`. Evidence: implementation `d171be4`, lifecycle hardening `a509507`, and invalid optional-auth fix `ea1fd50`.
 
 ### Task 5: Isolated security and privacy pages
 
