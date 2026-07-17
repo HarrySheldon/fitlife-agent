@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from backend.config import get_settings
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
 from backend.main import create_app
+from backend.tools.data_access import DEFAULT_PROFILE
 
 
 @pytest.fixture(autouse=True)
@@ -57,6 +58,55 @@ def test_confirmed_account_deletion_invalidates_identity_and_existing_token(monk
         "/auth/login",
         json={"identifier": "delete-api-user", "password": "password123"},
     ).status_code == 401
+
+
+def test_deleted_account_token_cannot_mutate_anonymous_profile(monkeypatch):
+    client, data_dir = build_client(monkeypatch)
+    session = register(client, "deleted-profile-writer")
+    headers = authorization(session)
+    anonymous_profile = data_dir / "user_profile.json"
+    anonymous_profile.write_text(DEFAULT_PROFILE.model_dump_json(), encoding="utf-8")
+    original_profile = anonymous_profile.read_bytes()
+    replacement_profile = DEFAULT_PROFILE.model_copy(update={"weight_kg": 99}).model_dump()
+
+    assert client.request(
+        "DELETE",
+        "/account",
+        headers=headers,
+        json={"password": "password123", "confirmation": "DELETE"},
+    ).status_code == 200
+
+    response = client.post("/profile", headers=headers, json=replacement_profile)
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "AUTH_TOKEN_INVALID"
+    assert anonymous_profile.read_bytes() == original_profile
+
+
+def test_deleted_account_token_cannot_replace_anonymous_meals_upload(monkeypatch):
+    client, data_dir = build_client(monkeypatch)
+    session = register(client, "deleted-meals-uploader")
+    headers = authorization(session)
+    anonymous_meals = data_dir / "meals.csv"
+    original_meals = b"date,meal\n2026-07-01,anonymous baseline\n"
+    anonymous_meals.write_bytes(original_meals)
+
+    assert client.request(
+        "DELETE",
+        "/account",
+        headers=headers,
+        json={"password": "password123", "confirmation": "DELETE"},
+    ).status_code == 200
+
+    response = client.post(
+        "/upload/meals",
+        headers=headers,
+        files={"file": ("meals.csv", b"date,meal\n2026-07-02,attacker\n", "text/csv")},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "AUTH_TOKEN_INVALID"
+    assert anonymous_meals.read_bytes() == original_meals
 
 
 def test_account_deletion_success_uses_language_selected_before_cleanup(monkeypatch):
