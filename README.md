@@ -91,6 +91,12 @@ Frontend: `http://127.0.0.1:5173`
 docker compose up --build
 ```
 
+Docker frontend: `http://127.0.0.1:3000`
+
+Docker backend: `http://127.0.0.1:8000`
+
+Set `FRONTEND_PORT` in `.env` to override the default host port when needed.
+
 ## Secure Model Configuration
 
 Deterministic features are available without a model. Each authenticated user configures one model connection from **Settings > Model connection**. API keys are encrypted at rest and are never returned by the API.

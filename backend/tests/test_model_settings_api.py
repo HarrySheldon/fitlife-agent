@@ -24,7 +24,7 @@ def build_client(monkeypatch, *, with_cipher: bool = True, data_dir: Path | None
     if with_cipher:
         monkeypatch.setenv("SETTINGS_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
     else:
-        monkeypatch.delenv("SETTINGS_ENCRYPTION_KEY", raising=False)
+        monkeypatch.setenv("SETTINGS_ENCRYPTION_KEY", "")
     get_settings.cache_clear()
     return TestClient(create_app())
 

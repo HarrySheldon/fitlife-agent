@@ -22,7 +22,11 @@ class Settings(BaseSettings):
     data_dir: Path = BACKEND_ROOT / "data"
     knowledge_base_dir: Path = BACKEND_ROOT / "knowledge_base"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @property
     def cors_origins(self) -> list[str]:
