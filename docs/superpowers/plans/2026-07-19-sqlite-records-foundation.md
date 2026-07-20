@@ -1022,6 +1022,7 @@ to exercise a representative CSV endpoint from a context-managed startup test.
 ### Task 6: Verify The Foundation And Document The Next Boundary
 
 **Files:**
+- Modify: `.gitignore`
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md`
 
@@ -1034,6 +1035,9 @@ Add a concise README section stating:
 
 The backend creates `backend/data/fitlife.sqlite3` on startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. CSV remains the active record source until the migration phase completes; do not delete existing user CSV files.
 ```
+
+Ignore the runtime database plus its WAL and shared-memory sidecars so normal application
+startup does not dirty the worktree.
 
 Mark Phase 1 as complete in the roadmap only after every verification command below passes.
 
