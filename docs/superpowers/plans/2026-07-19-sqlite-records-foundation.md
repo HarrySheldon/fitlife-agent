@@ -86,7 +86,7 @@ def test_blank_sqlite_database_path_uses_default(tmp_path):
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests/test_config.py -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-config
+..\..\.venv\Scripts\python.exe -m pytest backend/tests/test_config.py -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-config
 ```
 
 Expected: both new tests fail because `Settings.database_path` does not exist.
@@ -194,7 +194,7 @@ def test_transaction_rolls_back_every_statement(tmp_path):
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_sqlite_database.py -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-database
+..\..\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_sqlite_database.py -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-database
 ```
 
 Expected: collection fails because the SQLite module does not exist.
@@ -353,7 +353,7 @@ def test_failed_migration_does_not_record_or_partially_apply(tmp_path):
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_sqlite_migrations.py -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-migrations
+..\..\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_sqlite_migrations.py -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-migrations
 ```
 
 Expected: collection fails because migration types do not exist.
@@ -525,7 +525,7 @@ def test_user_owned_children_cascade_from_their_aggregate(tmp_path):
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_records_schema.py -q -p no:cacheprovider --basetemp .tmp\pytest-records-schema
+..\..\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_records_schema.py -q -p no:cacheprovider --basetemp .tmp\pytest-records-schema
 ```
 
 Expected: collection fails because `RECORDS_MIGRATIONS` does not exist.
@@ -880,7 +880,7 @@ The schema intentionally has no identity-table foreign key because authenticatio
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_records_schema.py backend/tests/infrastructure/test_sqlite_migrations.py -q -p no:cacheprovider --basetemp .tmp\pytest-records-schema-green
+..\..\.venv\Scripts\python.exe -m pytest backend/tests/infrastructure/test_records_schema.py backend/tests/infrastructure/test_sqlite_migrations.py -q -p no:cacheprovider --basetemp .tmp\pytest-records-schema-green
 ```
 
 Expected: 5 tests pass.
@@ -935,7 +935,7 @@ def test_application_startup_creates_and_migrates_database(tmp_path, monkeypatch
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests/test_database_startup.py -q -p no:cacheprovider --basetemp .tmp\pytest-database-startup
+..\..\.venv\Scripts\python.exe -m pytest backend/tests/test_database_startup.py -q -p no:cacheprovider --basetemp .tmp\pytest-database-startup
 ```
 
 Expected: collection fails because `runtime.get_database` does not exist.
@@ -985,7 +985,7 @@ Do not initialize the database at module import time, do not alter `/health`, an
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests/test_database_startup.py backend/tests/test_api_basic.py backend/tests/test_auth_calendar_api.py -q -p no:cacheprovider --basetemp .tmp\pytest-database-startup-green
+..\..\.venv\Scripts\python.exe -m pytest backend/tests/test_database_startup.py backend/tests/test_api_basic.py backend/tests/test_auth_calendar_api.py -q -p no:cacheprovider --basetemp .tmp\pytest-database-startup-green
 ```
 
 Expected: all selected tests pass and current CSV-backed endpoints retain their response contracts.
@@ -1020,7 +1020,7 @@ Mark Phase 1 as complete in the roadmap only after every verification command be
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/tests -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-foundation-full
+..\..\.venv\Scripts\python.exe -m pytest backend/tests -q -p no:cacheprovider --basetemp .tmp\pytest-sqlite-foundation-full
 ```
 
 Expected: all backend tests pass. The existing Starlette `httpx` deprecation warning may remain; test failures may not.
