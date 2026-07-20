@@ -20,11 +20,13 @@ class Settings(BaseSettings):
     backend_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     data_dir: Path = BACKEND_ROOT / "data"
+    sqlite_database_path: Path | None = None
     knowledge_base_dir: Path = BACKEND_ROOT / "knowledge_base"
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        env_ignore_empty=True,
         extra="ignore",
     )
 
@@ -35,6 +37,10 @@ class Settings(BaseSettings):
     @property
     def vector_index_path(self) -> Path:
         return self.data_dir / "vector_index.json"
+
+    @property
+    def database_path(self) -> Path:
+        return self.sqlite_database_path or self.data_dir / "fitlife.sqlite3"
 
 
 @lru_cache
