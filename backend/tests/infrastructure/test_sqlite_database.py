@@ -18,6 +18,42 @@ def test_file_connection_enables_sqlite_safety_pragmas(tmp_path):
     assert busy_timeout == 5000
 
 
+def test_connection_closes_after_context_exit(tmp_path):
+    database = SQLiteDatabase(tmp_path / "app.db")
+
+    with database.connection() as connection:
+        connection.execute("SELECT 1")
+
+    with pytest.raises(sqlite3.ProgrammingError):
+        connection.execute("SELECT 1")
+
+
+def test_connection_closes_when_pragma_setup_fails(tmp_path, monkeypatch):
+    setup_error = RuntimeError("pragma setup failed")
+
+    class TrackingConnection:
+        def __init__(self):
+            self.closed = False
+            self.row_factory = None
+
+        def execute(self, statement):
+            raise setup_error
+
+        def close(self):
+            self.closed = True
+
+    tracking_connection = TrackingConnection()
+    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
+    database = SQLiteDatabase(tmp_path / "app.db")
+
+    with pytest.raises(RuntimeError) as raised:
+        with database.connection():
+            pass
+
+    assert raised.value is setup_error
+    assert tracking_connection.closed is True
+
+
 def test_transaction_commits_table_creation_and_inserted_value(tmp_path):
     database = SQLiteDatabase(tmp_path / "app.db")
 
