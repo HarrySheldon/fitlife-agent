@@ -145,7 +145,7 @@ git commit -m "feat: configure embedded records database"
 - Create: `backend/infrastructure/sqlite/database.py`
 - Create: `backend/tests/infrastructure/test_sqlite_database.py`
 
-- [ ] **Step 1: Write failing database behavior tests**
+- [x] **Step 1: Write failing database behavior tests**
 
 Create `backend/tests/infrastructure/test_sqlite_database.py`:
 
@@ -194,7 +194,7 @@ def test_transaction_rolls_back_every_statement(tmp_path):
         assert connection.execute("SELECT COUNT(*) FROM values_table").fetchone()[0] == 0
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -204,7 +204,7 @@ Run:
 
 Expected: collection fails because the SQLite module does not exist.
 
-- [ ] **Step 3: Implement `SQLiteDatabase`**
+- [x] **Step 3: Implement `SQLiteDatabase`**
 
 Create `backend/infrastructure/sqlite/database.py`:
 
@@ -228,10 +228,14 @@ class SQLiteDatabase:
             timeout=5,
             isolation_level=None,
         )
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute("PRAGMA busy_timeout = 5000")
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA busy_timeout = 5000")
+        except Exception:
+            connection.close()
+            raise
         return connection
 
     @contextmanager
@@ -263,13 +267,13 @@ from backend.infrastructure.sqlite.database import SQLiteDatabase
 __all__ = ["SQLiteDatabase"]
 ```
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the Step 2 command again.
 
-Expected: 3 tests pass.
+Expected: 5 tests pass, including normal context cleanup and initialization-failure cleanup.
 
-- [ ] **Step 5: Commit the database adapter**
+- [x] **Step 5: Commit the database adapter**
 
 ```powershell
 git add backend/infrastructure/sqlite backend/tests/infrastructure/test_sqlite_database.py
