@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -13,6 +16,7 @@ from backend.i18n import (
     language_from_accept_language,
     translate_public_message,
 )
+from backend.infrastructure.sqlite.runtime import initialize_database
 from backend.schemas import ApiError, ApiResponse
 
 
@@ -23,9 +27,15 @@ def _safe_language_for_request(request: Request) -> AppLanguage:
         return language_from_accept_language(request.headers.get("accept-language"))
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    initialize_database()
+    yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="FitLife Agent API", version="0.1.0")
+    app = FastAPI(title="FitLife Agent API", version="0.1.0", lifespan=lifespan)
 
     @app.exception_handler(ApplicationError)
     async def handle_application_error(request: Request, error: ApplicationError) -> JSONResponse:
