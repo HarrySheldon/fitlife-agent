@@ -22,6 +22,12 @@ This phase follows established embedded-SQLite practices used by mature local-fi
 
 Do not add SQLAlchemy, Alembic, background workers, repository cutover, CSV migration, catalog seed data, API changes or frontend code in this phase.
 
+The project-local `.tmp` directory is ignored and is not copied into a new worktree. Create it once before running the commands below:
+
+```powershell
+New-Item -ItemType Directory -Force .tmp
+```
+
 ## File Structure
 
 | File | Responsibility |
@@ -47,29 +53,28 @@ Do not add SQLAlchemy, Alembic, background workers, repository cutover, CSV migr
 - Modify: `backend/config.py`
 - Modify: `backend/tests/test_config.py`
 
-- [ ] **Step 1: Write failing configuration tests**
+- [x] **Step 1: Write failing configuration tests**
 
 Append tests that prove the default is inside `DATA_DIR` and an explicit environment value wins:
 
 ```python
-def test_sqlite_database_defaults_to_data_dir(tmp_path):
+def test_sqlite_database_defaults_to_data_dir(tmp_path, monkeypatch):
+    monkeypatch.delenv("SQLITE_DATABASE_PATH", raising=False)
     settings = Settings(data_dir=tmp_path, _env_file=None)
 
     assert settings.database_path == tmp_path / "fitlife.sqlite3"
 
 
-def test_sqlite_database_path_can_be_overridden(tmp_path):
+def test_sqlite_database_path_can_be_overridden(tmp_path, monkeypatch):
     override = tmp_path / "state" / "records.sqlite3"
-    settings = Settings(
-        data_dir=tmp_path / "data",
-        sqlite_database_path=override,
-        _env_file=None,
-    )
+    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(override))
+    settings = Settings(data_dir=tmp_path / "data", _env_file=None)
 
     assert settings.database_path == override
 
 
-def test_blank_sqlite_database_path_uses_default(tmp_path):
+def test_blank_sqlite_database_path_uses_default(tmp_path, monkeypatch):
+    monkeypatch.delenv("SQLITE_DATABASE_PATH", raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text(
         f"DATA_DIR={tmp_path / 'data'}\nSQLITE_DATABASE_PATH=\n",
@@ -81,7 +86,7 @@ def test_blank_sqlite_database_path_uses_default(tmp_path):
     assert settings.database_path == tmp_path / "data" / "fitlife.sqlite3"
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -91,7 +96,7 @@ Run:
 
 Expected: both new tests fail because `Settings.database_path` does not exist.
 
-- [ ] **Step 3: Implement the configuration boundary**
+- [x] **Step 3: Implement the configuration boundary**
 
 Add this field and property to `Settings` in `backend/config.py`:
 
@@ -103,15 +108,15 @@ def database_path(self) -> Path:
     return self.sqlite_database_path or self.data_dir / "fitlife.sqlite3"
 ```
 
-Also add `env_ignore_empty=True` to the existing `SettingsConfigDict` so blank optional values in the shared Docker env file use their defaults:
+Add a field-scoped pre-validator so only a blank SQLite override uses its default; do not change empty-value behavior for unrelated settings:
 
 ```python
-model_config = SettingsConfigDict(
-    env_file=".env",
-    env_file_encoding="utf-8",
-    extra="ignore",
-    env_ignore_empty=True,
-)
+@field_validator("sqlite_database_path", mode="before")
+@classmethod
+def blank_sqlite_database_path_uses_default(cls, value: object) -> object:
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
 ```
 
 Add this line to `.env.example` directly after the model settings:
@@ -120,13 +125,13 @@ Add this line to `.env.example` directly after the model settings:
 SQLITE_DATABASE_PATH=
 ```
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run the Step 2 command again.
 
 Expected: all tests in `backend/tests/test_config.py` pass.
 
-- [ ] **Step 5: Commit the configuration change**
+- [x] **Step 5: Commit the configuration change**
 
 ```powershell
 git add .env.example backend/config.py backend/tests/test_config.py
