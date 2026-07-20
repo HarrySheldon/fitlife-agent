@@ -458,7 +458,7 @@ Review amendments applied during execution: preflight the complete applied histo
 - Create: `backend/infrastructure/sqlite/schema.py`
 - Create: `backend/tests/infrastructure/test_records_schema.py`
 
-- [ ] **Step 1: Write the schema contract test**
+- [x] **Step 1: Write the schema contract test**
 
 Create `backend/tests/infrastructure/test_records_schema.py`:
 
@@ -531,7 +531,7 @@ def test_user_owned_children_cascade_from_their_aggregate(tmp_path):
         assert connection.execute("SELECT COUNT(*) FROM meal_items").fetchone()[0] == 0
 ```
 
-- [ ] **Step 2: Run the contract test and verify RED**
+- [x] **Step 2: Run the contract test and verify RED**
 
 Run:
 
@@ -541,7 +541,7 @@ Run:
 
 Expected: collection fails because `RECORDS_MIGRATIONS` does not exist.
 
-- [ ] **Step 3: Define migration 1 in `schema.py`**
+- [x] **Step 3: Define migration 1 in `schema.py`**
 
 Create `backend/infrastructure/sqlite/schema.py` with one statement per tuple item. Do not split SQL strings dynamically:
 
@@ -886,7 +886,7 @@ RECORDS_MIGRATIONS = (
 
 The schema intentionally has no identity-table foreign key because authentication remains file-backed in this program. User deletion will issue explicit repository cleanup for every `user_id`-owned table in the later cutover phase.
 
-- [ ] **Step 4: Run schema and migration tests**
+- [x] **Step 4: Run schema and migration tests**
 
 Run:
 
@@ -896,12 +896,18 @@ Run:
 
 Expected: 5 tests pass.
 
-- [ ] **Step 5: Commit the empty schema**
+- [x] **Step 5: Commit the empty schema**
 
 ```powershell
 git add backend/infrastructure/sqlite/schema.py backend/tests/infrastructure/test_records_schema.py
 git commit -m "feat: define versioned fitness records schema"
 ```
+
+Review amendments applied during execution: user-owned version references use composite
+foreign keys, historical target provenance is protected with restricted deletion, catalog
+ownership is constrained by source, favorites and usage have relational catalog targets,
+training item positions are unique per session, and behavioral tests cover ownership,
+cascades, foreign keys, and FTS search.
 
 ### Task 5: Initialize The Database In FastAPI Lifespan
 
