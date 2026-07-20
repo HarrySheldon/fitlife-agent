@@ -916,7 +916,7 @@ cascades, foreign keys, and FTS search.
 - Modify: `backend/main.py`
 - Create: `backend/tests/test_database_startup.py`
 
-- [ ] **Step 1: Write a failing startup test**
+- [x] **Step 1: Write a failing startup test**
 
 Create `backend/tests/test_database_startup.py`:
 
@@ -947,7 +947,7 @@ def test_application_startup_creates_and_migrates_database(tmp_path, monkeypatch
     get_settings.cache_clear()
 ```
 
-- [ ] **Step 2: Run the startup test and verify RED**
+- [x] **Step 2: Run the startup test and verify RED**
 
 Run:
 
@@ -957,7 +957,7 @@ Run:
 
 Expected: collection fails because `runtime.get_database` does not exist.
 
-- [ ] **Step 3: Add the runtime factory**
+- [x] **Step 3: Add the runtime factory**
 
 Create `backend/infrastructure/sqlite/runtime.py`:
 
@@ -997,7 +997,7 @@ def create_app() -> FastAPI:
 
 Do not initialize the database at module import time, do not alter `/health`, and do not switch existing repositories.
 
-- [ ] **Step 4: Run startup and API regression tests**
+- [x] **Step 4: Run startup and API regression tests**
 
 Run:
 
@@ -1007,12 +1007,17 @@ Run:
 
 Expected: all selected tests pass and current CSV-backed endpoints retain their response contracts.
 
-- [ ] **Step 5: Commit lifespan initialization**
+- [x] **Step 5: Commit lifespan initialization**
 
 ```powershell
 git add backend/infrastructure/sqlite/runtime.py backend/main.py backend/tests/test_database_startup.py
 git commit -m "feat: initialize records database on startup"
 ```
+
+Review evidence: the startup and selected API regression suite passed 9 tests. Spec and
+quality review confirmed that initialization occurs only inside the FastAPI lifespan and
+does not replace the existing CSV repositories. A non-blocking follow-up coverage note is
+to exercise a representative CSV endpoint from a context-managed startup test.
 
 ### Task 6: Verify The Foundation And Document The Next Boundary
 
