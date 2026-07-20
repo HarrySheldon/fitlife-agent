@@ -286,7 +286,7 @@ git commit -m "feat: add transactional SQLite adapter"
 - Create: `backend/infrastructure/sqlite/migrations.py`
 - Create: `backend/tests/infrastructure/test_sqlite_migrations.py`
 
-- [ ] **Step 1: Write failing migration tests**
+- [x] **Step 1: Write failing migration tests**
 
 Create `backend/tests/infrastructure/test_sqlite_migrations.py`:
 
@@ -357,7 +357,7 @@ def test_failed_migration_does_not_record_or_partially_apply(tmp_path):
     assert count == 0
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -367,7 +367,7 @@ Run:
 
 Expected: collection fails because migration types do not exist.
 
-- [ ] **Step 3: Implement the migration runner**
+- [x] **Step 3: Implement the migration runner**
 
 Create `backend/infrastructure/sqlite/migrations.py`:
 
@@ -437,18 +437,20 @@ def _validate_versions(migrations: tuple[Migration, ...]) -> None:
         raise MigrationError("Migration versions must be unique positive integers")
 ```
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the Step 2 command again.
 
 Expected: 3 tests pass.
 
-- [ ] **Step 5: Commit the migration runner**
+- [x] **Step 5: Commit the migration runner**
 
 ```powershell
 git add backend/infrastructure/sqlite/migrations.py backend/tests/infrastructure/test_sqlite_migrations.py
 git commit -m "feat: add checksummed SQLite migrations"
 ```
+
+Review amendments applied during execution: preflight the complete applied history before pending work, reject unknown applied versions, retain the locked per-version re-read, and use a bounded lock-only retry while enabling WAL. Concurrency regression tests cover simultaneous migration runners.
 
 ### Task 4: Create The Approved Empty Record Schema
 
