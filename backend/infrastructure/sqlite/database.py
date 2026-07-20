@@ -1,9 +1,27 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+
+
+_WAL_SETUP_MAX_ATTEMPTS = 3
+_WAL_SETUP_RETRY_DELAY_SECONDS = 0.01
+
+
+def _enable_wal(connection: sqlite3.Connection) -> None:
+    for attempt in range(_WAL_SETUP_MAX_ATTEMPTS):
+        try:
+            connection.execute("PRAGMA journal_mode = WAL")
+            return
+        except sqlite3.OperationalError as error:
+            message = str(error).lower()
+            is_lock_error = "locked" in message or "busy" in message
+            if not is_lock_error or attempt == _WAL_SETUP_MAX_ATTEMPTS - 1:
+                raise
+            time.sleep(_WAL_SETUP_RETRY_DELAY_SECONDS)
 
 
 class SQLiteDatabase:
@@ -15,9 +33,9 @@ class SQLiteDatabase:
         connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
         try:
             connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute("PRAGMA journal_mode = WAL")
             connection.execute("PRAGMA busy_timeout = 5000")
+            connection.execute("PRAGMA foreign_keys = ON")
+            _enable_wal(connection)
         except Exception:
             connection.close()
             raise

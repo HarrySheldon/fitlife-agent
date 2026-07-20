@@ -25,6 +25,19 @@ class Migration:
         return hashlib.sha256(content).hexdigest()
 
 
+def _validate_applied_migration(
+    migration: Migration, *, applied_name: str, applied_checksum: str
+) -> None:
+    differences = []
+    if applied_name != migration.name:
+        differences.append("name")
+    if applied_checksum != migration.checksum:
+        differences.append("checksum")
+    if differences:
+        fields = " and ".join(differences)
+        raise MigrationError(f"migration {migration.version} {fields} mismatch")
+
+
 def run_migrations(
     database: SQLiteDatabase, migrations: Iterable[Migration]
 ) -> None:
@@ -38,6 +51,9 @@ def run_migrations(
     if len(set(versions)) != len(versions):
         raise MigrationError("migration versions must be unique")
     ordered_migrations.sort(key=lambda migration: migration.version)
+    migrations_by_version = {
+        migration.version: migration for migration in ordered_migrations
+    }
 
     with database.transaction() as connection:
         connection.execute(
@@ -51,6 +67,23 @@ def run_migrations(
             """
         )
 
+    with database.transaction() as connection:
+        applied_migrations = connection.execute(
+            "SELECT version, name, checksum FROM schema_migrations"
+        ).fetchall()
+        for applied in applied_migrations:
+            migration = migrations_by_version.get(applied["version"])
+            if migration is None:
+                raise MigrationError(
+                    f"applied migration {applied['version']} is unknown "
+                    "(not supplied)"
+                )
+            _validate_applied_migration(
+                migration,
+                applied_name=applied["name"],
+                applied_checksum=applied["checksum"],
+            )
+
     for migration in ordered_migrations:
         with database.transaction() as connection:
             applied = connection.execute(
@@ -58,16 +91,11 @@ def run_migrations(
                 (migration.version,),
             ).fetchone()
             if applied is not None:
-                differences = []
-                if applied["name"] != migration.name:
-                    differences.append("name")
-                if applied["checksum"] != migration.checksum:
-                    differences.append("checksum")
-                if differences:
-                    fields = " and ".join(differences)
-                    raise MigrationError(
-                        f"migration {migration.version} {fields} mismatch"
-                    )
+                _validate_applied_migration(
+                    migration,
+                    applied_name=applied["name"],
+                    applied_checksum=applied["checksum"],
+                )
                 continue
 
             for statement in migration.statements:

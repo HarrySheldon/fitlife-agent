@@ -1,4 +1,6 @@
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
@@ -72,6 +74,110 @@ def test_changing_an_applied_migration_raises_checksum_error(tmp_path):
 
     with pytest.raises(MigrationError, match="checksum"):
         run_migrations(database, [changed])
+
+
+def test_applied_migration_missing_from_complete_set_is_rejected_unchanged(
+    tmp_path,
+):
+    database = SQLiteDatabase(tmp_path / "app.db")
+    migration = Migration(
+        version=1,
+        name="create_entries",
+        statements=("CREATE TABLE entries (id INTEGER PRIMARY KEY)",),
+    )
+    run_migrations(database, [migration])
+
+    with database.connection() as connection:
+        before_history = connection.execute(
+            "SELECT version, name, checksum, applied_at FROM schema_migrations"
+        ).fetchall()
+        before_schema = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        ).fetchall()
+
+    with pytest.raises(MigrationError, match="not supplied"):
+        run_migrations(database, [])
+
+    with database.connection() as connection:
+        after_history = connection.execute(
+            "SELECT version, name, checksum, applied_at FROM schema_migrations"
+        ).fetchall()
+        after_schema = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        ).fetchall()
+
+    assert [tuple(row) for row in after_history] == [
+        tuple(row) for row in before_history
+    ]
+    assert [tuple(row) for row in after_schema] == [
+        tuple(row) for row in before_schema
+    ]
+
+
+def test_preflight_drift_rejection_happens_before_pending_migration(tmp_path):
+    database = SQLiteDatabase(tmp_path / "app.db")
+    applied_v2 = Migration(
+        version=2,
+        name="create_version_two",
+        statements=("CREATE TABLE version_two (id INTEGER PRIMARY KEY)",),
+    )
+    run_migrations(database, [applied_v2])
+    pending_v1 = Migration(
+        version=1,
+        name="create_version_one",
+        statements=("CREATE TABLE version_one (id INTEGER PRIMARY KEY)",),
+    )
+    changed_v2 = Migration(
+        version=2,
+        name="create_version_two",
+        statements=(
+            "CREATE TABLE version_two (id INTEGER PRIMARY KEY, notes TEXT)",
+        ),
+    )
+
+    with pytest.raises(MigrationError, match="checksum"):
+        run_migrations(database, [pending_v1, changed_v2])
+
+    with database.connection() as connection:
+        version_one = connection.execute(
+            "SELECT name FROM sqlite_master WHERE name = 'version_one'"
+        ).fetchone()
+        applied_versions = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall()
+
+    assert version_one is None
+    assert [row["version"] for row in applied_versions] == [2]
+
+
+def test_concurrent_runners_apply_new_migration_once(tmp_path):
+    database = SQLiteDatabase(tmp_path / "app.db")
+    migration = Migration(
+        version=1,
+        name="create_entries",
+        statements=("CREATE TABLE entries (id INTEGER PRIMARY KEY)",),
+    )
+    barrier = Barrier(2)
+
+    def migrate():
+        barrier.wait(timeout=5)
+        run_migrations(database, [migration])
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(migrate) for _ in range(2)]
+        for future in futures:
+            future.result(timeout=10)
+
+    with database.connection() as connection:
+        applied_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM schema_migrations"
+        ).fetchone()["count"]
+        entries = connection.execute(
+            "SELECT name FROM sqlite_master WHERE name = 'entries'"
+        ).fetchone()
+
+    assert applied_count == 1
+    assert entries["name"] == "entries"
 
 
 def test_failed_migration_rolls_back_schema_and_metadata(tmp_path):

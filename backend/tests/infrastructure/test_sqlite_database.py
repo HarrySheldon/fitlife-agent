@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -51,6 +52,70 @@ def test_connection_closes_when_pragma_setup_fails(tmp_path, monkeypatch):
             pass
 
     assert raised.value is setup_error
+    assert tracking_connection.closed is True
+
+
+def test_locked_wal_setup_retries_after_setting_busy_timeout(monkeypatch):
+    class TrackingConnection:
+        def __init__(self):
+            self.calls = []
+            self.closed = False
+            self.row_factory = None
+            self.wal_attempts = 0
+
+        def execute(self, statement):
+            self.calls.append(statement)
+            if statement == "PRAGMA journal_mode = WAL":
+                self.wal_attempts += 1
+                if self.wal_attempts == 1:
+                    raise sqlite3.OperationalError("database is locked")
+
+        def close(self):
+            self.closed = True
+
+    tracking_connection = TrackingConnection()
+    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
+    database = SQLiteDatabase(Path("unused.db"))
+
+    with database.connection():
+        pass
+
+    assert tracking_connection.calls == [
+        "PRAGMA busy_timeout = 5000",
+        "PRAGMA foreign_keys = ON",
+        "PRAGMA journal_mode = WAL",
+        "PRAGMA journal_mode = WAL",
+    ]
+    assert tracking_connection.closed is True
+
+
+def test_non_lock_wal_setup_error_does_not_retry_and_closes(monkeypatch):
+    setup_error = sqlite3.OperationalError("disk I/O error")
+
+    class TrackingConnection:
+        def __init__(self):
+            self.closed = False
+            self.row_factory = None
+            self.wal_attempts = 0
+
+        def execute(self, statement):
+            if statement == "PRAGMA journal_mode = WAL":
+                self.wal_attempts += 1
+                raise setup_error
+
+        def close(self):
+            self.closed = True
+
+    tracking_connection = TrackingConnection()
+    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
+    database = SQLiteDatabase(Path("unused.db"))
+
+    with pytest.raises(sqlite3.OperationalError) as raised:
+        with database.connection():
+            pass
+
+    assert raised.value is setup_error
+    assert tracking_connection.wal_attempts == 1
     assert tracking_connection.closed is True
 
 
