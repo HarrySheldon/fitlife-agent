@@ -1025,7 +1025,7 @@ to exercise a representative CSV endpoint from a context-managed startup test.
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md`
 
-- [ ] **Step 1: Document runtime behavior**
+- [x] **Step 1: Document runtime behavior**
 
 Add a concise README section stating:
 
@@ -1037,7 +1037,7 @@ The backend creates `backend/data/fitlife.sqlite3` on startup and applies checks
 
 Mark Phase 1 as complete in the roadmap only after every verification command below passes.
 
-- [ ] **Step 2: Run complete backend verification**
+- [x] **Step 2: Run complete backend verification**
 
 Run:
 
@@ -1047,7 +1047,7 @@ Run:
 
 Expected: all backend tests pass. The existing Starlette `httpx` deprecation warning may remain; test failures may not.
 
-- [ ] **Step 3: Validate Docker configuration and application startup**
+- [x] **Step 3: Validate Docker configuration and application startup**
 
 Run:
 
@@ -1065,7 +1065,7 @@ Expected:
 - health response has `success=True` and `data.status=ok`;
 - `backend/data/fitlife.sqlite3` exists on the bind-mounted data directory.
 
-- [ ] **Step 4: Confirm migration idempotency through restart**
+- [x] **Step 4: Confirm migration idempotency through restart**
 
 Run:
 
@@ -1076,12 +1076,20 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 
 Expected: the backend restarts successfully and migration 1 is not reapplied or rejected.
 
-- [ ] **Step 5: Commit documentation and roadmap evidence**
+- [x] **Step 5: Commit documentation and roadmap evidence**
 
 ```powershell
-git add README.md docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md
+git add .gitignore README.md docs/superpowers/plans/2026-07-19-sqlite-records-foundation.md docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md
 git commit -m "docs: verify SQLite records foundation"
 ```
+
+Verification evidence recorded on 2026-07-20: the complete backend suite passed 321
+tests with one known Starlette/httpx deprecation warning; `docker compose config --quiet`
+and both Compose image builds succeeded; the backend and frontend were `Up`; `/health`
+returned `success=true` with `status=ok`; migration version 1 existed in the bind-mounted
+database; and the migration row, including its checksum and application timestamp, remained
+unchanged after a backend container restart. After that restart, the backend returned to
+`Up` and `/health` again returned `success=true` with `status=ok`.
 
 ## Completion Criteria
 

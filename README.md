@@ -65,6 +65,10 @@ date,type,exercise,muscle_group,sets,reps,weight,duration_min
 
 The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. After registration or login, API requests with a bearer token read and write `backend/data/users/<user_id>/...` so each local demo account has isolated profile, meal, and workout data. Registration asks the user to choose one primary identifier type: username, email, or phone. Login accepts any of those identifiers in one account field. Email and phone are local demo identifiers only; the app does not send verification emails or SMS messages.
 
+### Records database
+
+The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. CSV remains the active record source until the later migration phase; do not delete existing user CSV files.
+
 ## Local Setup
 
 ```bash

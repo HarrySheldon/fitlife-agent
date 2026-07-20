@@ -1,7 +1,8 @@
 # Today Records Product Program Roadmap
 
 **Source specification:** `docs/superpowers/specs/2026-07-19-today-nutrition-training-records-design.md`  
-**Status:** Approved program decomposition  
+**Status:** Phase 1 complete; Phases 2-6 pending
+
 **Excluded:** Account data export, recipe builder, barcode/image recognition, PostgreSQL, external runtime catalog APIs
 
 ## Why This Is A Program
@@ -14,7 +15,7 @@ The work is therefore split into six ordered, independently verifiable plans. Ea
 
 | Phase | Deliverable | Depends On | Product Proof |
 | --- | --- | --- | --- |
-| 1 | SQLite foundation and migration runtime | None | App starts against a versioned local database without changing current API behavior |
+| 1 (complete) | SQLite foundation and migration runtime | None | App starts against a versioned local database without changing current API behavior |
 | 2 | Versioned profile and deterministic daily targets | Phase 1 | New users confirm profile, overall goal, activity and four daily targets |
 | 3 | Food catalog and meal drafts | Phases 1-2 | Users search foods, build a multi-item meal draft and atomically confirm it |
 | 4 | Exercise catalog, workout sessions and Today summary | Phases 1-3 | Users record strength/cardio sessions and Today shows four nutrients plus optional training |
@@ -35,7 +36,7 @@ The work is therefore split into six ordered, independently verifiable plans. Ea
 
 ## Plan Files
 
-The first executable plan is:
+The completed Phase 1 plan is:
 
 - `docs/superpowers/plans/2026-07-19-sqlite-records-foundation.md`
 
