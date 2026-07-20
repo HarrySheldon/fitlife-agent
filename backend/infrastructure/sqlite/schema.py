@@ -33,7 +33,7 @@ RECORDS_MIGRATIONS = (
                 UNIQUE(user_id, effective_from)
             )
             """,
-            "CREATE INDEX idx_profile_versions_user_effective ON user_profile_versions(user_id, effective_from DESC)",
+            "CREATE UNIQUE INDEX idx_profile_versions_user_id ON user_profile_versions(user_id, id)",
             """
             CREATE TABLE overall_goal_versions (
                 id TEXT PRIMARY KEY,
@@ -44,7 +44,7 @@ RECORDS_MIGRATIONS = (
                 UNIQUE(user_id, effective_from)
             )
             """,
-            "CREATE INDEX idx_goal_versions_user_effective ON overall_goal_versions(user_id, effective_from DESC)",
+            "CREATE UNIQUE INDEX idx_goal_versions_user_id ON overall_goal_versions(user_id, id)",
             """
             CREATE TABLE daily_target_versions (
                 id TEXT PRIMARY KEY,
@@ -60,14 +60,14 @@ RECORDS_MIGRATIONS = (
                 rationale_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(rationale_json)),
                 effective_from TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(profile_version_id) REFERENCES user_profile_versions(id) ON DELETE SET NULL,
-                FOREIGN KEY(overall_goal_version_id) REFERENCES overall_goal_versions(id) ON DELETE SET NULL,
+                FOREIGN KEY(user_id, profile_version_id) REFERENCES user_profile_versions(user_id, id) ON DELETE RESTRICT,
+                FOREIGN KEY(user_id, overall_goal_version_id) REFERENCES overall_goal_versions(user_id, id) ON DELETE RESTRICT,
                 UNIQUE(user_id, effective_from)
             )
             """,
-            "CREATE INDEX idx_target_versions_user_effective ON daily_target_versions(user_id, effective_from DESC)",
-            "CREATE INDEX idx_target_versions_profile ON daily_target_versions(profile_version_id)",
-            "CREATE INDEX idx_target_versions_goal ON daily_target_versions(overall_goal_version_id)",
+            "CREATE UNIQUE INDEX idx_target_versions_user_id ON daily_target_versions(user_id, id)",
+            "CREATE INDEX idx_target_versions_profile ON daily_target_versions(user_id, profile_version_id)",
+            "CREATE INDEX idx_target_versions_goal ON daily_target_versions(user_id, overall_goal_version_id)",
             """
             CREATE TABLE daily_logs (
                 id TEXT PRIMARY KEY,
@@ -77,11 +77,11 @@ RECORDS_MIGRATIONS = (
                 target_version_id TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(target_version_id) REFERENCES daily_target_versions(id) ON DELETE SET NULL,
+                FOREIGN KEY(user_id, target_version_id) REFERENCES daily_target_versions(user_id, id) ON DELETE RESTRICT,
                 UNIQUE(user_id, log_date)
             )
             """,
-            "CREATE INDEX idx_daily_logs_target ON daily_logs(target_version_id)",
+            "CREATE INDEX idx_daily_logs_target ON daily_logs(user_id, target_version_id)",
             """
             CREATE TABLE food_catalog (
                 id TEXT PRIMARY KEY,
@@ -104,10 +104,18 @@ RECORDS_MIGRATIONS = (
                 content_hash TEXT,
                 active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CHECK (
+                    (source = 'public' AND owner_user_id IS NULL)
+                    OR (
+                        source IN ('user_custom', 'agent_estimate', 'legacy_import')
+                        AND owner_user_id IS NOT NULL
+                    )
+                )
             )
             """,
             "CREATE UNIQUE INDEX idx_food_public_source ON food_catalog(source_name, source_record_id) WHERE owner_user_id IS NULL",
+            "CREATE UNIQUE INDEX idx_food_private_source ON food_catalog(owner_user_id, source_name, source_record_id) WHERE owner_user_id IS NOT NULL",
             "CREATE INDEX idx_food_owner_name ON food_catalog(owner_user_id, name)",
             """
             CREATE TABLE exercise_catalog (
@@ -128,10 +136,18 @@ RECORDS_MIGRATIONS = (
                 content_hash TEXT,
                 active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CHECK (
+                    (source = 'public' AND owner_user_id IS NULL)
+                    OR (
+                        source IN ('user_custom', 'agent_estimate', 'legacy_import')
+                        AND owner_user_id IS NOT NULL
+                    )
+                )
             )
             """,
             "CREATE UNIQUE INDEX idx_exercise_public_source ON exercise_catalog(source_name, source_record_id) WHERE owner_user_id IS NULL",
+            "CREATE UNIQUE INDEX idx_exercise_private_source ON exercise_catalog(owner_user_id, source_name, source_record_id) WHERE owner_user_id IS NOT NULL",
             "CREATE INDEX idx_exercise_owner_name ON exercise_catalog(owner_user_id, name)",
             """
             CREATE TABLE catalog_aliases (
@@ -151,24 +167,38 @@ RECORDS_MIGRATIONS = (
             "CREATE INDEX idx_catalog_alias_normalized ON catalog_aliases(normalized_alias)",
             """
             CREATE TABLE catalog_favorites (
+                id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
-                catalog_kind TEXT NOT NULL CHECK (catalog_kind IN ('food', 'exercise')),
-                catalog_id TEXT NOT NULL,
+                food_id TEXT,
+                exercise_id TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(user_id, catalog_kind, catalog_id)
+                FOREIGN KEY(food_id) REFERENCES food_catalog(id) ON DELETE CASCADE,
+                FOREIGN KEY(exercise_id) REFERENCES exercise_catalog(id) ON DELETE CASCADE,
+                CHECK ((food_id IS NOT NULL) != (exercise_id IS NOT NULL))
             )
             """,
+            "CREATE UNIQUE INDEX idx_catalog_favorites_user_food ON catalog_favorites(user_id, food_id) WHERE food_id IS NOT NULL",
+            "CREATE UNIQUE INDEX idx_catalog_favorites_user_exercise ON catalog_favorites(user_id, exercise_id) WHERE exercise_id IS NOT NULL",
+            "CREATE INDEX idx_catalog_favorites_food ON catalog_favorites(food_id)",
+            "CREATE INDEX idx_catalog_favorites_exercise ON catalog_favorites(exercise_id)",
             """
             CREATE TABLE catalog_usage (
+                id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
-                catalog_kind TEXT NOT NULL CHECK (catalog_kind IN ('food', 'exercise')),
-                catalog_id TEXT NOT NULL,
+                food_id TEXT,
+                exercise_id TEXT,
                 use_count INTEGER NOT NULL DEFAULT 1 CHECK (use_count >= 1),
                 last_used_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(user_id, catalog_kind, catalog_id)
+                FOREIGN KEY(food_id) REFERENCES food_catalog(id) ON DELETE CASCADE,
+                FOREIGN KEY(exercise_id) REFERENCES exercise_catalog(id) ON DELETE CASCADE,
+                CHECK ((food_id IS NOT NULL) != (exercise_id IS NOT NULL))
             )
             """,
-            "CREATE INDEX idx_catalog_usage_recent ON catalog_usage(user_id, catalog_kind, last_used_at DESC)",
+            "CREATE UNIQUE INDEX idx_catalog_usage_user_food ON catalog_usage(user_id, food_id) WHERE food_id IS NOT NULL",
+            "CREATE UNIQUE INDEX idx_catalog_usage_user_exercise ON catalog_usage(user_id, exercise_id) WHERE exercise_id IS NOT NULL",
+            "CREATE INDEX idx_catalog_usage_food ON catalog_usage(food_id)",
+            "CREATE INDEX idx_catalog_usage_exercise ON catalog_usage(exercise_id)",
+            "CREATE INDEX idx_catalog_usage_recent ON catalog_usage(user_id, last_used_at DESC)",
             """
             CREATE TABLE record_drafts (
                 id TEXT PRIMARY KEY,
@@ -202,7 +232,6 @@ RECORDS_MIGRATIONS = (
                 UNIQUE(user_id, log_date, position)
             )
             """,
-            "CREATE INDEX idx_meals_user_date ON meals(user_id, log_date)",
             """
             CREATE TABLE meal_items (
                 id TEXT PRIMARY KEY,
@@ -259,10 +288,10 @@ RECORDS_MIGRATIONS = (
                 provenance_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(provenance_json)),
                 position INTEGER NOT NULL CHECK (position >= 1),
                 FOREIGN KEY(session_id) REFERENCES training_sessions(id) ON DELETE CASCADE,
-                FOREIGN KEY(catalog_exercise_id) REFERENCES exercise_catalog(id) ON DELETE SET NULL
+                FOREIGN KEY(catalog_exercise_id) REFERENCES exercise_catalog(id) ON DELETE SET NULL,
+                UNIQUE(session_id, position)
             )
             """,
-            "CREATE INDEX idx_strength_exercises_session ON strength_exercises(session_id)",
             "CREATE INDEX idx_strength_exercises_catalog ON strength_exercises(catalog_exercise_id)",
             """
             CREATE TABLE strength_sets (
@@ -276,7 +305,6 @@ RECORDS_MIGRATIONS = (
                 UNIQUE(strength_exercise_id, set_number)
             )
             """,
-            "CREATE INDEX idx_strength_sets_exercise ON strength_sets(strength_exercise_id)",
             """
             CREATE TABLE cardio_items (
                 id TEXT PRIMARY KEY,
@@ -291,10 +319,10 @@ RECORDS_MIGRATIONS = (
                 provenance_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(provenance_json)),
                 position INTEGER NOT NULL CHECK (position >= 1),
                 FOREIGN KEY(session_id) REFERENCES training_sessions(id) ON DELETE CASCADE,
-                FOREIGN KEY(catalog_exercise_id) REFERENCES exercise_catalog(id) ON DELETE SET NULL
+                FOREIGN KEY(catalog_exercise_id) REFERENCES exercise_catalog(id) ON DELETE SET NULL,
+                UNIQUE(session_id, position)
             )
             """,
-            "CREATE INDEX idx_cardio_items_session ON cardio_items(session_id)",
             "CREATE INDEX idx_cardio_items_catalog ON cardio_items(catalog_exercise_id)",
             """
             CREATE TABLE idempotency_keys (
