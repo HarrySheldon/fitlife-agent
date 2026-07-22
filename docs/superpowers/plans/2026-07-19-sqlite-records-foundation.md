@@ -1091,8 +1091,9 @@ git commit -m "docs: verify SQLite records foundation"
 
 Verification evidence refreshed on 2026-07-22: the complete backend suite passed 377
 tests with one known Starlette/httpx deprecation warning; `docker compose config --quiet`
-and both Compose image builds succeeded; the backend image contained no SQLite database or
-sidecar files; the backend and frontend were `Up`; and `/health` returned `success=true`
+and both Compose image builds succeeded. The backend image contained only the four sample
+data files generated during the build, with no local user/runtime data, SQLite sidecars, or
+environment files. The backend and frontend were `Up`, and `/health` returned `success=true`
 with `status=ok`. The bind-mounted database upgraded from migration 1 to migrations 1 and 2.
 After a backend container restart, both migration rows retained the same version, name,
 checksum, and application timestamp; the backend returned to `Up` and `/health` again
