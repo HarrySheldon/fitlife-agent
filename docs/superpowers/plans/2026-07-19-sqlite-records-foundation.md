@@ -942,7 +942,7 @@ def test_application_startup_creates_and_migrates_database(tmp_path, monkeypatch
         versions = connection.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
-    assert [row["version"] for row in versions] == [1]
+    assert [row["version"] for row in versions] == [1, 2]
 
     get_settings.cache_clear()
 ```
@@ -1016,14 +1016,16 @@ git commit -m "feat: initialize records database on startup"
 
 Review evidence: the startup and selected API regression suite passed 9 tests. Spec and
 quality review confirmed that initialization occurs only inside the FastAPI lifespan and
-does not replace the existing CSV repositories. A non-blocking follow-up coverage note is
-to exercise a representative CSV endpoint from a context-managed startup test.
+does not replace the existing CSV repositories. The context-managed startup regression
+also exercises `/dashboard/summary` against isolated header-only CSV files.
 
 ### Task 6: Verify The Foundation And Document The Next Boundary
 
 **Files:**
+- Create: `.dockerignore`
 - Modify: `.gitignore`
 - Modify: `README.md`
+- Modify: `backend/tests/test_database_startup.py`
 - Modify: `docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md`
 
 - [x] **Step 1: Document runtime behavior**
@@ -1078,22 +1080,23 @@ docker compose restart backend
 Invoke-RestMethod http://127.0.0.1:8000/health
 ```
 
-Expected: the backend restarts successfully and migration 1 is not reapplied or rejected.
+Expected: the backend restarts successfully and migrations 1 and 2 are not reapplied or rejected.
 
 - [x] **Step 5: Commit documentation and roadmap evidence**
 
 ```powershell
-git add .gitignore README.md docs/superpowers/plans/2026-07-19-sqlite-records-foundation.md docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md
+git add .dockerignore .gitignore README.md backend/tests/test_database_startup.py docs/superpowers/plans/2026-07-19-sqlite-records-foundation.md docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md
 git commit -m "docs: verify SQLite records foundation"
 ```
 
-Verification evidence recorded on 2026-07-20: the complete backend suite passed 321
+Verification evidence refreshed on 2026-07-22: the complete backend suite passed 377
 tests with one known Starlette/httpx deprecation warning; `docker compose config --quiet`
-and both Compose image builds succeeded; the backend and frontend were `Up`; `/health`
-returned `success=true` with `status=ok`; migration version 1 existed in the bind-mounted
-database; and the migration row, including its checksum and application timestamp, remained
-unchanged after a backend container restart. After that restart, the backend returned to
-`Up` and `/health` again returned `success=true` with `status=ok`.
+and both Compose image builds succeeded; the backend image contained no SQLite database or
+sidecar files; the backend and frontend were `Up`; and `/health` returned `success=true`
+with `status=ok`. The bind-mounted database upgraded from migration 1 to migrations 1 and 2.
+After a backend container restart, both migration rows retained the same version, name,
+checksum, and application timestamp; the backend returned to `Up` and `/health` again
+returned `success=true` with `status=ok`.
 
 ## Completion Criteria
 
