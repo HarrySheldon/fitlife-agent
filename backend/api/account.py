@@ -15,7 +15,11 @@ from backend.i18n import (
     translate_public_message,
 )
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+    SQLiteProfileTargetRepository,
+)
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.schemas import (
     AccountDeleteRequest,
     AccountPasswordChangeRequest,
@@ -42,6 +46,7 @@ def delete_account(
     DeleteAccount(
         settings.data_dir,
         FileIdentityRepository(settings.data_dir),
+        SQLiteProfileTargetRepository(get_database()),
     ).execute(
         principal,
         password=payload.password,

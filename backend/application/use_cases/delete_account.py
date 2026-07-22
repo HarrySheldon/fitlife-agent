@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import sqlite3
 import stat
 from pathlib import Path
 from uuid import uuid4
 
 from backend.application.ports.identity_repository import IdentityRepository
+from backend.application.ports.profile_target_repository import ProfileTargetRepository
 from backend.domain.errors import ApplicationError, account_delete_failed_error
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedPrincipal
@@ -17,9 +19,15 @@ USER_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 
 
 class DeleteAccount:
-    def __init__(self, data_dir: Path, identities: IdentityRepository) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        identities: IdentityRepository,
+        profile_targets: ProfileTargetRepository | None = None,
+    ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
+        self.profile_targets = profile_targets
 
     def execute(
         self,
@@ -48,7 +56,7 @@ class DeleteAccount:
                 )
                 if result == "deleted":
                     lifecycle.mark_deleted()
-        except (OSError, ValueError):
+        except (OSError, ValueError, sqlite3.Error):
             raise account_delete_failed_error() from None
         if result == "token_invalid":
             raise ApplicationError(
@@ -86,6 +94,7 @@ class DeleteAccount:
             quarantines = list(
                 users_root.glob(f".delete-{user_id}-*.quarantine")
             )
+            staged_quarantine: Path | None = None
             if _entry_exists(user_root):
                 quarantine = users_root / f".delete-{user_id}-{uuid4().hex}.quarantine"
                 try:
@@ -95,9 +104,26 @@ class DeleteAccount:
                         raise
                 else:
                     quarantines.append(quarantine)
+                    staged_quarantine = quarantine
+
+            for quarantine in quarantines:
+                _validate_quarantine(quarantine, resolved_users_root)
+
+            try:
+                if self.profile_targets is not None:
+                    self.profile_targets.delete_user_data(user_id)
+            except (OSError, ValueError, sqlite3.Error):
+                if staged_quarantine is not None:
+                    _restore_quarantine(
+                        staged_quarantine,
+                        user_root,
+                        resolved_users_root,
+                    )
+                raise
+
             for quarantine in quarantines:
                 _cleanup_quarantine(quarantine, resolved_users_root)
-        except (OSError, ValueError):
+        except (OSError, ValueError, sqlite3.Error):
             raise account_delete_failed_error() from None
 
 
@@ -124,13 +150,28 @@ def _entry_exists(path: Path) -> bool:
     return True
 
 
-def _cleanup_quarantine(quarantine: Path, resolved_users_root: Path) -> None:
+def _validate_quarantine(quarantine: Path, resolved_users_root: Path) -> None:
     if _entry_is_link_or_reparse(quarantine):
         _unlink_reparse_entry(quarantine)
         raise ValueError("Quarantined account storage is an untrusted link")
     resolved_quarantine = quarantine.resolve(strict=True)
     if resolved_quarantine.parent != resolved_users_root:
         raise ValueError("Quarantined account storage escaped its boundary")
+
+
+def _restore_quarantine(
+    quarantine: Path,
+    user_root: Path,
+    resolved_users_root: Path,
+) -> None:
+    _validate_quarantine(quarantine, resolved_users_root)
+    if _entry_exists(user_root):
+        raise OSError("Account storage was recreated before rollback")
+    os.replace(quarantine, user_root)
+
+
+def _cleanup_quarantine(quarantine: Path, resolved_users_root: Path) -> None:
+    _validate_quarantine(quarantine, resolved_users_root)
     try:
         shutil.rmtree(quarantine)
     except FileNotFoundError:

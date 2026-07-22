@@ -5,7 +5,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
+from backend.application.ports.profile_target_repository import (
+    GoalVersionInput,
+    ProfileVersionInput,
+    TargetVersionInput,
+)
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+    SQLiteProfileTargetRepository,
+)
+from backend.infrastructure.sqlite.runtime import get_database, initialize_database
 from backend.main import create_app
 from backend.tools.data_access import DEFAULT_PROFILE
 
@@ -20,6 +29,7 @@ def build_client(monkeypatch) -> tuple[TestClient, Path]:
     data_dir = Path(".tmp") / "pytest-account-delete-api" / uuid4().hex
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     get_settings.cache_clear()
+    initialize_database()
     return TestClient(create_app()), data_dir
 
 
@@ -248,3 +258,89 @@ def test_confirmed_delete_removes_all_owned_files_and_preserves_other_account(mo
         "/auth/login",
         json={"identifier": "preserved-delete-user", "password": "password456"},
     ).status_code == 200
+
+
+def _seed_versioned_setup(repository, user_id: str, weight_kg: float = 70):
+    setup = repository.bootstrap(
+        user_id,
+        ProfileVersionInput(
+            age=30,
+            height_cm=175,
+            weight_kg=weight_kg,
+            energy_parameter="male",
+            activity_level="moderate",
+            auto_target_disabled=False,
+            safety_conditions=(),
+            effective_from="2026-07-01",
+        ),
+        GoalVersionInput(goal="maintenance", effective_from="2026-07-01"),
+    )
+    return repository.confirm_target_once(
+        user_id,
+        f"confirm-{user_id}",
+        f"fingerprint-{user_id}",
+        TargetVersionInput(
+            profile_version_id=setup.profile.id,
+            overall_goal_version_id=setup.goal.id,
+            calories=2100,
+            carbs=250,
+            protein=120,
+            fat=68,
+            source="manual",
+            formula_version=None,
+            rationale={},
+            effective_from="2026-07-02",
+        ),
+    )
+
+
+def test_account_deletion_erases_only_authenticated_users_versioned_sqlite_data(monkeypatch):
+    client, _ = build_client(monkeypatch)
+    current = register(client, "sqlite-delete-user")
+    other = register(client, "sqlite-preserved-user", "password456")
+    repository = SQLiteProfileTargetRepository(get_database())
+    _seed_versioned_setup(repository, current["user"]["user_id"])
+    other_target = _seed_versioned_setup(
+        repository, other["user"]["user_id"], weight_kg=80
+    )
+
+    response = client.request(
+        "DELETE",
+        "/account",
+        headers=authorization(current),
+        json={"password": "password123", "confirmation": "DELETE"},
+    )
+
+    assert response.status_code == 200
+    deleted_setup = repository.get_setup(current["user"]["user_id"])
+    assert deleted_setup.profile is None
+    assert deleted_setup.goal is None
+    assert deleted_setup.target is None
+    assert repository.get_setup(other["user"]["user_id"]).target == other_target
+
+
+def test_sqlite_cleanup_failure_restores_files_and_preserves_identity(monkeypatch):
+    client, data_dir = build_client(monkeypatch)
+    session = register(client, "sqlite-cleanup-failure")
+    user_id = session["user"]["user_id"]
+    user_root = data_dir / "users" / user_id
+    marker = user_root / "record.json"
+    marker.write_text("must be restored", encoding="utf-8")
+
+    def fail_cleanup(_repository, _user_id: str) -> None:
+        raise OSError("private sqlite failure detail")
+
+    monkeypatch.setattr(SQLiteProfileTargetRepository, "delete_user_data", fail_cleanup)
+    response = client.request(
+        "DELETE",
+        "/account",
+        headers=authorization(session),
+        json={"password": "password123", "confirmation": "DELETE"},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "ACCOUNT_DELETE_FAILED"
+    assert "sqlite" not in response.text.lower()
+    assert client.get("/auth/me", headers=authorization(session)).status_code == 200
+    assert marker.read_text(encoding="utf-8") == "must be restored"
+    assert list(user_root.parent.glob(f".delete-{user_id}-*.quarantine")) == []
