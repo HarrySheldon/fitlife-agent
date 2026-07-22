@@ -1,6 +1,32 @@
 from backend.infrastructure.sqlite.migrations import Migration
 
 
+def _json_shape_triggers(
+    table_name: str, columns: tuple[tuple[str, str], ...]
+) -> tuple[str, ...]:
+    checks = "\n                OR ".join(
+        f"(CASE WHEN json_valid(NEW.{column_name}) "
+        f"THEN json_type(NEW.{column_name}) <> '{shape}' ELSE 0 END)"
+        for column_name, shape in columns
+    )
+    column_names = ", ".join(column_name for column_name, _ in columns)
+    events = (
+        ("insert", "INSERT"),
+        ("update", f"UPDATE OF {column_names}"),
+    )
+    return tuple(
+        f"""
+            CREATE TRIGGER {table_name}_json_shape_{suffix}
+            BEFORE {event} ON {table_name}
+            WHEN {checks}
+            BEGIN
+                SELECT RAISE(ABORT, '{table_name} JSON shape mismatch');
+            END
+            """
+        for suffix, event in events
+    )
+
+
 RECORDS_MIGRATIONS = (
     Migration(
         version=1,
@@ -359,6 +385,537 @@ RECORDS_MIGRATIONS = (
                 source_tokens
             )
             """,
+        ),
+    ),
+    Migration(
+        version=2,
+        name="enforce_records_schema_invariants",
+        statements=(
+            """
+            CREATE TABLE records_v2_migration_guard (
+                violations INTEGER NOT NULL CHECK (violations = 0)
+            )
+            """,
+            """
+            INSERT INTO records_v2_migration_guard (violations)
+            SELECT SUM(violations)
+            FROM (
+                SELECT COUNT(*) AS violations
+                FROM catalog_favorites AS favorite
+                WHERE favorite.food_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM food_catalog AS food
+                    WHERE food.id = favorite.food_id
+                      AND (
+                        food.owner_user_id IS NULL
+                        OR food.owner_user_id = favorite.user_id
+                      )
+                  )
+                UNION ALL
+                SELECT COUNT(*)
+                FROM catalog_favorites AS favorite
+                WHERE favorite.exercise_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM exercise_catalog AS exercise
+                    WHERE exercise.id = favorite.exercise_id
+                      AND (
+                        exercise.owner_user_id IS NULL
+                        OR exercise.owner_user_id = favorite.user_id
+                      )
+                  )
+                UNION ALL
+                SELECT COUNT(*)
+                FROM catalog_usage AS usage
+                WHERE usage.food_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM food_catalog AS food
+                    WHERE food.id = usage.food_id
+                      AND (
+                        food.owner_user_id IS NULL
+                        OR food.owner_user_id = usage.user_id
+                      )
+                  )
+                UNION ALL
+                SELECT COUNT(*)
+                FROM catalog_usage AS usage
+                WHERE usage.exercise_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM exercise_catalog AS exercise
+                    WHERE exercise.id = usage.exercise_id
+                      AND (
+                        exercise.owner_user_id IS NULL
+                        OR exercise.owner_user_id = usage.user_id
+                      )
+                  )
+                UNION ALL
+                SELECT COUNT(*)
+                FROM meal_items AS item
+                WHERE item.catalog_food_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM meals AS meal
+                    JOIN food_catalog AS food
+                      ON food.id = item.catalog_food_id
+                    WHERE meal.id = item.meal_id
+                      AND (
+                        food.owner_user_id IS NULL
+                        OR food.owner_user_id = meal.user_id
+                      )
+                  )
+                UNION ALL
+                SELECT COUNT(*)
+                FROM strength_exercises AS item
+                WHERE item.catalog_exercise_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM training_sessions AS session
+                    JOIN exercise_catalog AS exercise
+                      ON exercise.id = item.catalog_exercise_id
+                    WHERE session.id = item.session_id
+                      AND exercise.exercise_type = 'strength'
+                      AND (
+                        exercise.owner_user_id IS NULL
+                        OR exercise.owner_user_id = session.user_id
+                      )
+                  )
+                UNION ALL
+                SELECT COUNT(*)
+                FROM cardio_items AS item
+                WHERE item.catalog_exercise_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM training_sessions AS session
+                    JOIN exercise_catalog AS exercise
+                      ON exercise.id = item.catalog_exercise_id
+                    WHERE session.id = item.session_id
+                      AND exercise.exercise_type = 'cardio'
+                      AND (
+                        exercise.owner_user_id IS NULL
+                        OR exercise.owner_user_id = session.user_id
+                      )
+                  )
+                UNION ALL
+                SELECT COUNT(*) FROM data_migrations
+                WHERE CASE WHEN json_valid(details_json)
+                    THEN json_type(details_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM user_profile_versions
+                WHERE CASE WHEN json_valid(safety_conditions_json)
+                    THEN json_type(safety_conditions_json) IS NOT 'array' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM daily_target_versions
+                WHERE CASE WHEN json_valid(rationale_json)
+                    THEN json_type(rationale_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM food_catalog
+                WHERE CASE WHEN json_valid(provenance_json)
+                    THEN json_type(provenance_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM exercise_catalog
+                WHERE CASE WHEN json_valid(secondary_muscles_json)
+                    THEN json_type(secondary_muscles_json) IS NOT 'array' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM exercise_catalog
+                WHERE CASE WHEN json_valid(provenance_json)
+                    THEN json_type(provenance_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM record_drafts
+                WHERE CASE WHEN json_valid(payload_json)
+                    THEN json_type(payload_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM record_drafts
+                WHERE CASE WHEN json_valid(agent_metadata_json)
+                    THEN json_type(agent_metadata_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM meal_items
+                WHERE CASE WHEN json_valid(uncertainty_json)
+                    THEN json_type(uncertainty_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM meal_items
+                WHERE CASE WHEN json_valid(assumptions_json)
+                    THEN json_type(assumptions_json) IS NOT 'array' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM meal_items
+                WHERE CASE WHEN json_valid(provenance_json)
+                    THEN json_type(provenance_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM training_sessions
+                WHERE CASE WHEN json_valid(estimate_json)
+                    THEN json_type(estimate_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM strength_exercises
+                WHERE CASE WHEN json_valid(secondary_muscles_json)
+                    THEN json_type(secondary_muscles_json) IS NOT 'array' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM strength_exercises
+                WHERE CASE WHEN json_valid(estimate_json)
+                    THEN json_type(estimate_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM strength_exercises
+                WHERE CASE WHEN json_valid(provenance_json)
+                    THEN json_type(provenance_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM cardio_items
+                WHERE CASE WHEN json_valid(estimate_json)
+                    THEN json_type(estimate_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM cardio_items
+                WHERE CASE WHEN json_valid(provenance_json)
+                    THEN json_type(provenance_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM idempotency_keys
+                WHERE CASE WHEN json_valid(response_json)
+                    THEN json_type(response_json) IS NOT 'object' ELSE 1 END
+                UNION ALL
+                SELECT COUNT(*) FROM catalog_imports
+                WHERE CASE WHEN json_valid(details_json)
+                    THEN json_type(details_json) IS NOT 'object' ELSE 1 END
+            )
+            """,
+            """
+            CREATE TRIGGER food_catalog_partition_immutable
+            BEFORE UPDATE OF owner_user_id, source ON food_catalog
+            WHEN NEW.owner_user_id IS NOT OLD.owner_user_id
+              OR NEW.source IS NOT OLD.source
+            BEGIN
+                SELECT RAISE(ABORT, 'food catalog ownership is immutable');
+            END
+            """,
+            """
+            CREATE TRIGGER exercise_catalog_partition_type_immutable
+            BEFORE UPDATE OF owner_user_id, source, exercise_type ON exercise_catalog
+            WHEN NEW.owner_user_id IS NOT OLD.owner_user_id
+              OR NEW.source IS NOT OLD.source
+              OR NEW.exercise_type IS NOT OLD.exercise_type
+            BEGIN
+                SELECT RAISE(
+                    ABORT,
+                    'exercise catalog ownership and type are immutable'
+                );
+            END
+            """,
+            """
+            CREATE TRIGGER catalog_favorites_visible_insert
+            BEFORE INSERT ON catalog_favorites
+            WHEN (
+                NEW.food_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM food_catalog
+                    WHERE id = NEW.food_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            ) OR (
+                NEW.exercise_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM exercise_catalog
+                    WHERE id = NEW.exercise_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'catalog favorite is not visible to user');
+            END
+            """,
+            """
+            CREATE TRIGGER catalog_favorites_visible_update
+            BEFORE UPDATE OF user_id, food_id, exercise_id ON catalog_favorites
+            WHEN (
+                NEW.food_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM food_catalog
+                    WHERE id = NEW.food_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            ) OR (
+                NEW.exercise_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM exercise_catalog
+                    WHERE id = NEW.exercise_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'catalog favorite is not visible to user');
+            END
+            """,
+            """
+            CREATE TRIGGER catalog_usage_visible_insert
+            BEFORE INSERT ON catalog_usage
+            WHEN (
+                NEW.food_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM food_catalog
+                    WHERE id = NEW.food_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            ) OR (
+                NEW.exercise_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM exercise_catalog
+                    WHERE id = NEW.exercise_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'catalog usage is not visible to user');
+            END
+            """,
+            """
+            CREATE TRIGGER catalog_usage_visible_update
+            BEFORE UPDATE OF user_id, food_id, exercise_id ON catalog_usage
+            WHEN (
+                NEW.food_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM food_catalog
+                    WHERE id = NEW.food_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            ) OR (
+                NEW.exercise_id IS NOT NULL
+                AND NOT EXISTS (
+                    SELECT 1 FROM exercise_catalog
+                    WHERE id = NEW.exercise_id
+                      AND (owner_user_id IS NULL OR owner_user_id = NEW.user_id)
+                )
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'catalog usage is not visible to user');
+            END
+            """,
+            """
+            CREATE TRIGGER meals_owner_immutable
+            BEFORE UPDATE OF user_id ON meals
+            WHEN NEW.user_id IS NOT OLD.user_id
+            BEGIN
+                SELECT RAISE(ABORT, 'meal owner is immutable');
+            END
+            """,
+            """
+            CREATE TRIGGER meal_items_visible_insert
+            BEFORE INSERT ON meal_items
+            WHEN NEW.catalog_food_id IS NOT NULL
+             AND NOT EXISTS (
+                SELECT 1
+                FROM meals AS meal
+                JOIN food_catalog AS food ON food.id = NEW.catalog_food_id
+                WHERE meal.id = NEW.meal_id
+                  AND (
+                    food.owner_user_id IS NULL
+                    OR food.owner_user_id = meal.user_id
+                  )
+             )
+            BEGIN
+                SELECT RAISE(ABORT, 'catalog food is not visible to meal owner');
+            END
+            """,
+            """
+            CREATE TRIGGER meal_items_visible_update
+            BEFORE UPDATE OF meal_id, catalog_food_id ON meal_items
+            WHEN NEW.catalog_food_id IS NOT NULL
+             AND NOT EXISTS (
+                SELECT 1
+                FROM meals AS meal
+                JOIN food_catalog AS food ON food.id = NEW.catalog_food_id
+                WHERE meal.id = NEW.meal_id
+                  AND (
+                    food.owner_user_id IS NULL
+                    OR food.owner_user_id = meal.user_id
+                  )
+             )
+            BEGIN
+                SELECT RAISE(ABORT, 'catalog food is not visible to meal owner');
+            END
+            """,
+            """
+            CREATE TRIGGER training_sessions_owner_immutable
+            BEFORE UPDATE OF user_id ON training_sessions
+            WHEN NEW.user_id IS NOT OLD.user_id
+            BEGIN
+                SELECT RAISE(ABORT, 'training session owner is immutable');
+            END
+            """,
+            """
+            CREATE TRIGGER strength_exercises_catalog_insert
+            BEFORE INSERT ON strength_exercises
+            WHEN NEW.catalog_exercise_id IS NOT NULL
+             AND NOT EXISTS (
+                SELECT 1
+                FROM training_sessions AS session
+                JOIN exercise_catalog AS exercise
+                  ON exercise.id = NEW.catalog_exercise_id
+                WHERE session.id = NEW.session_id
+                  AND exercise.exercise_type = 'strength'
+                  AND (
+                    exercise.owner_user_id IS NULL
+                    OR exercise.owner_user_id = session.user_id
+                  )
+             )
+            BEGIN
+                SELECT RAISE(
+                    ABORT,
+                    'catalog exercise must be visible strength exercise'
+                );
+            END
+            """,
+            """
+            CREATE TRIGGER strength_exercises_catalog_update
+            BEFORE UPDATE OF session_id, catalog_exercise_id ON strength_exercises
+            WHEN NEW.catalog_exercise_id IS NOT NULL
+             AND NOT EXISTS (
+                SELECT 1
+                FROM training_sessions AS session
+                JOIN exercise_catalog AS exercise
+                  ON exercise.id = NEW.catalog_exercise_id
+                WHERE session.id = NEW.session_id
+                  AND exercise.exercise_type = 'strength'
+                  AND (
+                    exercise.owner_user_id IS NULL
+                    OR exercise.owner_user_id = session.user_id
+                  )
+             )
+            BEGIN
+                SELECT RAISE(
+                    ABORT,
+                    'catalog exercise must be visible strength exercise'
+                );
+            END
+            """,
+            """
+            CREATE TRIGGER cardio_items_catalog_insert
+            BEFORE INSERT ON cardio_items
+            WHEN NEW.catalog_exercise_id IS NOT NULL
+             AND NOT EXISTS (
+                SELECT 1
+                FROM training_sessions AS session
+                JOIN exercise_catalog AS exercise
+                  ON exercise.id = NEW.catalog_exercise_id
+                WHERE session.id = NEW.session_id
+                  AND exercise.exercise_type = 'cardio'
+                  AND (
+                    exercise.owner_user_id IS NULL
+                    OR exercise.owner_user_id = session.user_id
+                  )
+             )
+            BEGIN
+                SELECT RAISE(
+                    ABORT,
+                    'catalog exercise must be visible cardio exercise'
+                );
+            END
+            """,
+            """
+            CREATE TRIGGER cardio_items_catalog_update
+            BEFORE UPDATE OF session_id, catalog_exercise_id ON cardio_items
+            WHEN NEW.catalog_exercise_id IS NOT NULL
+             AND NOT EXISTS (
+                SELECT 1
+                FROM training_sessions AS session
+                JOIN exercise_catalog AS exercise
+                  ON exercise.id = NEW.catalog_exercise_id
+                WHERE session.id = NEW.session_id
+                  AND exercise.exercise_type = 'cardio'
+                  AND (
+                    exercise.owner_user_id IS NULL
+                    OR exercise.owner_user_id = session.user_id
+                  )
+             )
+            BEGIN
+                SELECT RAISE(
+                    ABORT,
+                    'catalog exercise must be visible cardio exercise'
+                );
+            END
+            """,
+            *_json_shape_triggers(
+                "data_migrations", (("details_json", "object"),)
+            ),
+            *_json_shape_triggers(
+                "user_profile_versions",
+                (("safety_conditions_json", "array"),),
+            ),
+            *_json_shape_triggers(
+                "daily_target_versions", (("rationale_json", "object"),)
+            ),
+            *_json_shape_triggers(
+                "food_catalog", (("provenance_json", "object"),)
+            ),
+            *_json_shape_triggers(
+                "exercise_catalog",
+                (
+                    ("secondary_muscles_json", "array"),
+                    ("provenance_json", "object"),
+                ),
+            ),
+            *_json_shape_triggers(
+                "record_drafts",
+                (
+                    ("payload_json", "object"),
+                    ("agent_metadata_json", "object"),
+                ),
+            ),
+            *_json_shape_triggers(
+                "meal_items",
+                (
+                    ("uncertainty_json", "object"),
+                    ("assumptions_json", "array"),
+                    ("provenance_json", "object"),
+                ),
+            ),
+            *_json_shape_triggers(
+                "training_sessions", (("estimate_json", "object"),)
+            ),
+            *_json_shape_triggers(
+                "strength_exercises",
+                (
+                    ("secondary_muscles_json", "array"),
+                    ("estimate_json", "object"),
+                    ("provenance_json", "object"),
+                ),
+            ),
+            *_json_shape_triggers(
+                "cardio_items",
+                (
+                    ("estimate_json", "object"),
+                    ("provenance_json", "object"),
+                ),
+            ),
+            *_json_shape_triggers(
+                "idempotency_keys", (("response_json", "object"),)
+            ),
+            *_json_shape_triggers(
+                "catalog_imports", (("details_json", "object"),)
+            ),
+            # source_tokens contains full normalized terms and overlapping
+            # bigrams so exact Chinese terms and shorter phrases both match.
+            """
+            CREATE VIRTUAL TABLE catalog_search_v2 USING fts5(
+                catalog_kind UNINDEXED,
+                catalog_id UNINDEXED,
+                name,
+                aliases,
+                pinyin,
+                source_tokens,
+                tokenize = 'unicode61 remove_diacritics 2',
+                prefix = '2 3 4'
+            )
+            """,
+            """
+            INSERT INTO catalog_search_v2 (
+                rowid, catalog_kind, catalog_id, name, aliases, pinyin,
+                source_tokens
+            )
+            SELECT
+                rowid, catalog_kind, catalog_id, name, aliases, pinyin,
+                source_tokens
+            FROM catalog_search
+            """,
+            "DROP TABLE catalog_search",
+            "ALTER TABLE catalog_search_v2 RENAME TO catalog_search",
+            "DROP TABLE records_v2_migration_guard",
         ),
     ),
 )
