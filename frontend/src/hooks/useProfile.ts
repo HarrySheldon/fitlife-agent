@@ -25,6 +25,7 @@ export function useProfile() {
       setProfile(saved)
     } catch (err) {
       setError((err as Error).message)
+      throw err
     } finally {
       setSaving(false)
     }

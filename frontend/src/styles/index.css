@@ -1286,6 +1286,388 @@ pre {
   cursor: not-allowed;
 }
 
+.profile-page {
+  width: min(100%, 1120px);
+  margin: 0 auto;
+}
+
+.profile-workspace {
+  border-top: 1px solid #cfc4b3;
+}
+
+.profile-global-feedback {
+  margin-bottom: 18px;
+}
+
+.profile-section {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.65fr);
+  gap: 34px;
+  padding: 30px 0 34px;
+  border-bottom: 1px solid #ded4c5;
+}
+
+.profile-section.compact {
+  padding-block: 25px;
+}
+
+.profile-section-heading {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  align-content: start;
+}
+
+.profile-section-heading > svg,
+.profile-coach-section > header > svg {
+  color: #216869;
+  margin-top: 2px;
+}
+
+.profile-section-heading h2,
+.profile-coach-section h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.profile-section-heading p,
+.profile-coach-section header p {
+  max-width: 34ch;
+  margin: 7px 0 0;
+  color: #68776d;
+  line-height: 1.55;
+}
+
+.profile-section-content {
+  min-width: 0;
+}
+
+.profile-form {
+  display: grid;
+  gap: 20px;
+}
+
+.profile-field-grid,
+.profile-target-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-field-grid label,
+.profile-target-inputs label,
+.legacy-personalization-form label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #44554b;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.profile-field-grid input,
+.profile-field-grid select,
+.profile-target-inputs input,
+.legacy-personalization-form select {
+  width: 100%;
+}
+
+.profile-field-wide {
+  grid-column: 1 / -1;
+}
+
+.profile-imperial-height {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-checkbox {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  color: #44554b;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.profile-checkbox input {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: #216869;
+}
+
+.profile-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.profile-choice-fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.profile-choice-fieldset legend {
+  margin-bottom: 9px;
+  color: #44554b;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.profile-goal-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #cfc4b3;
+}
+
+.profile-goal-options label {
+  position: relative;
+  min-width: 0;
+  border-right: 1px solid #cfc4b3;
+}
+
+.profile-goal-options label:last-child {
+  border-right: 0;
+}
+
+.profile-goal-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.profile-goal-options span {
+  display: grid;
+  min-height: 48px;
+  place-items: center;
+  padding: 8px 10px;
+  color: #55645b;
+  font-size: 14px;
+  font-weight: 750;
+  text-align: center;
+  cursor: pointer;
+}
+
+.profile-goal-options input:checked + span {
+  background: #dce9e3;
+  color: #154f50;
+  box-shadow: inset 0 -3px #216869;
+}
+
+.profile-goal-options input:focus-visible + span {
+  outline: 2px solid #216869;
+  outline-offset: -3px;
+}
+
+.daily-target-editor {
+  display: grid;
+  gap: 22px;
+}
+
+.profile-target-values {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-block: 1px solid #ded4c5;
+}
+
+.profile-target-values > div {
+  min-width: 0;
+  padding: 14px 12px;
+  border-right: 1px solid #ded4c5;
+}
+
+.profile-target-values > div:first-child {
+  padding-left: 0;
+}
+
+.profile-target-values > div:last-child {
+  border-right: 0;
+}
+
+.profile-target-values span,
+.profile-target-values strong {
+  display: block;
+}
+
+.profile-target-values span {
+  color: #68776d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-target-values strong {
+  margin-top: 5px;
+  color: #23372c;
+  font-size: 23px;
+}
+
+.profile-target-values strong small {
+  color: #68776d;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.target-edit-controls {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+.profile-target-inputs {
+  width: 100%;
+}
+
+.target-preview {
+  display: grid;
+  gap: 18px;
+  border-left: 4px solid #d7b377;
+  padding: 18px 0 18px 20px;
+  background: #fffaf1;
+}
+
+.target-preview > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.target-preview > header span {
+  color: #8a5b1f;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.target-preview > header h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.target-preview > header small {
+  color: #68776d;
+  font-weight: 700;
+}
+
+.target-preview .profile-target-values {
+  margin-right: 18px;
+}
+
+.profile-target-disclaimer {
+  margin: 0 18px 0 0;
+  color: #68776d;
+  font-size: 13px;
+}
+
+.profile-target-warnings {
+  display: grid;
+  gap: 10px;
+  margin-right: 18px;
+  border-top: 1px solid #ded4c5;
+  padding-top: 14px;
+}
+
+.profile-target-warnings ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #624a2d;
+}
+
+.target-preview > .primary-button {
+  justify-self: start;
+}
+
+.profile-restriction {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 11px;
+  border-block: 1px solid #d6b7ac;
+  padding: 14px 0;
+  color: #704237;
+}
+
+.profile-restriction p {
+  margin: 4px 0 0;
+}
+
+.target-history {
+  border-top: 1px solid #ded4c5;
+  padding-top: 4px;
+}
+
+.target-history summary {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 0;
+  color: #44554b;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+
+.target-history summary::-webkit-details-marker {
+  display: none;
+}
+
+.target-history[open] summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.target-history ol {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.target-history li {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(180px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border-top: 1px solid #eee5d8;
+  padding: 11px 0;
+  color: #44554b;
+  font-size: 13px;
+}
+
+.target-history li small {
+  color: #68776d;
+  text-align: right;
+}
+
+.legacy-personalization-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.profile-coach-section {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.65fr);
+  gap: 34px;
+  padding-top: 30px;
+}
+
+.profile-coach-section > header {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  align-content: start;
+}
+
+.profile-coach-section .coach-panel {
+  position: static;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1370,6 +1752,26 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .profile-section,
+  .profile-coach-section {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .profile-section-heading p,
+  .profile-coach-section header p {
+    max-width: 62ch;
+  }
+
+  .legacy-personalization-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .legacy-personalization-form button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
   .target-progress {
     border-right: 0;
     border-bottom: 1px solid #ded4c5;
@@ -1390,6 +1792,54 @@ pre {
 
   .form-grid .wide {
     grid-column: span 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .profile-field-grid,
+  .profile-target-inputs,
+  .legacy-personalization-form {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-field-wide,
+  .legacy-personalization-form button {
+    grid-column: span 1;
+  }
+
+  .profile-goal-options,
+  .profile-target-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-goal-options label:nth-child(2) {
+    border-right: 0;
+  }
+
+  .profile-goal-options label:last-child {
+    grid-column: 1 / -1;
+    border-top: 1px solid #cfc4b3;
+  }
+
+  .profile-target-values > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .profile-target-values > div:nth-child(n + 3) {
+    border-top: 1px solid #ded4c5;
+  }
+
+  .profile-target-values > div:nth-child(3) {
+    padding-left: 0;
+  }
+
+  .target-history li {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .target-history li small {
+    text-align: left;
   }
 }
 
