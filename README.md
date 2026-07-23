@@ -1,6 +1,6 @@
 # FitLife Agent
 
-FitLife Agent is an open-source Agentic RAG project for personal fitness and diet management. It combines user profile data, meal records, workout records, a small Markdown knowledge base, deterministic Python analysis tools, a LangGraph-ready agent workflow, FastAPI APIs, and a React + Vite frontend.
+FitLife Agent is an open-source Agentic RAG project for personal fitness and diet management. It combines versioned user profile and nutrition-target data in SQLite, per-user meal and workout records in CSV, a small Markdown knowledge base, deterministic Python analysis tools, a LangGraph-ready agent workflow, FastAPI APIs, and a React + Vite frontend.
 
 The project is designed as a resume-ready AI Agent engineering internship portfolio project and a locally deliverable product. Its main loop is record-driven: register or log in, maintain meal and workout records from Today, review history and weekly trends, generate the next plan, and ask the contextual Coach for analysis without leaving the active workspace.
 
@@ -11,6 +11,9 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 - Tool calling with deterministic Python analyzers
 - Per-user OpenAI or OpenAI-compatible model connections with explicit Responses or Chat Completions adapters
 - Demo user management with username, email, or phone login, bearer-token sessions, and per-user local data files
+- Authenticated, append-only profile, overall-goal, and daily-target versions in SQLite
+- Deterministic four-target nutrition calculation with preview and explicit user confirmation
+- Required first-run onboarding and separately editable Profile sections
 - FastAPI backend with typed Pydantic schemas
 - Today-first React + Vite + TypeScript frontend with contextual Coach actions
 - Structured plan validation and Evaluation v2 reporting
@@ -23,10 +26,12 @@ flowchart LR
   UI["React + Vite Frontend"] --> API["FastAPI API"]
   API --> APP["Application Use Cases"]
   APP --> DOMAIN["Deterministic Domain Tools"]
-  APP --> REPO["FitnessRepository"]
+  APP --> PROFILE_REPO["Versioned Profile Target Repository"]
+  APP --> RECORD_REPO["Legacy Record Repository"]
   AGENT["FitLife Coach Agent"] --> APP
   AGENT --> MODEL["ModelGateway"]
-  REPO --> FILES["Per-user JSON / CSV"]
+  PROFILE_REPO --> SQLITE["SQLite"]
+  RECORD_REPO --> FILES["Per-user JSON / CSV"]
   MODEL --> OPENAI["OpenAI Responses API"]
   DOMAIN --> KB["Markdown Knowledge Base"]
 ```
@@ -61,13 +66,15 @@ date,meal,food,amount,calories,protein,carbs,fat
 date,type,exercise,muscle_group,sets,reps,weight,duration_min
 ```
 
-`user_profile.json` includes height, weight, age, gender, goal, training frequency, preferences, restrictions, target weight, calorie target, and protein target.
+`user_profile.json` remains a compatibility projection for legacy features. The authenticated setup workflow stores append-only body-profile, overall-goal, and four-target versions in SQLite. The four daily targets are calories, carbohydrates, protein, and fat.
 
 The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. After registration or login, API requests with a bearer token read and write `backend/data/users/<user_id>/...` so each local demo account has isolated profile, meal, and workout data. Registration asks the user to choose one primary identifier type: username, email, or phone. Login accepts any of those identifiers in one account field. Email and phone are local demo identifiers only; the app does not send verification emails or SMS messages.
 
 ### Records database
 
-The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. CSV remains the active record source until the later migration phase; do not delete existing user CSV files.
+The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. Authenticated profile, overall-goal, and confirmed daily-target writes use this versioned SQLite model. Meal and workout records continue to use isolated per-user CSV files until a later migration phase; do not delete those files.
+
+Daily targets are calculated deterministically from the saved body profile, activity level, and overall goal. Profile or goal changes create a recalculation preview only. A target version is written only after the user explicitly confirms the preview; the Agent does not write overall goals or confirmed targets.
 
 ## Local Setup
 
@@ -145,7 +152,7 @@ The endpoint `/calendar/agent-entry` retains its current compatibility name, but
 
 1. Start the backend and frontend.
 2. Register or log in with a local username, email, or phone identifier.
-3. Complete Profile with body state, goal, experience level, training focus, target mode, and restrictions.
+3. Complete the required onboarding flow with body profile, overall goal, activity level, and an explicitly confirmed four-target nutrition plan.
 4. Open Today and record a meal or workout with smart entry or a compact form.
 5. Use the contextual Coach to explain daily progress, suggest the next meal, or adjust today's training.
 6. Open Logbook to inspect calendar history, add records for an earlier date, or import CSV data.
@@ -184,6 +191,20 @@ Artifacts are written to:
 - `backend/data/eval_results.md`
 
 The frontend Evaluation page calls `POST /eval/run` and renders the same aggregate metrics, group metrics, and failed-case details.
+
+## Phase 2 Verification
+
+The versioned profile and daily-target workflow was verified on 2026-07-23:
+
+- Backend: `537 passed` in `47.51s`; one known Starlette/httpx warning remains.
+- Frontend: `112 passed` across `18` files.
+- Production build: succeeded with `2448` modules transformed; the existing chunk-size warning above `500 kB` remains.
+- Docker: `docker compose config --quiet`, rebuild, startup, restart, and health recovery passed. Containers ran on backend port `8000` and frontend port `3000`.
+- Desktop acceptance: a fresh account completed fat-loss onboarding and confirmed `2172 kcal`, `291 g` carbohydrates, `126 g` protein, and `56 g` fat; Profile history showed the saved version.
+- Mobile acceptance at `390x844`: a fresh account completed muscle-gain onboarding and confirmed `2811 kcal`, `451 g` carbohydrates, `126 g` protein, and `56 g` fat; Profile showed the saved values, each onboarding step had no horizontal overflow, and the console had no errors.
+- Compatibility: authenticated setup returned `setup_complete: true`, and the legacy CSV-backed dashboard summary still responded after confirmation.
+
+The first Docker build exposed a frontend `node_modules` junction conflict in the build context. Commit `457fa8e` added `frontend/.dockerignore`; the subsequent Compose build and startup passed.
 
 ## Verification Report
 
