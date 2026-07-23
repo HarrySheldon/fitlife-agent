@@ -114,6 +114,7 @@ class TargetPreviewRequest(BaseModel):
     source: Literal["deterministic_calculation", "manual"]
     formula_version: str | None = None
     warnings: list[str] = Field(default_factory=list)
+    requires_confirmation: bool = False
     preview_token: str = Field(min_length=64, max_length=64)
 
 
