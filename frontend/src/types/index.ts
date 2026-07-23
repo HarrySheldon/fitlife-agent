@@ -30,6 +30,101 @@ export interface UserProfile {
   target_mode: 'suggested' | 'manual'
 }
 
+export type EnergyParameter = 'male' | 'female' | 'neutral'
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'high'
+export type OverallGoal = 'fat_loss' | 'maintenance' | 'muscle_gain'
+export type DailyTargetSource = 'deterministic_calculation' | 'manual' | 'agent_confirmed'
+export type TargetWarning = 'TARGET_BASELINE_DEVIATION' | 'TARGET_MACRO_ENERGY_MISMATCH'
+
+export interface ProfileVersion {
+  id: string
+  user_id: string
+  age: number
+  height_cm: number
+  weight_kg: number
+  energy_parameter: EnergyParameter
+  activity_level: ActivityLevel
+  auto_target_disabled: boolean
+  safety_conditions: string[]
+  effective_from: string
+  created_at: string
+}
+
+export interface ProfileVersionUpdate {
+  age: number
+  height_cm: number
+  weight_kg: number
+  energy_parameter: EnergyParameter
+  activity_level: ActivityLevel
+  auto_target_disabled: boolean
+  safety_conditions: string[]
+  effective_from: string
+}
+
+export interface OverallGoalVersion {
+  id: string
+  user_id: string
+  goal: OverallGoal
+  effective_from: string
+  created_at: string
+}
+
+export interface OverallGoalVersionUpdate {
+  goal: OverallGoal
+  effective_from: string
+}
+
+export interface DailyTargetValues {
+  calories: number
+  carbs: number
+  protein: number
+  fat: number
+}
+
+export interface DailyTargetVersion extends DailyTargetValues {
+  id: string
+  user_id: string
+  profile_version_id: string | null
+  overall_goal_version_id: string | null
+  source: DailyTargetSource
+  formula_version: string | null
+  rationale: Record<string, unknown>
+  effective_from: string
+  created_at: string
+}
+
+export interface TargetPreview {
+  profile_version_id: string
+  overall_goal_version_id: string
+  targets: DailyTargetValues
+  source: Extract<DailyTargetSource, 'deterministic_calculation' | 'manual'>
+  formula_version: string | null
+  warnings: TargetWarning[]
+  requires_confirmation: boolean
+  preview_token: string
+}
+
+export interface ProfileSetup {
+  profile: ProfileVersion | null
+  goal: OverallGoalVersion | null
+  target: DailyTargetVersion | null
+  setup_complete: boolean
+}
+
+export interface ProfileSetupMutation {
+  profile: ProfileVersion | null
+  goal: OverallGoalVersion | null
+  recalculation_preview: TargetPreview | null
+  recalculation_restriction: string | null
+}
+
+export interface ConfirmTargetsInput {
+  preview: TargetPreview
+  effective_from: string
+  acknowledge_warnings: boolean
+  idempotencyKey: string
+}
+
 export interface AuthenticatedUser {
   user_id: string
   username: string | null

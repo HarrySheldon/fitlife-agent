@@ -10,8 +10,11 @@ import type {
   ChatResponse,
   CoachActionRequest,
   CoachActionResponse,
+  ConfirmTargetsInput,
   DailyDetail,
   DailySummary,
+  DailyTargetValues,
+  DailyTargetVersion,
   DashboardSummary,
   EvalResult,
   GeneratedPlan,
@@ -19,7 +22,13 @@ import type {
   ModelConnectionSettings,
   ModelConnectionTestResult,
   ModelSettingsUpdate,
+  OverallGoalVersion,
+  OverallGoalVersionUpdate,
+  ProfileSetup,
+  ProfileSetupMutation,
+  ProfileVersionUpdate,
   ProcessingMode,
+  TargetPreview,
   TodayOverview,
   UserProfile,
   UserPreferences,
@@ -30,13 +39,22 @@ import type {
 import i18n from '../i18n'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const API_V1_BASE = import.meta.env.VITE_API_V1_BASE_URL || '/api/v1'
 const TOKEN_KEY = 'fitlife_access_token'
 const ACCOUNT_EXPORT_FILENAME = 'account-data-export.zip'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return requestFrom<T>(API_BASE, path, init)
+}
+
+async function requestV1<T>(path: string, init?: RequestInit): Promise<T> {
+  return requestFrom<T>(API_V1_BASE, path, init)
+}
+
+async function requestFrom<T>(base: string, path: string, init?: RequestInit): Promise<T> {
   const headers = requestHeaders(init)
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${base}${path}`, {
     ...init,
     headers,
   })
@@ -113,6 +131,27 @@ export const api = {
   dashboardForDate: (date: string) => request<DashboardSummary>(`/dashboard/summary?date=${encodeURIComponent(date)}`),
   profile: () => request<UserProfile>('/profile'),
   saveProfile: (profile: UserProfile) => request<UserProfile>('/profile', { method: 'POST', body: JSON.stringify(profile) }),
+  profileSetup: () => requestV1<ProfileSetup>('/profile'),
+  saveProfileVersion: (profile: ProfileVersionUpdate) =>
+    requestV1<ProfileSetupMutation>('/profile', { method: 'PUT', body: JSON.stringify(profile) }),
+  overallGoal: () => requestV1<{ overall: OverallGoalVersion | null }>('/goals'),
+  saveOverallGoal: (goal: OverallGoalVersionUpdate) =>
+    requestV1<ProfileSetupMutation>('/goals/overall', { method: 'PUT', body: JSON.stringify(goal) }),
+  calculateTargets: (manualTargets?: DailyTargetValues) =>
+    requestV1<TargetPreview>('/targets/calculate', {
+      method: 'POST',
+      body: JSON.stringify(manualTargets ? { manual_targets: manualTargets } : {}),
+    }),
+  confirmTargets: ({ idempotencyKey, ...payload }: ConfirmTargetsInput) =>
+    requestV1<{ target: DailyTargetVersion }>('/targets/confirm', {
+      method: 'POST',
+      headers: {
+        'If-Match': payload.preview.preview_token,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(payload),
+    }),
+  targetHistory: () => requestV1<DailyTargetVersion[]>('/targets/history'),
   modelSettings: () => request<ModelConnectionSettings>('/settings/model'),
   saveModelSettings: (settings: ModelSettingsUpdate) =>
     request<ModelConnectionSettings>('/settings/model', { method: 'PUT', body: JSON.stringify(settings) }),
