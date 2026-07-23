@@ -23,6 +23,42 @@ export const enUS = {
       identifierRequired: 'Username, email, or phone is required',
       weekdays: { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' },
     },
+    onboarding: {
+      loading: 'Loading profile setup', brandLine: 'Personal setup', eyebrow: 'Required setup',
+      title: 'Set up your daily targets', context: 'Your body profile and overall goal create a clear baseline for daily nutrition records.',
+      adultOnly: 'Daily target setup is available for adults aged 18 and over.',
+      stepCount: 'Step {{current}} of {{total}}', progressLabel: 'Setup progress',
+      continue: 'Continue', stalePreview: 'Your profile changed. Calculate a new preview before confirming.',
+      steps: { profile: 'Profile', goal: 'Goal', targets: 'Targets', confirm: 'Confirm' },
+      profile: {
+        title: 'Your starting profile', age: 'Age', height: 'Height (cm)', weight: 'Weight (kg)',
+        energyParameter: 'Energy calculation parameter',
+        energy: { female: 'Female', neutral: 'Neutral', male: 'Male' },
+      },
+      goal: {
+        title: 'Goal and activity', overall: 'Overall goal', activity: 'Activity level', calculate: 'Calculate targets',
+        options: { fat_loss: 'Fat loss', maintenance: 'Maintenance', muscle_gain: 'Muscle gain' },
+        activityOptions: { sedentary: 'Sedentary', light: 'Light', moderate: 'Moderate', high: 'High' },
+      },
+      targets: {
+        title: 'Daily target preview', disclaimer: 'Calculated targets are estimates, not medical advice.',
+        manual: 'Set my own daily targets', review: 'Review targets',
+        calories: 'Calories', carbs: 'Carbohydrate', protein: 'Protein', fat: 'Fat',
+        caloriesInput: 'Calories (kcal)', carbsInput: 'Carbohydrate (g)', proteinInput: 'Protein (g)', fatInput: 'Fat (g)',
+      },
+      confirm: {
+        title: 'Confirm daily targets', warnings: 'Review before continuing',
+        acknowledge: 'I reviewed these warnings and want to continue.', submit: 'Confirm and start',
+      },
+      warnings: {
+        TARGET_BASELINE_DEVIATION: 'One or more targets differ substantially from the calculated baseline.',
+        TARGET_MACRO_ENERGY_MISMATCH: 'Macro calories do not closely match the daily calorie target.',
+      },
+      restriction: {
+        title: 'Automatic targets unavailable',
+        message: 'Talk with a qualified medical professional before setting nutrition targets.',
+      },
+    },
     today: {
       eyebrow: 'Daily workspace', title: 'Today', loading: 'Loading today', targetsLabel: 'Daily target progress',
       meals: 'Meals', training: 'Training', noMeals: 'No meals recorded', noTraining: 'No training recorded',

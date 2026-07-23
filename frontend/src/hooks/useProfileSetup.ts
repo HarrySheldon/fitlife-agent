@@ -18,7 +18,8 @@ export function useProfileSetup() {
     owner: symbol
   } | null>(null)
   const confirmationAttempt = useRef<{
-    fingerprint: string
+    previewToken: string
+    effectiveFrom: string
     idempotencyKey: string
   } | null>(null)
   const [setup, setSetup] = useState<ProfileSetup | null>(null)
@@ -189,21 +190,17 @@ export function useProfileSetup() {
     const owner = beginCommand('confirming')
     try {
       if (!preview) throw new Error('TARGET_PREVIEW_REQUIRED')
-      const fingerprint = confirmationFingerprint(
-        preview,
-        effectiveFrom,
-        acknowledgeWarnings,
-      )
-      if (confirmationAttempt.current?.fingerprint !== fingerprint) {
+      if (confirmationAttempt.current?.previewToken !== preview.preview_token) {
         confirmationAttempt.current = {
-          fingerprint,
+          previewToken: preview.preview_token,
+          effectiveFrom,
           idempotencyKey: globalThis.crypto.randomUUID(),
         }
       }
       const attempt = confirmationAttempt.current
       const confirmation = await api.confirmTargets({
         preview,
-        effective_from: effectiveFrom,
+        effective_from: attempt.effectiveFrom,
         acknowledge_warnings: acknowledgeWarnings,
         idempotencyKey: attempt.idempotencyKey,
       })
@@ -250,26 +247,4 @@ export function useProfileSetup() {
     calculateTargets,
     confirmTargets,
   }
-}
-
-function confirmationFingerprint(
-  preview: TargetPreview,
-  effectiveFrom: string,
-  acknowledgeWarnings: boolean,
-): string {
-  return JSON.stringify([
-    preview.profile_version_id,
-    preview.overall_goal_version_id,
-    preview.targets.calories,
-    preview.targets.carbs,
-    preview.targets.protein,
-    preview.targets.fat,
-    preview.source,
-    preview.formula_version,
-    preview.warnings,
-    preview.requires_confirmation,
-    preview.preview_token,
-    effectiveFrom,
-    acknowledgeWarnings,
-  ])
 }

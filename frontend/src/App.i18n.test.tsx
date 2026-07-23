@@ -103,6 +103,15 @@ vi.mock('./hooks/useProfile', () => ({
   useProfile: () => ({ profile, setProfile: vi.fn(), loading: false, saving: false, error: null, save: vi.fn() }),
 }))
 
+vi.mock('./hooks/useProfileSetup', () => ({
+  useProfileSetup: () => ({
+    setup: { profile: {}, goal: {}, target: {}, setup_complete: true },
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+  }),
+}))
+
 vi.mock('./hooks/useModelSettings', () => ({
   useModelSettings: () => ({
     settings: {

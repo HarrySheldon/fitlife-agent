@@ -9,6 +9,15 @@ import { AppRoutes } from '../../routes/AppRoutes'
 import { api, tokenStorage } from '../../services/api'
 import type { AuthSession, AuthenticatedUser } from '../../types'
 
+vi.mock('../../hooks/useProfileSetup', () => ({
+  useProfileSetup: () => ({
+    setup: { profile: {}, goal: {}, target: {}, setup_complete: true },
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+  }),
+}))
+
 const user: AuthenticatedUser = {
   user_id: 'user-1',
   username: 'account-owner',

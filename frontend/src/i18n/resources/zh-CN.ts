@@ -20,6 +20,42 @@ export const zhCN = {
       identifierRequired: '请输入用户名、邮箱或手机号',
       weekdays: { mon: '周一', tue: '周二', wed: '周三', thu: '周四', fri: '周五', sat: '周六', sun: '周日' },
     },
+    onboarding: {
+      loading: '正在加载档案设置', brandLine: '个性化设置', eyebrow: '必填设置',
+      title: '设置每日目标', context: '身体档案和总体目标将为每日饮食记录建立清晰基线。',
+      adultOnly: '每日目标设置仅适用于年满 18 周岁的成年人。',
+      stepCount: '第 {{current}} 步，共 {{total}} 步', progressLabel: '设置进度',
+      continue: '继续', stalePreview: '档案已发生变化，请重新计算后再确认。',
+      steps: { profile: '身体档案', goal: '目标', targets: '每日目标', confirm: '确认' },
+      profile: {
+        title: '填写初始身体档案', age: '年龄', height: '身高（厘米）', weight: '体重（千克）',
+        energyParameter: '能量计算参数',
+        energy: { female: '女性', neutral: '中性', male: '男性' },
+      },
+      goal: {
+        title: '目标与活动水平', overall: '总体目标', activity: '活动水平', calculate: '计算每日目标',
+        options: { fat_loss: '减脂', maintenance: '保持', muscle_gain: '增肌' },
+        activityOptions: { sedentary: '久坐', light: '轻度活动', moderate: '中度活动', high: '高强度活动' },
+      },
+      targets: {
+        title: '每日目标预览', disclaimer: '计算结果仅为估算值，不构成医疗建议。',
+        manual: '自行设置每日目标', review: '检查目标',
+        calories: '热量', carbs: '碳水化合物', protein: '蛋白质', fat: '脂肪',
+        caloriesInput: '热量（千卡）', carbsInput: '碳水化合物（克）', proteinInput: '蛋白质（克）', fatInput: '脂肪（克）',
+      },
+      confirm: {
+        title: '确认每日目标', warnings: '继续前请确认',
+        acknowledge: '我已查看这些提示并确认继续。', submit: '确认并开始使用',
+      },
+      warnings: {
+        TARGET_BASELINE_DEVIATION: '一个或多个目标与计算基线存在较大差异。',
+        TARGET_MACRO_ENERGY_MISMATCH: '三大营养素热量与每日热量目标不完全匹配。',
+      },
+      restriction: {
+        title: '无法自动计算目标',
+        message: '设置营养目标前，请先咨询具备资质的医疗专业人员。',
+      },
+    },
     today: {
       eyebrow: '每日工作区', title: '今天', loading: '正在加载今天', targetsLabel: '每日目标进度', meals: '餐食', training: '训练',
       noMeals: '尚未记录餐食', noTraining: '尚未记录训练', addRecord: '添加记录', entryMethod: '录入方式', smart: '智能录入', meal: '餐食',

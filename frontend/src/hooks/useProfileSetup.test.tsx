@@ -243,7 +243,7 @@ describe('useProfileSetup', () => {
     expect(api.profileSetup).toHaveBeenCalledOnce()
   })
 
-  it('reuses the idempotency key for an unknown-error retry and rotates it when the request changes', async () => {
+  it('freezes effective time and idempotency key across network retries for one preview', async () => {
     vi.mocked(api.profileSetup).mockResolvedValue({
       profile,
       goal,
@@ -253,30 +253,35 @@ describe('useProfileSetup', () => {
     vi.mocked(api.calculateTargets).mockResolvedValue(preview)
     vi.mocked(api.confirmTargets).mockRejectedValue(new TypeError('Network unavailable'))
     const randomUUID = vi.spyOn(globalThis.crypto, 'randomUUID')
-      .mockReturnValueOnce('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
-      .mockReturnValueOnce('6ba7b811-9dad-11d1-80b4-00c04fd430c8')
+      .mockReturnValue('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
     const { result } = renderHook(() => useProfileSetup())
     await waitFor(() => expect(result.current.loading).toBe(false))
     await act(() => result.current.calculateTargets())
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      await act(async () => {
-        await expect(result.current.confirmTargets(confirmationInput))
-          .rejects.toThrow('Network unavailable')
-      })
-    }
+    await act(async () => {
+      await expect(result.current.confirmTargets(confirmationInput))
+        .rejects.toThrow('Network unavailable')
+    })
     await act(async () => {
       await expect(result.current.confirmTargets({
         ...confirmationInput,
-        acknowledgeWarnings: true,
+        effectiveFrom: '2026-07-23T09:05:00Z',
       })).rejects.toThrow('Network unavailable')
     })
 
-    expect(randomUUID).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(api.confirmTargets).mock.calls.map(([request]) => request.idempotencyKey)).toEqual([
-      '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
-      '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
-      '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
+    expect(randomUUID).toHaveBeenCalledOnce()
+    expect(vi.mocked(api.confirmTargets).mock.calls.map(([request]) => ({
+      effectiveFrom: request.effective_from,
+      idempotencyKey: request.idempotencyKey,
+    }))).toEqual([
+      {
+        effectiveFrom: confirmationInput.effectiveFrom,
+        idempotencyKey: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+      },
+      {
+        effectiveFrom: confirmationInput.effectiveFrom,
+        idempotencyKey: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+      },
     ])
   })
 
@@ -303,11 +308,23 @@ describe('useProfileSetup', () => {
       await expect(result.current.confirmTargets(confirmationInput))
         .rejects.toThrow('Aggregate unavailable')
     })
-    await act(() => result.current.confirmTargets(confirmationInput))
+    await act(() => result.current.confirmTargets({
+      ...confirmationInput,
+      effectiveFrom: '2026-07-23T09:05:00Z',
+    }))
 
-    expect(vi.mocked(api.confirmTargets).mock.calls.slice(0, 2).map(([request]) => request.idempotencyKey)).toEqual([
-      '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
-      '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+    expect(vi.mocked(api.confirmTargets).mock.calls.slice(0, 2).map(([request]) => ({
+      effectiveFrom: request.effective_from,
+      idempotencyKey: request.idempotencyKey,
+    }))).toEqual([
+      {
+        effectiveFrom: confirmationInput.effectiveFrom,
+        idempotencyKey: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+      },
+      {
+        effectiveFrom: confirmationInput.effectiveFrom,
+        idempotencyKey: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+      },
     ])
 
     await act(() => result.current.calculateTargets())

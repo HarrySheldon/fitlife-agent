@@ -2,7 +2,7 @@ import { ArrowRight, Bot, CalendarDays, Dumbbell, Eye, EyeOff, Flame, Sparkles, 
 import type { FormEvent } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../hooks/useAuth'
 
@@ -18,12 +18,12 @@ export function Auth() {
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const navigate = useNavigate()
+  const [postAuthDestination, setPostAuthDestination] = useState<string | null>(null)
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   if (user) {
-    return <Navigate to={from} replace />
+    return <Navigate to={postAuthDestination ?? from} replace />
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -35,6 +35,7 @@ export function Auth() {
         if (!registerIdentifier.trim()) {
           throw new Error(t('auth.identifierRequired'))
         }
+        setPostAuthDestination('/onboarding')
         await register({
           username: registerIdentifierType === 'username' ? registerIdentifier.trim() : undefined,
           email: registerIdentifierType === 'email' ? registerIdentifier.trim() : undefined,
@@ -43,10 +44,11 @@ export function Auth() {
           display_name: displayName,
         })
       } else {
+        setPostAuthDestination(from)
         await login({ identifier: identifier.trim(), password })
       }
-      navigate(from, { replace: true })
     } catch (err) {
+      setPostAuthDestination(null)
       setError((err as Error).message)
     } finally {
       setSubmitting(false)
