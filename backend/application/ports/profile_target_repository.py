@@ -76,13 +76,28 @@ class ProfileTargetSetup:
     target: TargetVersion | None
 
 
+@dataclass(frozen=True)
+class TargetConfirmationState:
+    target: TargetVersion
+    replayed: bool
+    projection_completed: bool
+
+
 @runtime_checkable
 class ProfileTargetRepository(Protocol):
     def get_setup(self, user_id: str) -> ProfileTargetSetup: ...
 
     def get_latest_profile(self, user_id: str) -> ProfileVersion | None: ...
 
+    def get_profile_version(
+        self, user_id: str, version_id: str
+    ) -> ProfileVersion | None: ...
+
     def get_latest_goal(self, user_id: str) -> GoalVersion | None: ...
+
+    def get_goal_version(
+        self, user_id: str, version_id: str
+    ) -> GoalVersion | None: ...
 
     def get_latest_target(self, user_id: str) -> TargetVersion | None: ...
 
@@ -92,7 +107,19 @@ class ProfileTargetRepository(Protocol):
         profile: ProfileVersionInput,
     ) -> ProfileVersion: ...
 
+    def append_profile_if_changed(
+        self,
+        user_id: str,
+        profile: ProfileVersionInput,
+    ) -> ProfileVersion: ...
+
     def append_goal(
+        self,
+        user_id: str,
+        goal: GoalVersionInput,
+    ) -> GoalVersion: ...
+
+    def append_goal_if_changed(
         self,
         user_id: str,
         goal: GoalVersionInput,
@@ -120,5 +147,27 @@ class ProfileTargetRepository(Protocol):
         request_fingerprint: str,
         target: TargetVersionInput,
     ) -> TargetVersion: ...
+
+    def confirm_target(
+        self,
+        user_id: str,
+        idempotency_key: str,
+        request_fingerprint: str,
+        target: TargetVersionInput,
+    ) -> TargetConfirmationState: ...
+
+    def get_confirmation(
+        self,
+        user_id: str,
+        idempotency_key: str,
+        request_fingerprint: str,
+    ) -> TargetConfirmationState | None: ...
+
+    def mark_projection_complete(
+        self,
+        user_id: str,
+        idempotency_key: str,
+        request_fingerprint: str,
+    ) -> TargetConfirmationState: ...
 
     def delete_user_data(self, user_id: str) -> None: ...

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pandas as pd
 
 from backend.schemas import MealRecord, UserProfile, WorkoutRecord
@@ -14,6 +16,13 @@ class FileFitnessRepository:
 
     def write_profile(self, profile: UserProfile, user_id: str | None = None) -> None:
         data_access.write_profile(profile, user_id)
+
+    def update_profile_atomically(
+        self,
+        update: Callable[[UserProfile], UserProfile],
+        user_id: str | None = None,
+    ) -> UserProfile:
+        return data_access.update_profile_atomically(update, user_id)
 
     def read_meals(self, user_id: str | None = None) -> pd.DataFrame:
         return data_access.read_meals(user_id)

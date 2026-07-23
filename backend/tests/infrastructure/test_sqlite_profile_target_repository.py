@@ -82,6 +82,51 @@ def test_repository_appends_profile_versions_and_reads_latest_by_effective_from(
     assert earlier.created_at == "2026-07-22T08:00:00Z"
 
 
+def test_append_profile_if_changed_is_atomic_under_concurrent_identical_updates(tmp_path):
+    database = _database(tmp_path)
+
+    def append(index):
+        return SQLiteProfileTargetRepository(database).append_profile_if_changed(
+            "user-a",
+            _profile(f"2026-07-22T08:00:0{index}Z"),
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(append, range(4)))
+
+    assert results == [results[0]] * 4
+    with database.connection() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) AS count FROM user_profile_versions WHERE user_id = ?",
+            ("user-a",),
+        ).fetchone()["count"]
+    assert count == 1
+
+
+def test_append_goal_if_changed_is_atomic_under_concurrent_identical_updates(tmp_path):
+    database = _database(tmp_path)
+
+    def append(index):
+        return SQLiteProfileTargetRepository(database).append_goal_if_changed(
+            "user-a",
+            GoalVersionInput(
+                goal="maintenance",
+                effective_from=f"2026-07-22T08:00:0{index}Z",
+            ),
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(append, range(4)))
+
+    assert results == [results[0]] * 4
+    with database.connection() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) AS count FROM overall_goal_versions WHERE user_id = ?",
+            ("user-a",),
+        ).fetchone()["count"]
+    assert count == 1
+
+
 def test_setup_reads_latest_profile_and_goal_for_only_the_requested_user(tmp_path):
     repository = SQLiteProfileTargetRepository(_database(tmp_path))
     profile_a = repository.append_profile("user-a", _profile("2026-07-01"))
@@ -289,6 +334,96 @@ def test_confirm_target_once_is_atomic_under_concurrent_retries(tmp_path):
 
     assert results == [results[0]] * 4
     assert setup_repository.list_targets("user-a") == (results[0],)
+
+
+def test_confirm_target_replays_before_freshness_check_and_tracks_projection(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    setup = repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01"),
+        GoalVersionInput(goal="maintenance", effective_from="2026-07-01"),
+    )
+    target = _target(setup.profile.id, setup.goal.id)
+
+    first = repository.confirm_target(
+        "user-a", "key-1", "fingerprint-a", target
+    )
+    repository.append_profile(
+        "user-a", _profile("2026-07-03", weight_kg=68)
+    )
+    replay = repository.confirm_target(
+        "user-a", "key-1", "fingerprint-a", target
+    )
+
+    assert first.replayed is False
+    assert first.projection_completed is False
+    assert replay.target == first.target
+    assert replay.replayed is True
+    assert replay.projection_completed is False
+    assert repository.get_profile_version("user-a", setup.profile.id) == setup.profile
+    assert repository.get_goal_version("user-a", setup.goal.id) == setup.goal
+
+    completed = repository.mark_projection_complete(
+        "user-a", "key-1", "fingerprint-a"
+    )
+    final_replay = repository.confirm_target(
+        "user-a", "key-1", "fingerprint-a", target
+    )
+
+    assert completed.projection_completed is True
+    assert final_replay.replayed is True
+    assert final_replay.projection_completed is True
+
+
+def test_get_confirmation_returns_saved_state_and_validates_fingerprint(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    setup = repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01"),
+        GoalVersionInput(goal="maintenance", effective_from="2026-07-01"),
+    )
+    assert repository.get_confirmation("user-a", "missing", "fingerprint") is None
+    created = repository.confirm_target(
+        "user-a",
+        "lookup-key",
+        "lookup-fingerprint",
+        _target(setup.profile.id, setup.goal.id),
+    )
+
+    pending = repository.get_confirmation(
+        "user-a", "lookup-key", "lookup-fingerprint"
+    )
+    assert pending.target == created.target
+    assert pending.replayed is True
+    assert pending.projection_completed is False
+
+    with pytest.raises(ProfileTargetRepositoryError) as raised:
+        repository.get_confirmation(
+            "user-a", "lookup-key", "changed-fingerprint"
+        )
+    assert raised.value.code == "IDEMPOTENCY_KEY_REUSED"
+
+
+def test_confirm_target_rejects_new_stale_preview_inside_transaction(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    setup = repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01"),
+        GoalVersionInput(goal="maintenance", effective_from="2026-07-01"),
+    )
+    stale_target = _target(setup.profile.id, setup.goal.id)
+    repository.append_goal(
+        "user-a",
+        GoalVersionInput(goal="fat_loss", effective_from="2026-07-03"),
+    )
+
+    with pytest.raises(ProfileTargetRepositoryError) as raised:
+        repository.confirm_target(
+            "user-a", "new-key", "fingerprint", stale_target
+        )
+
+    assert raised.value.code == "TARGET_PREVIEW_STALE"
+    assert repository.list_targets("user-a") == ()
 
 
 def test_delete_user_data_removes_owned_rows_and_preserves_other_users(tmp_path):

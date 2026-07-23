@@ -1,6 +1,15 @@
-from typing import Generic, Literal, TypeVar
+from datetime import datetime, timezone
+from typing import Annotated, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from backend.domain.user_preferences import AppLanguage, UnitSystem, validate_iana_timezone
 
@@ -24,6 +33,13 @@ ModelProvider = Literal["openai", "custom"]
 ModelProtocol = Literal["responses", "chat_completions"]
 
 
+def _normalize_utc(value: datetime) -> datetime:
+    return value.astimezone(timezone.utc)
+
+
+UtcAwareDatetime = Annotated[AwareDatetime, AfterValidator(_normalize_utc)]
+
+
 class ApiError(BaseModel):
     code: str
     message: str
@@ -38,20 +54,75 @@ class ApiResponse(BaseModel, Generic[T]):
 
 
 class UserProfile(BaseModel):
-    height_cm: int = Field(ge=120, le=230)
-    weight_kg: float = Field(gt=30, le=250)
-    age: int = Field(ge=16, le=90)
+    height_cm: float = Field(ge=120, le=230)
+    weight_kg: float = Field(ge=30, le=300)
+    age: int = Field(ge=16, le=100)
     gender: Literal["male", "female", "other"]
     goal: Literal["fat_loss", "muscle_gain", "maintenance"]
     weekly_training_frequency: int = Field(ge=0, le=7)
     diet_preferences: list[str] = Field(default_factory=list)
     allergies_or_restrictions: list[str] = Field(default_factory=list)
-    target_weight_kg: float = Field(gt=30, le=250)
-    daily_calorie_target: int = Field(ge=1200, le=5000)
-    daily_protein_target: int = Field(ge=40, le=300)
+    target_weight_kg: float = Field(ge=30, le=300)
+    daily_calorie_target: int = Field(ge=800, le=6000)
+    daily_protein_target: int = Field(ge=20, le=400)
     experience_level: ExperienceLevel = "novice"
     training_preference: TrainingPreference = "mixed"
     target_mode: TargetMode = "suggested"
+
+
+class ProfileVersionUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    age: int = Field(ge=18, le=100)
+    height_cm: float = Field(ge=120, le=230)
+    weight_kg: float = Field(ge=30, le=300)
+    energy_parameter: Literal["male", "female", "neutral"]
+    activity_level: Literal["sedentary", "light", "moderate", "high"]
+    auto_target_disabled: bool = False
+    safety_conditions: list[str] = Field(default_factory=list)
+    effective_from: UtcAwareDatetime
+
+
+class OverallGoalUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal: Literal["fat_loss", "maintenance", "muscle_gain"]
+    effective_from: UtcAwareDatetime
+
+
+class DailyTargetsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    calories: int = Field(ge=800, le=6000)
+    carbs: int = Field(ge=0, le=1000)
+    protein: int = Field(ge=20, le=400)
+    fat: int = Field(ge=10, le=300)
+
+
+class TargetCalculateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    manual_targets: DailyTargetsRequest | None = None
+
+
+class TargetPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile_version_id: str = Field(min_length=1)
+    overall_goal_version_id: str = Field(min_length=1)
+    targets: DailyTargetsRequest
+    source: Literal["deterministic_calculation", "manual"]
+    formula_version: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    preview_token: str = Field(min_length=64, max_length=64)
+
+
+class TargetConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    effective_from: UtcAwareDatetime
+    preview: TargetPreviewRequest
+    acknowledge_warnings: bool = False
 
 
 class AuthRegisterRequest(BaseModel):

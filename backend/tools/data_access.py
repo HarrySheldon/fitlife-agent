@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -80,6 +81,25 @@ def write_profile(profile: UserProfile, user_id: str | None = None) -> None:
         return
     with user_lifecycle_guard(get_settings().data_dir, user_id):
         save_profile(data_path("user_profile.json", user_id), profile)
+
+
+def update_profile_atomically(
+    update: Callable[[UserProfile], UserProfile],
+    user_id: str | None = None,
+) -> UserProfile:
+    if user_id is None:
+        path = data_path("user_profile.json")
+        updated = UserProfile.model_validate(update(load_profile(path)))
+        save_profile(path, updated)
+        return updated
+
+    data_dir = get_settings().data_dir
+    with user_lifecycle_guard(data_dir, user_id):
+        root = _ensure_user_data_unlocked(data_dir, user_id)
+        path = root / "user_profile.json"
+        updated = UserProfile.model_validate(update(load_profile(path)))
+        save_profile(path, updated)
+        return updated
 
 
 def append_meal(record: MealRecord, user_id: str | None = None) -> None:
