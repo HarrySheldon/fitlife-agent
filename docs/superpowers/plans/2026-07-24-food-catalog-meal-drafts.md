@@ -268,7 +268,7 @@ git commit -m "feat: add local searchable food catalog"
 - Create: `backend/tests/application/test_meals.py`
 - Create: `backend/tests/infrastructure/test_sqlite_meal_repository.py`
 
-- [ ] **Step 1: Write failing draft tests**
+- [x] **Step 1: Write failing draft tests**
 
 Cover create/get/update/delete, owner isolation, 30-day expiry, stale-version `409`, incomplete-item rejection, catalog snapshot stability, custom-food confirmation, idempotent retries and all-or-nothing rollback.
 
@@ -290,11 +290,11 @@ def test_confirm_draft_atomically_creates_meal_items_and_usage(tmp_path):
     assert repository.list_meals("user-a", confirmed.log_date) == (confirmed,)
 ```
 
-- [ ] **Step 2: Run draft tests and verify RED**
+- [x] **Step 2: Run draft tests and verify RED**
 
 Expected: imports fail because the meal repository does not exist.
 
-- [ ] **Step 3: Implement optimistic drafts**
+- [x] **Step 3: Implement optimistic drafts**
 
 `PATCH` persistence must execute:
 
@@ -306,7 +306,7 @@ WHERE id = ? AND user_id = ? AND version = ? AND expires_at > ?
 
 Zero updated rows are resolved into `DRAFT_NOT_FOUND`, `DRAFT_EXPIRED` or `DRAFT_VERSION_CONFLICT`.
 
-- [ ] **Step 4: Implement atomic idempotent confirmation**
+- [x] **Step 4: Implement atomic idempotent confirmation**
 
 Inside one `BEGIN IMMEDIATE` transaction:
 
@@ -322,11 +322,11 @@ Inside one `BEGIN IMMEDIATE` transaction:
 
 Any failure rolls back all nine operations.
 
-- [ ] **Step 5: Run repository, service and lifecycle tests**
+- [x] **Step 5: Run repository, service and lifecycle tests**
 
 Expected: all focused tests pass, including concurrent retries and account deletion.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add backend/application/ports/meal_repository.py backend/application/use_cases/meals.py backend/infrastructure/repositories/sqlite_meal_repository.py backend/tests/application/test_meals.py backend/tests/infrastructure/test_sqlite_meal_repository.py
