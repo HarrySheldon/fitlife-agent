@@ -174,7 +174,7 @@ git commit -m "feat: calculate deterministic food portions"
 - Create: `backend/tests/infrastructure/test_sqlite_food_catalog_repository.py`
 - Create: `backend/tests/infrastructure/test_food_catalog_seed.py`
 
-- [ ] **Step 1: Write failing catalog tests**
+- [x] **Step 1: Write failing catalog tests**
 
 Prove:
 
@@ -201,11 +201,11 @@ def test_search_foods_ranks_recent_favorite_private_and_public(tmp_path):
     assert all(item.owner_user_id in (None, "user-a") for item in results)
 ```
 
-- [ ] **Step 2: Run catalog tests and verify RED**
+- [x] **Step 2: Run catalog tests and verify RED**
 
 Expected: imports fail because the catalog port and adapter do not exist.
 
-- [ ] **Step 3: Implement the catalog port, service and SQLite adapter**
+- [x] **Step 3: Implement the catalog port, service and SQLite adapter**
 
 Use parameterized SQL and a sanitized prefix query:
 
@@ -224,7 +224,7 @@ WHERE food.active = 1
 
 and return source/license/attribution without exposing another user's private rows.
 
-- [ ] **Step 4: Add the bundled audited catalog**
+- [x] **Step 4: Add the bundled audited catalog**
 
 Add a small, reviewable first dataset of common staple foods. Every JSON record must include:
 
@@ -248,11 +248,11 @@ Add a small, reviewable first dataset of common staple foods. Every JSON record 
 
 The loader hashes canonical source JSON, upserts by `(source_name, source_record_id)`, and rebuilds only affected FTS rows.
 
-- [ ] **Step 5: Run catalog, schema and lifecycle tests**
+- [x] **Step 5: Run catalog, schema and lifecycle tests**
 
 Run the focused repository tests plus account-deletion tests. Expected: all pass and no account-export manifest changes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add backend/application/ports/food_catalog_repository.py backend/application/use_cases/food_catalog.py backend/infrastructure/repositories/sqlite_food_catalog_repository.py backend/infrastructure/catalog backend/data/catalog backend/tests/infrastructure

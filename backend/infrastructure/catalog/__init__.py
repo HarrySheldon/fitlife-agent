@@ -1,0 +1,1 @@
+"""Bundled local catalog loading."""

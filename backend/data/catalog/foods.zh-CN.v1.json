@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "source_name": "USDA FoodData Central",
+  "dataset_version": "2026-07-24",
+  "license": "CC0-1.0",
+  "attribution": "USDA FoodData Central",
+  "foods": [
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "169756",
+      "dataset_version": "2026-07-24",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "生白米（长粒）",
+      "basis_type": "per_100g",
+      "basis_amount": 100,
+      "unit": "g",
+      "calories": 365,
+      "carbs": 79.95,
+      "protein": 7.13,
+      "fat": 0.66,
+      "aliases": [
+        "大米",
+        "白米",
+        "raw white rice",
+        "dami"
+      ],
+      "provenance": {
+        "description": "Rice, white, long-grain, regular, raw, unenriched",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/169756/nutrients"
+      }
+    }
+  ]
+}
