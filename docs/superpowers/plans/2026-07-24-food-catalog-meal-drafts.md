@@ -407,15 +407,15 @@ git commit -m "feat: expose meal draft workflow"
 - Create: `frontend/src/hooks/useMealDraft.ts`
 - Create: `frontend/src/hooks/useMealDraft.test.tsx`
 
-- [ ] **Step 1: Write failing client and hook tests**
+- [x] **Step 1: Write failing client and hook tests**
 
 Prove authorization/language headers reuse the shared request boundary, search parameters are encoded, updates send `If-Match`, confirms send both concurrency headers, and stale saves retain local form values.
 
-- [ ] **Step 2: Run focused frontend tests and verify RED**
+- [x] **Step 2: Run focused frontend tests and verify RED**
 
 Expected: imports fail because the focused meal modules do not exist.
 
-- [ ] **Step 3: Implement the focused API client**
+- [x] **Step 3: Implement the focused API client**
 
 Expose narrow methods:
 
@@ -429,11 +429,11 @@ export const mealApi = {
 }
 ```
 
-- [ ] **Step 4: Implement recoverable draft state**
+- [x] **Step 4: Implement recoverable draft state**
 
 The hook owns remote version, save state and retry. A `409` sets `conflict` without discarding local items. No Agent call exists in this phase.
 
-- [ ] **Step 5: Run focused tests and commit**
+- [x] **Step 5: Run focused tests and commit**
 
 ```powershell
 git add frontend/src/types/meals.ts frontend/src/services/mealApi.ts frontend/src/services/mealApi.test.ts frontend/src/hooks/useMealDraft.ts frontend/src/hooks/useMealDraft.test.tsx

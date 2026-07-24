@@ -48,7 +48,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return requestFrom<T>(API_BASE, path, init)
 }
 
-async function requestV1<T>(path: string, init?: RequestInit): Promise<T> {
+export async function requestV1<T>(path: string, init?: RequestInit): Promise<T> {
   return requestFrom<T>(API_V1_BASE, path, init)
 }
 
