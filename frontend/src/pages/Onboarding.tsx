@@ -21,6 +21,7 @@ import type {
   EnergyParameter,
   OverallGoal,
   ProfileVersionUpdate,
+  SafetyCondition,
   TargetPreview,
 } from '../types'
 
@@ -34,7 +35,7 @@ interface ProfileFields {
   energyParameter: EnergyParameter
   activityLevel: ActivityLevel
   autoTargetDisabled: boolean
-  safetyConditions: string[]
+  safetyConditions: SafetyCondition[]
 }
 
 const defaultProfile: ProfileFields = {

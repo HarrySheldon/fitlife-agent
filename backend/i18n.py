@@ -88,6 +88,70 @@ PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
     "API_KEY_CLEARED": {"en-US": "API key cleared.", "zh-CN": "API 密钥已清除。"},
     "MODEL_CONNECTION_VERIFIED": {"en-US": "Model connection verified.", "zh-CN": "模型连接验证成功。"},
     "PROFILE_SAVED": {"en-US": "Profile saved.", "zh-CN": "个人资料已保存。"},
+    "PROFILE_VERSIONED_WRITE_REQUIRED": {
+        "en-US": "Use the body profile or training personalization form for this change.",
+        "zh-CN": "请通过身体档案或训练个性化表单完成此修改。",
+    },
+    "PROFILE_EFFECTIVE_FROM_CONFLICT": {
+        "en-US": "A profile version already exists at that effective time. Try saving again.",
+        "zh-CN": "该生效时间已存在档案版本，请重新保存。",
+    },
+    "GOAL_EFFECTIVE_FROM_CONFLICT": {
+        "en-US": "A goal version already exists at that effective time. Try saving again.",
+        "zh-CN": "该生效时间已存在目标版本，请重新保存。",
+    },
+    "TARGET_EFFECTIVE_FROM_CONFLICT": {
+        "en-US": "A daily target version already exists at that effective time. Try confirming again.",
+        "zh-CN": "该生效时间已存在每日目标版本，请重新确认。",
+    },
+    "PROFILE_TARGET_SETUP_INCOMPLETE": {
+        "en-US": "Complete the body profile and overall goal before calculating targets.",
+        "zh-CN": "请先完成身体档案和总体目标，再计算每日目标。",
+    },
+    "TARGET_CALCULATION_RESTRICTED": {
+        "en-US": "Automatic target calculation is unavailable for this profile.",
+        "zh-CN": "当前档案不支持自动计算每日目标。",
+    },
+    "TARGET_OUT_OF_RANGE": {
+        "en-US": "One or more daily targets are outside the supported range.",
+        "zh-CN": "一个或多个每日目标超出支持范围。",
+    },
+    "TARGET_PREVIEW_STALE": {
+        "en-US": "The profile or goal changed. Calculate a new target preview.",
+        "zh-CN": "档案或目标已变化，请重新计算目标预览。",
+    },
+    "TARGET_PREVIEW_INVALID": {
+        "en-US": "The target preview is invalid. Calculate it again.",
+        "zh-CN": "目标预览无效，请重新计算。",
+    },
+    "TARGET_PREVIEW_TOKEN_REQUIRED": {
+        "en-US": "A target preview token is required.",
+        "zh-CN": "缺少目标预览令牌。",
+    },
+    "TARGET_WARNING_ACKNOWLEDGEMENT_REQUIRED": {
+        "en-US": "Review and acknowledge the target warnings before confirming.",
+        "zh-CN": "确认前请查看并确认目标警告。",
+    },
+    "TARGET_COMPATIBILITY_WRITE_FAILED": {
+        "en-US": "Targets were saved, but legacy views could not be updated. Retry the confirmation.",
+        "zh-CN": "目标已保存，但旧版视图更新失败，请重试确认。",
+    },
+    "IDEMPOTENCY_KEY_REQUIRED": {
+        "en-US": "A confirmation retry key is required.",
+        "zh-CN": "缺少确认重试键。",
+    },
+    "INVALID_IDEMPOTENCY_KEY": {
+        "en-US": "The confirmation retry key is invalid.",
+        "zh-CN": "确认重试键无效。",
+    },
+    "IDEMPOTENCY_KEY_REUSED": {
+        "en-US": "That confirmation retry key was already used for another request.",
+        "zh-CN": "该确认重试键已用于其他请求。",
+    },
+    "IDEMPOTENCY_RESULT_NOT_FOUND": {
+        "en-US": "The saved confirmation result could not be recovered. Calculate a new preview.",
+        "zh-CN": "无法恢复已保存的确认结果，请重新计算目标预览。",
+    },
     "MEAL_SAVED": {"en-US": "Meal saved.", "zh-CN": "餐食已保存。"},
     "WORKOUT_SAVED": {"en-US": "Workout saved.", "zh-CN": "训练已保存。"},
     "ENTRY_PARSED": {"en-US": "Entry parsed.", "zh-CN": "记录已解析。"},

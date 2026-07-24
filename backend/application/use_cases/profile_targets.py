@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Protocol, runtime_checkable
@@ -113,9 +115,12 @@ class ProfileTargetService:
         self,
         repository: ProfileTargetRepository,
         legacy_projection: LegacyProfileProjection,
+        *,
+        mutation_scope: Callable[[str], AbstractContextManager] | None = None,
     ) -> None:
         self.repository = repository
         self.legacy_projection = legacy_projection
+        self._mutation_scope = mutation_scope or (lambda _user_id: nullcontext())
 
     def get_setup(self, user_id: str) -> ProfileSetupAggregate:
         setup = self.repository.get_setup(user_id)
@@ -134,30 +139,38 @@ class ProfileTargetService:
         user_id: str,
         update: ProfileVersionInput,
     ) -> SetupMutationResult:
-        profile = self.repository.append_profile_if_changed(user_id, update)
-        goal = self.repository.get_latest_goal(user_id)
-        preview, restriction = self._preview_after_save(profile, goal)
-        return SetupMutationResult(
-            profile=profile,
-            goal=goal,
-            recalculation_preview=preview,
-            recalculation_restriction=restriction,
-        )
+        with self._mutation_scope(user_id):
+            try:
+                profile = self.repository.append_profile_if_changed(user_id, update)
+            except ProfileTargetRepositoryError as error:
+                raise _repository_error(error) from None
+            goal = self.repository.get_latest_goal(user_id)
+            preview, restriction = self._preview_after_save(profile, goal)
+            return SetupMutationResult(
+                profile=profile,
+                goal=goal,
+                recalculation_preview=preview,
+                recalculation_restriction=restriction,
+            )
 
     def update_goal(
         self,
         user_id: str,
         update: GoalVersionInput,
     ) -> SetupMutationResult:
-        goal = self.repository.append_goal_if_changed(user_id, update)
-        profile = self.repository.get_latest_profile(user_id)
-        preview, restriction = self._preview_after_save(profile, goal)
-        return SetupMutationResult(
-            profile=profile,
-            goal=goal,
-            recalculation_preview=preview,
-            recalculation_restriction=restriction,
-        )
+        with self._mutation_scope(user_id):
+            try:
+                goal = self.repository.append_goal_if_changed(user_id, update)
+            except ProfileTargetRepositoryError as error:
+                raise _repository_error(error) from None
+            profile = self.repository.get_latest_profile(user_id)
+            preview, restriction = self._preview_after_save(profile, goal)
+            return SetupMutationResult(
+                profile=profile,
+                goal=goal,
+                recalculation_preview=preview,
+                recalculation_restriction=restriction,
+            )
 
     def calculate_preview(
         self,
@@ -172,6 +185,24 @@ class ProfileTargetService:
         return self._manual_preview(profile, goal, manual_targets)
 
     def confirm_target(
+        self,
+        user_id: str,
+        *,
+        preview: TargetPreview,
+        idempotency_key: str,
+        effective_from: str,
+        acknowledge_warnings: bool = False,
+    ) -> TargetConfirmation:
+        with self._mutation_scope(user_id):
+            return self._confirm_target(
+                user_id,
+                preview=preview,
+                idempotency_key=idempotency_key,
+                effective_from=effective_from,
+                acknowledge_warnings=acknowledge_warnings,
+            )
+
+    def _confirm_target(
         self,
         user_id: str,
         *,
@@ -263,12 +294,16 @@ class ProfileTargetService:
         fingerprint: str,
         target: TargetVersion,
     ) -> TargetConfirmation:
-
+        latest_target = self.repository.get_latest_target(user_id)
+        if latest_target is None:
+            raise TargetServiceError(
+                "TARGET_COMPATIBILITY_WRITE_FAILED", status_code=500
+            )
         projection_profile = self.repository.get_profile_version(
-            user_id, target.profile_version_id or ""
+            user_id, latest_target.profile_version_id or ""
         )
         projection_goal = self.repository.get_goal_version(
-            user_id, target.overall_goal_version_id or ""
+            user_id, latest_target.overall_goal_version_id or ""
         )
         if projection_profile is None or projection_goal is None:
             raise TargetServiceError(
@@ -280,7 +315,7 @@ class ProfileTargetService:
                 user_id,
                 projection_profile,
                 projection_goal,
-                target,
+                latest_target,
             )
         except Exception as error:
             raise TargetServiceError(
@@ -477,7 +512,12 @@ def _confirmation_fingerprint(
 def _repository_error(error: ProfileTargetRepositoryError) -> TargetServiceError:
     if error.code == "TARGET_PREVIEW_STALE":
         status_code = 412
-    elif error.code == "IDEMPOTENCY_KEY_REUSED":
+    elif error.code in {
+        "GOAL_EFFECTIVE_FROM_CONFLICT",
+        "IDEMPOTENCY_KEY_REUSED",
+        "PROFILE_EFFECTIVE_FROM_CONFLICT",
+        "TARGET_EFFECTIVE_FROM_CONFLICT",
+    }:
         status_code = 409
     else:
         status_code = 500

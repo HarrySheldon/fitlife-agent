@@ -45,10 +45,10 @@ Plans 3-6 are written after the preceding phase lands so their exact paths and s
 
 ## Phase 2 Verification Evidence
 
-**Verified:** 2026-07-23
+**Verified:** 2026-07-24
 
-- Backend full suite: `537 passed`, one known Starlette/httpx warning, `47.51s`.
-- Frontend full suite: `112 passed` across `18` files.
+- Backend full suite: `550 passed`, one known Starlette/httpx warning, `168.12s`.
+- Frontend full suite: `113 passed` across `18` files.
 - Production frontend build: success with `2448` modules transformed; the existing chunk-size warning above `500 kB` remains.
 - `docker compose config --quiet` passed.
 - The first Docker build exposed a frontend `node_modules` junction conflict in the build context. Commit `457fa8e` added `frontend/.dockerignore`; the next `docker compose up --build -d` passed.
@@ -58,5 +58,6 @@ Plans 3-6 are written after the preceding phase lands so their exact paths and s
 - Mobile browser acceptance at `390x844` registered another account, completed muscle-gain onboarding, confirmed `2811 kcal`, `451 g` carbohydrates, `126 g` protein, and `56 g` fat, and verified the saved values in Profile. Every onboarding step had no horizontal overflow and the console had no errors.
 - The authenticated setup API returned `setup_complete: true` after confirmation.
 - The legacy per-user CSV-backed dashboard summary still responded after confirmation; CSV meal and workout storage remains active.
+- Final review regression coverage verifies deletion/write lifecycle exclusion, narrow training-personalization writes, stable effective-time conflicts, latest-target legacy projection, coded safety conditions, and accurately scoped legacy-record export messaging.
 
 Phase 3 and account data export were not implemented as part of this verification.

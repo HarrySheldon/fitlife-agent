@@ -110,7 +110,7 @@ const mocks = vi.hoisted(() => ({
   confirmTargets: vi.fn(),
   saveLegacyProfile: vi.fn(),
   targetHistory: vi.fn(),
-  readLegacyProfile: vi.fn(),
+  legacyError: null as string | null,
 }))
 
 vi.mock('../hooks/usePreferences', () => ({
@@ -178,7 +178,7 @@ vi.mock('../hooks/useProfile', () => ({
     setProfile: vi.fn(),
     loading: false,
     saving: false,
-    error: null,
+    error: mocks.legacyError,
     save: mocks.saveLegacyProfile,
   }),
 }))
@@ -186,7 +186,6 @@ vi.mock('../hooks/useProfile', () => ({
 vi.mock('../services/api', () => ({
   api: {
     targetHistory: mocks.targetHistory,
-    profile: mocks.readLegacyProfile,
   },
 }))
 
@@ -197,8 +196,8 @@ vi.mock('../components/CoachPanel', () => ({
 describe('Profile', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.legacyError = null
     mocks.targetHistory.mockResolvedValue([target])
-    mocks.readLegacyProfile.mockResolvedValue(legacyProfile)
     mocks.updateProfile.mockResolvedValue({
       profile: { ...profile, weight_kg: 71 },
       goal,
@@ -468,11 +467,8 @@ describe('Profile', () => {
   })
 
   it('shows a local error when reading the legacy profile fails', async () => {
-    const user = userEvent.setup()
-    mocks.readLegacyProfile.mockRejectedValueOnce(new Error('Legacy profile unavailable'))
+    mocks.legacyError = 'Legacy profile unavailable'
     render(<Profile />)
-
-    await user.click(screen.getByRole('button', { name: 'Save training personalization' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Legacy profile unavailable')
     expect(mocks.saveLegacyProfile).not.toHaveBeenCalled()
@@ -488,10 +484,8 @@ describe('Profile', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Legacy profile save failed')
   })
 
-  it('locks the complete legacy read and save merge flow', async () => {
-    const read = deferred<UserProfile>()
+  it('locks concurrent training personalization saves', async () => {
     const save = deferred<void>()
-    mocks.readLegacyProfile.mockReturnValueOnce(read.promise)
     mocks.saveLegacyProfile.mockReturnValueOnce(save.promise)
     render(<Profile />)
 
@@ -501,17 +495,10 @@ describe('Profile', () => {
       submit.click()
     })
 
-    expect(mocks.readLegacyProfile).toHaveBeenCalledTimes(1)
+    expect(mocks.saveLegacyProfile).toHaveBeenCalledTimes(1)
     expect(submit).toBeDisabled()
     expect(screen.getByLabelText('Experience')).toBeDisabled()
     expect(screen.getByLabelText('Training focus')).toBeDisabled()
-
-    await act(async () => {
-      read.resolve(legacyProfile)
-      await read.promise
-    })
-    await waitFor(() => expect(mocks.saveLegacyProfile).toHaveBeenCalledTimes(1))
-    expect(submit).toBeDisabled()
 
     await act(async () => {
       save.resolve()

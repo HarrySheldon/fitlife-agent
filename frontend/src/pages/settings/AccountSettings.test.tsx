@@ -158,7 +158,7 @@ it('keeps a session task error isolated when navigating to the password task', a
   expect(screen.queryByText('Session revoke failed.')).not.toBeInTheDocument()
 })
 
-it('downloads the privacy export and keeps deletion on its dedicated route', async () => {
+it('labels the legacy archive scope and keeps deletion on its dedicated route', async () => {
   const archive = new Blob(['zip-data'], { type: 'application/zip' })
   let resolveExport!: (response: Response) => void
   const fetchExport = vi.fn().mockReturnValue(new Promise((resolve) => { resolveExport = resolve }))
@@ -173,11 +173,12 @@ it('downloads the privacy export and keeps deletion on its dedicated route', asy
   })
   renderRoute('/settings/privacy')
 
-  const exportButton = await screen.findByRole('button', { name: 'Download account export' })
+  const exportButton = await screen.findByRole('button', { name: 'Download legacy records archive' })
+  expect(screen.getByText(/Versioned body profile, goal, and target history are not included/)).toBeInTheDocument()
   expect(screen.getByRole('link', { name: /Delete account/ })).toHaveAttribute('href', '/settings/privacy/delete')
   expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument()
   fireEvent.click(exportButton)
-  expect(screen.getByRole('button', { name: 'Preparing export...' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Preparing archive...' })).toBeDisabled()
 
   resolveExport(new Response(archive, {
     status: 200,
@@ -187,7 +188,7 @@ it('downloads the privacy export and keeps deletion on its dedicated route', asy
     },
   }))
 
-  expect(await screen.findByRole('status')).toHaveTextContent('Account export downloaded')
+  expect(await screen.findByRole('status')).toHaveTextContent('Legacy records archive downloaded')
   expect(fetchExport).toHaveBeenCalledWith('/api/account/export', expect.objectContaining({ headers: expect.any(Headers) }))
   const exportHeaders = fetchExport.mock.calls[0][1].headers as Headers
   expect(exportHeaders.get('Authorization')).toBe('Bearer original-token')

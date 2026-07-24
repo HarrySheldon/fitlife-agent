@@ -33,6 +33,11 @@ export interface UserProfile {
 export type EnergyParameter = 'male' | 'female' | 'neutral'
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'high'
 export type OverallGoal = 'fat_loss' | 'maintenance' | 'muscle_gain'
+export type SafetyCondition =
+  | 'pregnancy'
+  | 'breastfeeding'
+  | 'eating_disorder_history'
+  | 'medical_condition_affecting_nutrition'
 export type DailyTargetSource = 'deterministic_calculation' | 'manual' | 'agent_confirmed'
 export type TargetWarning = 'TARGET_BASELINE_DEVIATION' | 'TARGET_MACRO_ENERGY_MISMATCH'
 
@@ -45,7 +50,7 @@ export interface ProfileVersion {
   energy_parameter: EnergyParameter
   activity_level: ActivityLevel
   auto_target_disabled: boolean
-  safety_conditions: string[]
+  safety_conditions: SafetyCondition[]
   effective_from: string
   created_at: string
 }
@@ -57,7 +62,7 @@ export interface ProfileVersionUpdate {
   energy_parameter: EnergyParameter
   activity_level: ActivityLevel
   auto_target_disabled: boolean
-  safety_conditions: string[]
+  safety_conditions: SafetyCondition[]
   effective_from: string
 }
 
@@ -156,6 +161,11 @@ export interface AccountPasswordChangeRequest {
 export interface AccountDataExport {
   blob: Blob
   filename: string
+}
+
+export interface TrainingPersonalizationUpdate {
+  experience_level: UserProfile['experience_level']
+  training_preference: UserProfile['training_preference']
 }
 
 export interface AccountDeleteRequest {

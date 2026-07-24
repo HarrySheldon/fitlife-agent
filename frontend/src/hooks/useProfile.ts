@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { api } from '../services/api'
-import type { UserProfile } from '../types'
+import type { TrainingPersonalizationUpdate, UserProfile } from '../types'
 
 export function useProfile() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -17,11 +17,11 @@ export function useProfile() {
       .finally(() => setLoading(false))
   }, [])
 
-  async function save(next: UserProfile) {
+  async function save(next: TrainingPersonalizationUpdate) {
     setSaving(true)
     setError(null)
     try {
-      const saved = await api.saveProfile(next)
+      const saved = await api.saveTrainingPersonalization(next)
       setProfile(saved)
     } catch (err) {
       setError((err as Error).message)

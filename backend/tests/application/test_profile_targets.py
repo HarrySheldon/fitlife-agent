@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -16,6 +17,7 @@ from backend.application.use_cases.profile_targets import (
     ProfileTargetService,
     TargetServiceError,
 )
+from backend.domain.errors import ApplicationError
 from backend.domain.profile_targets import DailyTargets
 from backend.infrastructure.repositories.sqlite_profile_target_repository import (
     SQLiteProfileTargetRepository,
@@ -23,6 +25,7 @@ from backend.infrastructure.repositories.sqlite_profile_target_repository import
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.sqlite.migrations import run_migrations
 from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import UserProfile
 
 
@@ -110,6 +113,56 @@ def test_profile_and_goal_updates_are_content_idempotent_and_only_return_preview
     assert repeated_profile.profile == first_profile.profile
     assert goal_result.recalculation_preview is not None
     assert repository.get_latest_target("user-a") is None
+
+
+def test_mutations_use_the_injected_per_user_lifecycle_scope(repository, projection):
+    entered: list[str] = []
+
+    @contextmanager
+    def mutation_scope(user_id: str):
+        entered.append(user_id)
+        yield
+
+    guarded_service = ProfileTargetService(
+        repository,
+        projection,
+        mutation_scope=mutation_scope,
+    )
+    guarded_service.update_profile("user-a", profile())
+    result = guarded_service.update_goal("user-a", goal())
+    guarded_service.confirm_target(
+        "user-a",
+        preview=result.recalculation_preview,
+        idempotency_key="4e225bd1-b589-4cdd-859f-f23c155a45f4",
+        effective_from="2026-07-22T09:00:00Z",
+    )
+
+    assert entered == ["user-a", "user-a", "user-a"]
+
+
+def test_deleted_user_lifecycle_blocks_new_version_writes(
+    repository,
+    projection,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    user_id = "deleted-user"
+    with user_lifecycle_guard(data_dir, user_id) as lifecycle:
+        lifecycle.mark_deleted()
+    guarded_service = ProfileTargetService(
+        repository,
+        projection,
+        mutation_scope=lambda selected_user: user_lifecycle_guard(
+            data_dir,
+            selected_user,
+        ),
+    )
+
+    with pytest.raises(ApplicationError) as captured:
+        guarded_service.update_profile(user_id, profile())
+
+    assert captured.value.code == "AUTH_TOKEN_INVALID"
+    assert repository.get_latest_profile(user_id) is None
 
 
 def test_deterministic_preview_uses_canonical_sha256_token(service):
@@ -389,6 +442,39 @@ def test_projection_failure_retries_original_versions_after_profile_change(
     assert projection.calls[-1][1].id == original_profile_id
     assert replay.target == recovered.target
     assert len(projection.calls) == 2
+
+
+def test_pending_confirmation_retry_projects_latest_confirmed_target(
+    service,
+    repository,
+    projection,
+):
+    first_preview = bootstrap(service).recalculation_preview
+    first_arguments = {
+        "preview": first_preview,
+        "idempotency_key": "8eb72cf7-0cd3-4c30-97f4-2d90ba128658",
+        "effective_from": "2026-07-22T09:00:00Z",
+    }
+    projection.error = OSError("disk unavailable")
+    with pytest.raises(TargetServiceError):
+        service.confirm_target("user-a", **first_arguments)
+
+    second_result = service.update_goal(
+        "user-a",
+        goal("2026-07-23T08:00:00Z", "maintenance"),
+    )
+    projection.error = None
+    latest = service.confirm_target(
+        "user-a",
+        preview=second_result.recalculation_preview,
+        idempotency_key="29db9f47-8160-4918-8e63-738995afca9d",
+        effective_from="2026-07-23T09:00:00Z",
+    )
+
+    service.confirm_target("user-a", **first_arguments)
+
+    assert repository.get_latest_target("user-a") == latest.target
+    assert projection.calls[-1][3] == latest.target
 
 
 def test_restricted_recalculation_returns_structured_result_after_save(

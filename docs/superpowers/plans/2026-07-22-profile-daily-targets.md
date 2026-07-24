@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** Complete and verified on 2026-07-23
+**Status:** Complete and verified on 2026-07-24
 
 **Goal:** Let authenticated users version their body profile and overall goal, calculate or manually confirm four daily nutrition targets, and complete a required onboarding flow without replacing the still-active CSV meal and workout repositories.
 
@@ -407,10 +407,10 @@ Use browser automation at desktop and mobile widths to register a new user, comp
 
 Update the roadmap row to `2 (complete)` and record exact test/build/Docker/browser evidence in this plan.
 
-#### Verification Evidence (2026-07-23)
+#### Verification Evidence (2026-07-24)
 
-- Backend full suite: `537 passed`, one known Starlette/httpx warning, `47.51s`.
-- Frontend full suite: `112 passed` across `18` files.
+- Backend full suite: `550 passed`, one known Starlette/httpx warning, `168.12s`.
+- Frontend full suite: `113 passed` across `18` files.
 - Production frontend build: success with `2448` modules transformed. The existing chunk-size warning above `500 kB` remains.
 - `docker compose config --quiet` passed.
 - The first Docker build exposed a frontend `node_modules` junction conflict in the build context. Commit `457fa8e` added `frontend/.dockerignore`; the subsequent `docker compose up --build -d` passed.
@@ -420,6 +420,7 @@ Update the roadmap row to `2 (complete)` and record exact test/build/Docker/brow
 - Mobile acceptance at `390x844` registered another fresh account, completed muscle-gain onboarding, confirmed `2811 kcal`, `451 g` carbohydrates, `126 g` protein, and `56 g` fat, and verified the saved values in Profile. Every onboarding step had no horizontal overflow and the browser console had no errors.
 - The authenticated setup API returned `setup_complete: true` after confirmation.
 - The legacy per-user CSV-backed dashboard summary still responded after confirmation. Meal and workout CSV storage remains active in Phase 2.
+- Final review regression coverage verifies deletion/write lifecycle exclusion, narrow training-personalization writes, stable effective-time conflicts, latest-target legacy projection, coded safety conditions, and accurately scoped legacy-record export messaging.
 
 The evidence covers the Phase 2 implementation and acceptance boundary only. Phase 3 and the excluded account data export were not implemented.
 

@@ -45,7 +45,7 @@ it('locks every body profile control while saving', async () => {
     screen.getByLabelText('Weight (kg)'),
     screen.getByLabelText('Energy calculation parameter'),
     screen.getByLabelText('Activity level'),
-    screen.getByLabelText('Safety conditions'),
+    screen.getByRole('group', { name: 'Safety conditions' }),
     screen.getByLabelText('Disable automatic target calculation'),
   ]
   controls.forEach((control) => expect(control).toBeDisabled())

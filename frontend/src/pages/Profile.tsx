@@ -111,8 +111,7 @@ export function Profile() {
     setLegacyPersonalizationError(null)
     setLegacyPersonalizationSaving(true)
     try {
-      const latest = await api.profile()
-      await legacy.save({ ...latest, ...update })
+      await legacy.save(update)
     } catch (cause) {
       if (mounted.current) {
         setLegacyPersonalizationError(cause instanceof Error ? cause.message : String(cause))

@@ -55,7 +55,12 @@ class _SnapshotProbeDatabase(SQLiteDatabase):
             yield _SnapshotProbeConnection(connection, self)
 
 
-def _profile(effective_from: str, *, weight_kg: float = 70) -> ProfileVersionInput:
+def _profile(
+    effective_from: str,
+    *,
+    weight_kg: float = 70,
+    safety_conditions: tuple[str, ...] = (),
+) -> ProfileVersionInput:
     return ProfileVersionInput(
         age=30,
         height_cm=175,
@@ -63,7 +68,7 @@ def _profile(effective_from: str, *, weight_kg: float = 70) -> ProfileVersionInp
         energy_parameter="male",
         activity_level="moderate",
         auto_target_disabled=False,
-        safety_conditions=(),
+        safety_conditions=safety_conditions,
         effective_from=effective_from,
     )
 
@@ -80,6 +85,40 @@ def test_repository_appends_profile_versions_and_reads_latest_by_effective_from(
     assert repository.get_latest_profile("user-a") == latest
     assert earlier.id != latest.id
     assert earlier.created_at == "2026-07-22T08:00:00Z"
+
+
+def test_repository_orders_mixed_precision_effective_timestamps_chronologically(
+    tmp_path,
+):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    latest = repository.append_profile(
+        "user-a",
+        _profile("2026-07-22T08:00:00.000100Z", weight_kg=69),
+    )
+    repository.append_profile(
+        "user-a",
+        _profile("2026-07-22T08:00:00.000001Z"),
+    )
+
+    assert repository.get_latest_profile("user-a") == latest
+
+
+def test_repository_normalizes_legacy_free_text_safety_conditions(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository.append_profile(
+        "user-a",
+        _profile(
+            "2026-07-01",
+            safety_conditions=("diabetes", "pregnancy", "another condition"),
+        ),
+    )
+
+    loaded = repository.get_latest_profile("user-a")
+
+    assert loaded.safety_conditions == (
+        "medical_condition_affecting_nutrition",
+        "pregnancy",
+    )
 
 
 def test_append_profile_if_changed_is_atomic_under_concurrent_identical_updates(tmp_path):
@@ -101,6 +140,22 @@ def test_append_profile_if_changed_is_atomic_under_concurrent_identical_updates(
             ("user-a",),
         ).fetchone()["count"]
     assert count == 1
+
+
+def test_changed_profile_rejects_duplicate_effective_from_with_stable_error(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository.append_profile_if_changed(
+        "user-a",
+        _profile("2026-07-22T08:00:00Z"),
+    )
+
+    with pytest.raises(ProfileTargetRepositoryError) as captured:
+        repository.append_profile_if_changed(
+            "user-a",
+            _profile("2026-07-22T08:00:00Z", weight_kg=71),
+        )
+
+    assert captured.value.code == "PROFILE_EFFECTIVE_FROM_CONFLICT"
 
 
 def test_append_goal_if_changed_is_atomic_under_concurrent_identical_updates(tmp_path):
@@ -125,6 +180,28 @@ def test_append_goal_if_changed_is_atomic_under_concurrent_identical_updates(tmp
             ("user-a",),
         ).fetchone()["count"]
     assert count == 1
+
+
+def test_changed_goal_rejects_duplicate_effective_from_with_stable_error(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository.append_goal_if_changed(
+        "user-a",
+        GoalVersionInput(
+            goal="maintenance",
+            effective_from="2026-07-22T08:00:00Z",
+        ),
+    )
+
+    with pytest.raises(ProfileTargetRepositoryError) as captured:
+        repository.append_goal_if_changed(
+            "user-a",
+            GoalVersionInput(
+                goal="fat_loss",
+                effective_from="2026-07-22T08:00:00Z",
+            ),
+        )
+
+    assert captured.value.code == "GOAL_EFFECTIVE_FROM_CONFLICT"
 
 
 def test_setup_reads_latest_profile_and_goal_for_only_the_requested_user(tmp_path):
@@ -221,6 +298,27 @@ def test_repository_appends_targets_and_lists_newest_effective_version_first(tmp
     assert repository.get_latest_target("user-a") == latest
     assert repository.list_targets("user-a") == (latest, first)
     assert repository.get_setup("user-a").target == latest
+
+
+def test_target_rejects_duplicate_effective_from_with_stable_error(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    profile = repository.append_profile("user-a", _profile("2026-07-01"))
+    goal = repository.append_goal(
+        "user-a",
+        GoalVersionInput(goal="maintenance", effective_from="2026-07-01"),
+    )
+    repository.append_target(
+        "user-a",
+        _target(profile.id, goal.id, "2026-07-02"),
+    )
+
+    with pytest.raises(ProfileTargetRepositoryError) as captured:
+        repository.append_target(
+            "user-a",
+            _target(profile.id, goal.id, "2026-07-02"),
+        )
+
+    assert captured.value.code == "TARGET_EFFECTIVE_FROM_CONFLICT"
 
 
 def test_target_cannot_reference_another_users_profile_or_goal(tmp_path):

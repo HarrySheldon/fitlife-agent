@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
+from backend.domain.profile_targets import SafetyCondition
+
 
 EnergyParameter = Literal["male", "female", "neutral"]
 ActivityLevel = Literal["sedentary", "light", "moderate", "high"]
@@ -24,7 +26,7 @@ class ProfileVersionInput:
     energy_parameter: EnergyParameter
     activity_level: ActivityLevel
     auto_target_disabled: bool
-    safety_conditions: tuple[str, ...]
+    safety_conditions: tuple[SafetyCondition, ...]
     effective_from: str
 
 

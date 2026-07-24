@@ -30,6 +30,7 @@ import type {
   ProcessingMode,
   TargetPreview,
   TodayOverview,
+  TrainingPersonalizationUpdate,
   UserProfile,
   UserPreferences,
   UserPreferencesUpdate,
@@ -130,7 +131,8 @@ export const api = {
   dashboard: () => request<DashboardSummary>('/dashboard/summary'),
   dashboardForDate: (date: string) => request<DashboardSummary>(`/dashboard/summary?date=${encodeURIComponent(date)}`),
   profile: () => request<UserProfile>('/profile'),
-  saveProfile: (profile: UserProfile) => request<UserProfile>('/profile', { method: 'POST', body: JSON.stringify(profile) }),
+  saveTrainingPersonalization: (update: TrainingPersonalizationUpdate) =>
+    request<UserProfile>('/profile/personalization', { method: 'PATCH', body: JSON.stringify(update) }),
   profileSetup: () => requestV1<ProfileSetup>('/profile'),
   saveProfileVersion: (profile: ProfileVersionUpdate) =>
     requestV1<ProfileSetupMutation>('/profile', { method: 'PUT', body: JSON.stringify(profile) }),

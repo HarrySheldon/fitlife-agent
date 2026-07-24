@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from backend.domain.user_preferences import AppLanguage, UnitSystem, validate_iana_timezone
+from backend.domain.profile_targets import SafetyCondition
 
 
 T = TypeVar("T")
@@ -70,6 +71,13 @@ class UserProfile(BaseModel):
     target_mode: TargetMode = "suggested"
 
 
+class TrainingPersonalizationUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    experience_level: ExperienceLevel
+    training_preference: TrainingPreference
+
+
 class ProfileVersionUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -79,7 +87,7 @@ class ProfileVersionUpdateRequest(BaseModel):
     energy_parameter: Literal["male", "female", "neutral"]
     activity_level: Literal["sedentary", "light", "moderate", "high"]
     auto_target_disabled: bool = False
-    safety_conditions: list[str] = Field(default_factory=list)
+    safety_conditions: list[SafetyCondition] = Field(default_factory=list)
     effective_from: UtcAwareDatetime
 
 

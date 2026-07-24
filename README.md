@@ -194,15 +194,16 @@ The frontend Evaluation page calls `POST /eval/run` and renders the same aggrega
 
 ## Phase 2 Verification
 
-The versioned profile and daily-target workflow was verified on 2026-07-23:
+The versioned profile and daily-target workflow was verified on 2026-07-24:
 
-- Backend: `537 passed` in `47.51s`; one known Starlette/httpx warning remains.
-- Frontend: `112 passed` across `18` files.
+- Backend: `550 passed` in `168.12s`; one known Starlette/httpx warning remains.
+- Frontend: `113 passed` across `18` files.
 - Production build: succeeded with `2448` modules transformed; the existing chunk-size warning above `500 kB` remains.
 - Docker: `docker compose config --quiet`, rebuild, startup, restart, and health recovery passed. Containers ran on backend port `8000` and frontend port `3000`.
 - Desktop acceptance: a fresh account completed fat-loss onboarding and confirmed `2172 kcal`, `291 g` carbohydrates, `126 g` protein, and `56 g` fat; Profile history showed the saved version.
 - Mobile acceptance at `390x844`: a fresh account completed muscle-gain onboarding and confirmed `2811 kcal`, `451 g` carbohydrates, `126 g` protein, and `56 g` fat; Profile showed the saved values, each onboarding step had no horizontal overflow, and the console had no errors.
 - Compatibility: authenticated setup returned `setup_complete: true`, and the legacy CSV-backed dashboard summary still responded after confirmation.
+- Final review: lifecycle-guarded writes, narrow training-personalization updates, stable effective-time conflicts, latest-target compatibility projection, coded safety conditions, and accurately scoped legacy-record export messaging were regression tested.
 
 The first Docker build exposed a frontend `node_modules` junction conflict in the build context. Commit `457fa8e` added `frontend/.dockerignore`; the subsequent Compose build and startup passed.
 

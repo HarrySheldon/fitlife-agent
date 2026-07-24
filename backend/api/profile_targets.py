@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header
 
 from backend.api.dependencies import require_current_user
 from backend.api.utils import ok
+from backend.config import get_settings
 from backend.application.ports.profile_target_repository import (
     GoalVersionInput,
     ProfileVersionInput,
@@ -27,6 +28,7 @@ from backend.infrastructure.repositories.sqlite_profile_target_repository import
     SQLiteProfileTargetRepository,
 )
 from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import (
     AuthenticatedUser,
     OverallGoalUpdateRequest,
@@ -43,6 +45,10 @@ def get_profile_target_service() -> ProfileTargetService:
     return ProfileTargetService(
         SQLiteProfileTargetRepository(get_database()),
         FileLegacyProfileProjection(FileFitnessRepository()),
+        mutation_scope=lambda user_id: user_lifecycle_guard(
+            get_settings().data_dir,
+            user_id,
+        ),
     )
 
 
@@ -191,7 +197,7 @@ def target_history(
 def _canonical_utc(value: datetime) -> str:
     return (
         value.astimezone(timezone.utc)
-        .isoformat(timespec="seconds")
+        .isoformat()
         .replace("+00:00", "Z")
     )
 

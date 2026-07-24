@@ -54,6 +54,24 @@ it('derives imperial weight limits from the backend kilogram bounds', () => {
   expect(screen.getByLabelText('Weight (lb)')).toHaveAttribute('max', '661.3')
 })
 
+it('submits safety conditions as stable codes', () => {
+  const save = vi.fn()
+  render(
+    <ProfileDetailsForm
+      profile={profile}
+      saving={false}
+      onSave={save}
+    />,
+  )
+
+  fireEvent.click(screen.getByLabelText('Pregnancy'))
+  fireEvent.submit(screen.getByRole('button', { name: 'Save body profile' }).closest('form')!)
+
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({
+    safety_conditions: ['pregnancy'],
+  }))
+})
+
 describe.each([
   { feet: 3, inches: 11 },
   { feet: 7, inches: 7 },

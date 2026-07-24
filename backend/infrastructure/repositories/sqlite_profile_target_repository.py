@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -17,12 +18,26 @@ from backend.application.ports.profile_target_repository import (
     TargetVersion,
     TargetVersionInput,
 )
+from backend.domain.profile_targets import SAFETY_CONDITION_CODES
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 
 
 Clock = Callable[[], datetime]
 IdFactory = Callable[[], str]
 _TARGET_CONFIRM_OPERATION = "profile_target_confirm"
+_VERSION_ORDER_BY = """
+    CASE
+        WHEN effective_from GLOB '????-??-??T??:??:??Z'
+        THEN substr(effective_from, 1, 19) || '.000000Z'
+        ELSE effective_from
+    END DESC,
+    CASE
+        WHEN created_at GLOB '????-??-??T??:??:??Z'
+        THEN substr(created_at, 1, 19) || '.000000Z'
+        ELSE created_at
+    END DESC,
+    id DESC
+"""
 
 
 class SQLiteProfileTargetRepository:
@@ -42,28 +57,28 @@ class SQLiteProfileTargetRepository:
             connection.execute("BEGIN")
             try:
                 profile_row = connection.execute(
-                    """
+                    f"""
                     SELECT * FROM user_profile_versions
                     WHERE user_id = ?
-                    ORDER BY effective_from DESC, created_at DESC, id DESC
+                    ORDER BY {_VERSION_ORDER_BY}
                     LIMIT 1
                     """,
                     (user_id,),
                 ).fetchone()
                 goal_row = connection.execute(
-                    """
+                    f"""
                     SELECT * FROM overall_goal_versions
                     WHERE user_id = ?
-                    ORDER BY effective_from DESC, created_at DESC, id DESC
+                    ORDER BY {_VERSION_ORDER_BY}
                     LIMIT 1
                     """,
                     (user_id,),
                 ).fetchone()
                 target_row = connection.execute(
-                    """
+                    f"""
                     SELECT * FROM daily_target_versions
                     WHERE user_id = ?
-                    ORDER BY effective_from DESC, created_at DESC, id DESC
+                    ORDER BY {_VERSION_ORDER_BY}
                     LIMIT 1
                     """,
                     (user_id,),
@@ -101,8 +116,21 @@ class SQLiteProfileTargetRepository:
     ) -> ProfileVersion:
         profile_id = self._id_factory()
         created_at = _utc_timestamp(self._clock())
-        with self.database.transaction() as connection:
-            _insert_profile(connection, profile_id, user_id, profile, created_at)
+        try:
+            with self.database.transaction() as connection:
+                if _profile_at_effective_from(
+                    connection, user_id, profile.effective_from
+                ) is not None:
+                    raise ProfileTargetRepositoryError(
+                        "PROFILE_EFFECTIVE_FROM_CONFLICT"
+                    )
+                _insert_profile(connection, profile_id, user_id, profile, created_at)
+        except sqlite3.IntegrityError as error:
+            if _effective_from_conflict(error, "user_profile_versions"):
+                raise ProfileTargetRepositoryError(
+                    "PROFILE_EFFECTIVE_FROM_CONFLICT"
+                ) from None
+            raise
         return ProfileVersion(
             **profile.__dict__,
             id=profile_id,
@@ -117,13 +145,26 @@ class SQLiteProfileTargetRepository:
     ) -> ProfileVersion:
         profile_id = self._id_factory()
         created_at = _utc_timestamp(self._clock())
-        with self.database.transaction() as connection:
-            current_row = _latest_profile_row(connection, user_id)
-            if current_row is not None:
-                current = _profile_from_row(current_row)
-                if _same_profile_content(current, profile):
-                    return current
-            _insert_profile(connection, profile_id, user_id, profile, created_at)
+        try:
+            with self.database.transaction() as connection:
+                current_row = _latest_profile_row(connection, user_id)
+                if current_row is not None:
+                    current = _profile_from_row(current_row)
+                    if _same_profile_content(current, profile):
+                        return current
+                if _profile_at_effective_from(
+                    connection, user_id, profile.effective_from
+                ) is not None:
+                    raise ProfileTargetRepositoryError(
+                        "PROFILE_EFFECTIVE_FROM_CONFLICT"
+                    )
+                _insert_profile(connection, profile_id, user_id, profile, created_at)
+        except sqlite3.IntegrityError as error:
+            if _effective_from_conflict(error, "user_profile_versions"):
+                raise ProfileTargetRepositoryError(
+                    "PROFILE_EFFECTIVE_FROM_CONFLICT"
+                ) from None
+            raise
         return ProfileVersion(
             **profile.__dict__,
             id=profile_id,
@@ -152,8 +193,21 @@ class SQLiteProfileTargetRepository:
     def append_goal(self, user_id: str, goal: GoalVersionInput) -> GoalVersion:
         goal_id = self._id_factory()
         created_at = _utc_timestamp(self._clock())
-        with self.database.transaction() as connection:
-            _insert_goal(connection, goal_id, user_id, goal, created_at)
+        try:
+            with self.database.transaction() as connection:
+                if _goal_at_effective_from(
+                    connection, user_id, goal.effective_from
+                ) is not None:
+                    raise ProfileTargetRepositoryError(
+                        "GOAL_EFFECTIVE_FROM_CONFLICT"
+                    )
+                _insert_goal(connection, goal_id, user_id, goal, created_at)
+        except sqlite3.IntegrityError as error:
+            if _effective_from_conflict(error, "overall_goal_versions"):
+                raise ProfileTargetRepositoryError(
+                    "GOAL_EFFECTIVE_FROM_CONFLICT"
+                ) from None
+            raise
         return GoalVersion(
             **goal.__dict__,
             id=goal_id,
@@ -168,13 +222,26 @@ class SQLiteProfileTargetRepository:
     ) -> GoalVersion:
         goal_id = self._id_factory()
         created_at = _utc_timestamp(self._clock())
-        with self.database.transaction() as connection:
-            current_row = _latest_goal_row(connection, user_id)
-            if current_row is not None:
-                current = _goal_from_row(current_row)
-                if current.goal == goal.goal:
-                    return current
-            _insert_goal(connection, goal_id, user_id, goal, created_at)
+        try:
+            with self.database.transaction() as connection:
+                current_row = _latest_goal_row(connection, user_id)
+                if current_row is not None:
+                    current = _goal_from_row(current_row)
+                    if current.goal == goal.goal:
+                        return current
+                if _goal_at_effective_from(
+                    connection, user_id, goal.effective_from
+                ) is not None:
+                    raise ProfileTargetRepositoryError(
+                        "GOAL_EFFECTIVE_FROM_CONFLICT"
+                    )
+                _insert_goal(connection, goal_id, user_id, goal, created_at)
+        except sqlite3.IntegrityError as error:
+            if _effective_from_conflict(error, "overall_goal_versions"):
+                raise ProfileTargetRepositoryError(
+                    "GOAL_EFFECTIVE_FROM_CONFLICT"
+                ) from None
+            raise
         return GoalVersion(
             **goal.__dict__,
             id=goal_id,
@@ -193,8 +260,21 @@ class SQLiteProfileTargetRepository:
     ) -> TargetVersion:
         target_id = self._id_factory()
         created_at = _utc_timestamp(self._clock())
-        with self.database.transaction() as connection:
-            _insert_target(connection, target_id, user_id, target, created_at)
+        try:
+            with self.database.transaction() as connection:
+                if _target_at_effective_from(
+                    connection, user_id, target.effective_from
+                ) is not None:
+                    raise ProfileTargetRepositoryError(
+                        "TARGET_EFFECTIVE_FROM_CONFLICT"
+                    )
+                _insert_target(connection, target_id, user_id, target, created_at)
+        except sqlite3.IntegrityError as error:
+            if _effective_from_conflict(error, "daily_target_versions"):
+                raise ProfileTargetRepositoryError(
+                    "TARGET_EFFECTIVE_FROM_CONFLICT"
+                ) from None
+            raise
         return _target_version(target_id, user_id, target, created_at)
 
     def list_targets(
@@ -203,10 +283,10 @@ class SQLiteProfileTargetRepository:
         *,
         limit: int | None = None,
     ) -> tuple[TargetVersion, ...]:
-        sql = """
+        sql = f"""
             SELECT * FROM daily_target_versions
             WHERE user_id = ?
-            ORDER BY effective_from DESC, created_at DESC, id DESC
+            ORDER BY {_VERSION_ORDER_BY}
         """
         parameters: tuple[object, ...] = (user_id,)
         if limit is not None:
@@ -267,52 +347,65 @@ class SQLiteProfileTargetRepository:
     ) -> TargetConfirmationState:
         target_id = self._id_factory()
         created_at = _utc_timestamp(self._clock())
-        with self.database.transaction() as connection:
-            existing = connection.execute(
-                """
-                SELECT response_json FROM idempotency_keys
-                WHERE user_id = ? AND operation = ? AND idempotency_key = ?
-                """,
-                (user_id, _TARGET_CONFIRM_OPERATION, idempotency_key),
-            ).fetchone()
-            if existing is not None:
-                return _replay_confirmation(
-                    existing["response_json"], request_fingerprint
+        try:
+            with self.database.transaction() as connection:
+                existing = connection.execute(
+                    """
+                    SELECT response_json FROM idempotency_keys
+                    WHERE user_id = ? AND operation = ? AND idempotency_key = ?
+                    """,
+                    (user_id, _TARGET_CONFIRM_OPERATION, idempotency_key),
+                ).fetchone()
+                if existing is not None:
+                    return _replay_confirmation(
+                        existing["response_json"], request_fingerprint
+                    )
+
+                latest_profile = _latest_profile_row(connection, user_id)
+                latest_goal = _latest_goal_row(connection, user_id)
+                if (
+                    target.profile_version_id is None
+                    or target.overall_goal_version_id is None
+                    or latest_profile is None
+                    or latest_goal is None
+                    or latest_profile["id"] != target.profile_version_id
+                    or latest_goal["id"] != target.overall_goal_version_id
+                ):
+                    raise ProfileTargetRepositoryError("TARGET_PREVIEW_STALE")
+                if _target_at_effective_from(
+                    connection, user_id, target.effective_from
+                ) is not None:
+                    raise ProfileTargetRepositoryError(
+                        "TARGET_EFFECTIVE_FROM_CONFLICT"
+                    )
+
+                _insert_target(connection, target_id, user_id, target, created_at)
+                confirmed = _target_version(target_id, user_id, target, created_at)
+                response = {
+                    "request_fingerprint": request_fingerprint,
+                    "response": asdict(confirmed),
+                    "projection_completed": False,
+                }
+                connection.execute(
+                    """
+                    INSERT INTO idempotency_keys (
+                        user_id, operation, idempotency_key, response_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        user_id,
+                        _TARGET_CONFIRM_OPERATION,
+                        idempotency_key,
+                        json.dumps(response, sort_keys=True, separators=(",", ":")),
+                        created_at,
+                    ),
                 )
-
-            latest_profile = _latest_profile_row(connection, user_id)
-            latest_goal = _latest_goal_row(connection, user_id)
-            if (
-                target.profile_version_id is None
-                or target.overall_goal_version_id is None
-                or latest_profile is None
-                or latest_goal is None
-                or latest_profile["id"] != target.profile_version_id
-                or latest_goal["id"] != target.overall_goal_version_id
-            ):
-                raise ProfileTargetRepositoryError("TARGET_PREVIEW_STALE")
-
-            _insert_target(connection, target_id, user_id, target, created_at)
-            confirmed = _target_version(target_id, user_id, target, created_at)
-            response = {
-                "request_fingerprint": request_fingerprint,
-                "response": asdict(confirmed),
-                "projection_completed": False,
-            }
-            connection.execute(
-                """
-                INSERT INTO idempotency_keys (
-                    user_id, operation, idempotency_key, response_json, created_at
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    user_id,
-                    _TARGET_CONFIRM_OPERATION,
-                    idempotency_key,
-                    json.dumps(response, sort_keys=True, separators=(",", ":")),
-                    created_at,
-                ),
-            )
+        except sqlite3.IntegrityError as error:
+            if _effective_from_conflict(error, "daily_target_versions"):
+                raise ProfileTargetRepositoryError(
+                    "TARGET_EFFECTIVE_FROM_CONFLICT"
+                ) from None
+            raise
         return TargetConfirmationState(
             target=confirmed,
             replayed=False,
@@ -428,7 +521,9 @@ def _profile_from_row(row) -> ProfileVersion:
         energy_parameter=row["energy_parameter"],
         activity_level=row["activity_level"],
         auto_target_disabled=bool(row["auto_target_disabled"]),
-        safety_conditions=tuple(json.loads(row["safety_conditions_json"])),
+        safety_conditions=_normalized_safety_conditions(
+            json.loads(row["safety_conditions_json"])
+        ),
         effective_from=row["effective_from"],
         created_at=row["created_at"],
     )
@@ -574,10 +669,10 @@ def _replay_confirmation(
 
 def _latest_profile_row(connection, user_id: str):
     return connection.execute(
-        """
+        f"""
         SELECT * FROM user_profile_versions
         WHERE user_id = ?
-        ORDER BY effective_from DESC, created_at DESC, id DESC
+        ORDER BY {_VERSION_ORDER_BY}
         LIMIT 1
         """,
         (user_id,),
@@ -586,14 +681,66 @@ def _latest_profile_row(connection, user_id: str):
 
 def _latest_goal_row(connection, user_id: str):
     return connection.execute(
-        """
+        f"""
         SELECT * FROM overall_goal_versions
         WHERE user_id = ?
-        ORDER BY effective_from DESC, created_at DESC, id DESC
+        ORDER BY {_VERSION_ORDER_BY}
         LIMIT 1
         """,
         (user_id,),
     ).fetchone()
+
+
+def _profile_at_effective_from(connection, user_id: str, effective_from: str):
+    return connection.execute(
+        """
+        SELECT * FROM user_profile_versions
+        WHERE user_id = ? AND effective_from = ?
+        """,
+        (user_id, effective_from),
+    ).fetchone()
+
+
+def _goal_at_effective_from(connection, user_id: str, effective_from: str):
+    return connection.execute(
+        """
+        SELECT * FROM overall_goal_versions
+        WHERE user_id = ? AND effective_from = ?
+        """,
+        (user_id, effective_from),
+    ).fetchone()
+
+
+def _target_at_effective_from(connection, user_id: str, effective_from: str):
+    return connection.execute(
+        """
+        SELECT * FROM daily_target_versions
+        WHERE user_id = ? AND effective_from = ?
+        """,
+        (user_id, effective_from),
+    ).fetchone()
+
+
+def _effective_from_conflict(error: sqlite3.IntegrityError, table: str) -> bool:
+    message = str(error)
+    return (
+        "UNIQUE constraint failed" in message
+        and f"{table}.user_id" in message
+        and f"{table}.effective_from" in message
+    )
+
+
+def _normalized_safety_conditions(values: list[object]) -> tuple[str, ...]:
+    normalized: list[str] = []
+    for value in values:
+        condition = (
+            value
+            if value in SAFETY_CONDITION_CODES
+            else "medical_condition_affecting_nutrition"
+        )
+        if condition not in normalized:
+            normalized.append(condition)
+    return tuple(normalized)
 
 
 def _same_profile_content(

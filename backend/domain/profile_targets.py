@@ -8,6 +8,18 @@ from typing import Literal
 EnergyParameter = Literal["male", "female", "neutral"]
 ActivityLevel = Literal["sedentary", "light", "moderate", "high"]
 OverallGoal = Literal["fat_loss", "maintenance", "muscle_gain"]
+SafetyCondition = Literal[
+    "pregnancy",
+    "breastfeeding",
+    "eating_disorder_history",
+    "medical_condition_affecting_nutrition",
+]
+SAFETY_CONDITION_CODES: tuple[SafetyCondition, ...] = (
+    "pregnancy",
+    "breastfeeding",
+    "eating_disorder_history",
+    "medical_condition_affecting_nutrition",
+)
 
 FORMULA_VERSION = "mifflin_st_jeor_v1"
 
@@ -54,7 +66,7 @@ class ProfileInput:
     energy_parameter: EnergyParameter
     activity_level: ActivityLevel
     auto_target_disabled: bool = False
-    safety_conditions: tuple[str, ...] = ()
+    safety_conditions: tuple[SafetyCondition, ...] = ()
 
 
 @dataclass(frozen=True)

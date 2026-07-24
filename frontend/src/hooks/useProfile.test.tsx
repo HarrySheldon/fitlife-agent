@@ -13,7 +13,7 @@ vi.mock('../services/api', async (importOriginal) => {
     api: {
       ...original.api,
       profile: vi.fn(),
-      saveProfile: vi.fn(),
+      saveTrainingPersonalization: vi.fn(),
     },
   }
 })
@@ -37,17 +37,20 @@ const profile: UserProfile = {
 
 beforeEach(() => {
   vi.mocked(api.profile).mockReset()
-  vi.mocked(api.saveProfile).mockReset()
+  vi.mocked(api.saveTrainingPersonalization).mockReset()
   vi.mocked(api.profile).mockResolvedValue(profile)
 })
 
 it('records and rethrows legacy profile save failures', async () => {
-  vi.mocked(api.saveProfile).mockRejectedValue(new Error('Legacy save failed'))
+  vi.mocked(api.saveTrainingPersonalization).mockRejectedValue(new Error('Legacy save failed'))
   const { result } = renderHook(() => useProfile())
   await waitFor(() => expect(result.current.loading).toBe(false))
 
   await act(async () => {
-    await expect(result.current.save(profile)).rejects.toThrow('Legacy save failed')
+    await expect(result.current.save({
+      experience_level: profile.experience_level,
+      training_preference: profile.training_preference,
+    })).rejects.toThrow('Legacy save failed')
   })
 
   expect(result.current.error).toBe('Legacy save failed')

@@ -108,3 +108,48 @@ def test_optional_auth_preserves_legacy_anonymous_profile_without_header(monkeyp
 
     assert response.status_code == 200
     assert response.json()["data"] == DEFAULT_PROFILE.model_dump()
+
+
+def test_authenticated_legacy_profile_write_requires_narrow_personalization_route(monkeypatch):
+    client = build_client(monkeypatch)
+    session = register(client, "narrow-profile-writer")
+    headers = {"Authorization": f"Bearer {session['access_token']}"}
+
+    response = client.post(
+        "/profile",
+        headers=headers,
+        json=DEFAULT_PROFILE.model_dump(),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PROFILE_VERSIONED_WRITE_REQUIRED"
+
+
+def test_authenticated_personalization_updates_only_training_fields(monkeypatch):
+    client = build_client(monkeypatch)
+    session = register(client, "training-personalization")
+    headers = {"Authorization": f"Bearer {session['access_token']}"}
+    before = client.get("/profile", headers=headers).json()["data"]
+
+    response = client.patch(
+        "/profile/personalization",
+        headers=headers,
+        json={
+            "experience_level": "experienced",
+            "training_preference": "strength",
+        },
+    )
+
+    assert response.status_code == 200
+    saved = response.json()["data"]
+    assert saved["experience_level"] == "experienced"
+    assert saved["training_preference"] == "strength"
+    for field in (
+        "height_cm",
+        "weight_kg",
+        "age",
+        "goal",
+        "daily_calorie_target",
+        "daily_protein_target",
+    ):
+        assert saved[field] == before[field]

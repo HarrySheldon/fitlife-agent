@@ -763,6 +763,65 @@ def test_request_validation_has_stable_envelope_and_forbids_extra_fields(client)
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_profile_rejects_unknown_safety_condition_codes(client):
+    session = register(client, "invalid-safety-code")
+    response = client.put(
+        "/api/v1/profile",
+        headers=authorization(session),
+        json=profile_payload(safety_conditions=["free form diagnosis"]),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_profile_versions_preserve_subsecond_effective_times(client):
+    session = register(client, "subsecond-profile-version")
+    headers = authorization(session)
+
+    first = client.put(
+        "/api/v1/profile",
+        headers=headers,
+        json=profile_payload(
+            effective_from="2026-07-22T08:00:00.100000Z",
+            weight_kg=70,
+        ),
+    )
+    second = client.put(
+        "/api/v1/profile",
+        headers=headers,
+        json=profile_payload(
+            effective_from="2026-07-22T08:00:00.200000Z",
+            weight_kg=71,
+        ),
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["data"]["profile"]["effective_from"].endswith(".100000Z")
+    assert second.json()["data"]["profile"]["effective_from"].endswith(".200000Z")
+
+
+def test_duplicate_profile_effective_time_returns_localized_conflict(client):
+    session = register(client, "profile-version-conflict")
+    headers = {
+        **authorization(session),
+        "Accept-Language": "zh-CN",
+    }
+    payload = profile_payload(effective_from="2026-07-22T08:00:00Z")
+    assert client.put("/api/v1/profile", headers=headers, json=payload).status_code == 200
+
+    response = client.put(
+        "/api/v1/profile",
+        headers=headers,
+        json={**payload, "weight_kg": 71},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PROFILE_EFFECTIVE_FROM_CONFLICT"
+    assert response.json()["error"]["message"] != "PROFILE_EFFECTIVE_FROM_CONFLICT"
+
+
 def test_user_cannot_confirm_another_users_preview(client):
     first = register(client, "preview-owner")
     second = register(client, "preview-attacker")

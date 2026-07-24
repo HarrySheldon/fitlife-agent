@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { cmToFeetInches, displayWeight, feetInchesToCm, kgToLb, metricWeight, weightUnit } from '../domain/units'
-import type { ProfileVersion, ProfileVersionUpdate, UnitSystem } from '../types'
+import type { ProfileVersion, ProfileVersionUpdate, SafetyCondition, UnitSystem } from '../types'
 
+const SAFETY_CONDITIONS: SafetyCondition[] = [
+  'pregnancy',
+  'breastfeeding',
+  'eating_disorder_history',
+  'medical_condition_affecting_nutrition',
+]
 
 interface ProfileDetailsFormProps {
   profile: ProfileVersion
@@ -168,21 +174,27 @@ export function ProfileDetailsForm({
             ))}
           </select>
         </label>
-        <label className="profile-field-wide">
-          <span>{t('profile.safetyConditions')}</span>
-          <input
-            value={(draft.safety_conditions ?? []).join(', ')}
-            disabled={saving}
-            placeholder={t('profile.safetyConditionsPlaceholder')}
-            onChange={(event) => setDraft((current) => ({
-              ...current,
-              safety_conditions: event.target.value
-                .split(',')
-                .map((item) => item.trim())
-                .filter(Boolean),
-            }))}
-          />
-        </label>
+        <fieldset className="profile-field-wide profile-safety-options" disabled={saving}>
+          <legend>{t('profile.safetyConditions')}</legend>
+          <p>{t('profile.safetyConditionsDescription')}</p>
+          <div>
+            {SAFETY_CONDITIONS.map((condition) => (
+              <label key={condition}>
+                <input
+                  type="checkbox"
+                  checked={(draft.safety_conditions ?? []).includes(condition)}
+                  onChange={(event) => setDraft((current) => ({
+                    ...current,
+                    safety_conditions: event.target.checked
+                      ? [...(current.safety_conditions ?? []), condition]
+                      : (current.safety_conditions ?? []).filter((item) => item !== condition),
+                  }))}
+                />
+                <span>{t(`profile.safetyConditionOptions.${condition}`)}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </div>
       {validationError ? <div className="form-error" role="alert">{validationError}</div> : null}
       <label className="profile-checkbox">
