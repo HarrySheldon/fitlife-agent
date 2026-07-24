@@ -6,7 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import account, auth, calendar, chat, coach, dashboard, eval, health, plan, profile, profile_targets, report, settings as settings_api, today, upload
+from backend.api import account, auth, calendar, chat, coach, dashboard, eval, food_catalog, health, meals, plan, profile, profile_targets, report, settings as settings_api, today, upload
 from backend.api.utils import application_error_response
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
@@ -17,6 +17,8 @@ from backend.i18n import (
     translate_public_message,
 )
 from backend.infrastructure.sqlite.runtime import initialize_database
+from backend.infrastructure.catalog.seed_foods import seed_bundled_foods
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.schemas import ApiError, ApiResponse
 
 
@@ -30,6 +32,7 @@ def _safe_language_for_request(request: Request) -> AppLanguage:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     initialize_database()
+    seed_bundled_foods(get_database())
     yield
 
 
@@ -70,6 +73,8 @@ def create_app() -> FastAPI:
     app.include_router(settings_api.router)
     app.include_router(profile.router)
     app.include_router(profile_targets.router)
+    app.include_router(food_catalog.router)
+    app.include_router(meals.router)
     app.include_router(upload.router)
     app.include_router(calendar.router)
     app.include_router(today.router)

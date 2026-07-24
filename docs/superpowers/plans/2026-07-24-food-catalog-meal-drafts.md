@@ -344,7 +344,7 @@ git commit -m "feat: confirm meal drafts atomically"
 - Create: `backend/tests/test_food_catalog_api.py`
 - Create: `backend/tests/test_meal_drafts_api.py`
 
-- [ ] **Step 1: Write failing API contract tests**
+- [x] **Step 1: Write failing API contract tests**
 
 Required endpoints:
 
@@ -362,11 +362,11 @@ POST   /api/v1/meal-drafts/{draft_id}/confirm
 
 All routes require authentication. Confirm requires `Idempotency-Key` and `If-Match` draft version. Tests cover localized `401`, `404`, `409` and `422` responses.
 
-- [ ] **Step 2: Run API tests and verify RED**
+- [x] **Step 2: Run API tests and verify RED**
 
 Expected: `404` because routes are not registered.
 
-- [ ] **Step 3: Implement focused Pydantic schemas and routes**
+- [x] **Step 3: Implement focused Pydantic schemas and routes**
 
 Keep route handlers thin:
 
@@ -387,11 +387,11 @@ def update_draft(
 
 Wrap mutations with the existing user lifecycle guard.
 
-- [ ] **Step 4: Run API, auth and legacy regressions**
+- [x] **Step 4: Run API, auth and legacy regressions**
 
 Expected: API tests pass and legacy `/calendar/meals` remains unchanged until the Phase 6 cutover.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add backend/api/meal_schemas.py backend/api/food_catalog.py backend/api/meals.py backend/main.py backend/i18n.py backend/tests/test_food_catalog_api.py backend/tests/test_meal_drafts_api.py

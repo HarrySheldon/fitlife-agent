@@ -152,6 +152,94 @@ PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
         "en-US": "The saved confirmation result could not be recovered. Calculate a new preview.",
         "zh-CN": "无法恢复已保存的确认结果，请重新计算目标预览。",
     },
+    "FOOD_NOT_VISIBLE": {
+        "en-US": "The food was not found.",
+        "zh-CN": "未找到该食物。",
+    },
+    "DRAFT_NOT_FOUND": {
+        "en-US": "The meal draft was not found.",
+        "zh-CN": "未找到该餐食草稿。",
+    },
+    "DRAFT_EXPIRED": {
+        "en-US": "The meal draft has expired.",
+        "zh-CN": "该餐食草稿已过期。",
+    },
+    "DRAFT_VERSION_CONFLICT": {
+        "en-US": "The meal draft changed. Reload it and try again.",
+        "zh-CN": "餐食草稿已发生变化，请重新加载后再试。",
+    },
+    "DRAFT_INCOMPLETE": {
+        "en-US": "Add at least one complete food item before confirming.",
+        "zh-CN": "确认前请至少添加一项完整食物。",
+    },
+    "DRAFT_VERSION_REQUIRED": {
+        "en-US": "The meal draft version is required.",
+        "zh-CN": "缺少餐食草稿版本。",
+    },
+    "DRAFT_VERSION_INVALID": {
+        "en-US": "The meal draft version is invalid.",
+        "zh-CN": "餐食草稿版本无效。",
+    },
+    "FOOD_NAME_REQUIRED": {
+        "en-US": "Enter a food name.",
+        "zh-CN": "请输入食物名称。",
+    },
+    "FOOD_BASIS_TYPE_INVALID": {
+        "en-US": "Select a supported nutrition basis.",
+        "zh-CN": "请选择支持的营养基准。",
+    },
+    "FOOD_BASIS_AMOUNT_INVALID": {
+        "en-US": "Enter a valid nutrition basis amount.",
+        "zh-CN": "请输入有效的营养基准数量。",
+    },
+    "FOOD_UNIT_REQUIRED": {
+        "en-US": "Enter a food unit.",
+        "zh-CN": "请输入食物单位。",
+    },
+    "FOOD_UNIT_INCOMPATIBLE": {
+        "en-US": "The amount unit does not match the food basis.",
+        "zh-CN": "份量单位与食物营养基准不匹配。",
+    },
+    "FOOD_NUTRIENT_INVALID": {
+        "en-US": "Enter complete, non-negative nutrition values.",
+        "zh-CN": "请输入完整且不小于零的营养数据。",
+    },
+    "FOOD_PORTION_AMOUNT_INVALID": {
+        "en-US": "Enter a positive food amount.",
+        "zh-CN": "请输入大于零的食物份量。",
+    },
+    "FOOD_NUTRIENT_SCALE_INVALID": {
+        "en-US": "The nutrition values are too large to calculate.",
+        "zh-CN": "营养数据过大，无法计算。",
+    },
+    "FOOD_PORTION_SCALE_INVALID": {
+        "en-US": "The food amount is too large to calculate.",
+        "zh-CN": "食物份量过大，无法计算。",
+    },
+    "MEAL_ITEM_SOURCE_INVALID": {
+        "en-US": "Select one catalog food or enter one custom food.",
+        "zh-CN": "请选择一个目录食物或输入一个自定义食物。",
+    },
+    "MEAL_DATE_INVALID": {
+        "en-US": "Select a valid meal date.",
+        "zh-CN": "请选择有效的餐食日期。",
+    },
+    "MEAL_NAME_REQUIRED": {
+        "en-US": "Enter a meal name.",
+        "zh-CN": "请输入餐食名称。",
+    },
+    "MEAL_NAME_TOO_LONG": {
+        "en-US": "The meal name is too long.",
+        "zh-CN": "餐食名称过长。",
+    },
+    "MEAL_TYPE_INVALID": {
+        "en-US": "Select a supported meal type.",
+        "zh-CN": "请选择支持的餐食类型。",
+    },
+    "MEAL_ENTRY_METHOD_INVALID": {
+        "en-US": "This meal entry method is not supported.",
+        "zh-CN": "不支持该餐食录入方式。",
+    },
     "MEAL_SAVED": {"en-US": "Meal saved.", "zh-CN": "餐食已保存。"},
     "WORKOUT_SAVED": {"en-US": "Workout saved.", "zh-CN": "训练已保存。"},
     "ENTRY_PARSED": {"en-US": "Entry parsed.", "zh-CN": "记录已解析。"},
