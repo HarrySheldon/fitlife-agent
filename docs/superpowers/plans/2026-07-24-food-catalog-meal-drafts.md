@@ -62,7 +62,7 @@ Phase 3 applies these decisions:
 - Create: `backend/domain/meals.py`
 - Create: `backend/tests/domain/test_meals.py`
 
-- [ ] **Step 1: Write failing quantity-conversion tests**
+- [x] **Step 1: Write failing quantity-conversion tests**
 
 Cover per-100g, per-100ml and per-serving conversion, one-decimal output, positive amounts, complete custom nutrients and immutable snapshots:
 
@@ -88,7 +88,7 @@ def test_food_portion_scales_per_100g_nutrients():
     assert portion.fat == 0.5
 ```
 
-- [ ] **Step 2: Run the domain test and verify RED**
+- [x] **Step 2: Run the domain test and verify RED**
 
 Run:
 
@@ -98,7 +98,7 @@ docker run --rm --volume "${PWD}\backend:/app/backend" --workdir /app profile-da
 
 Expected: import failure because `backend.domain.meals` does not exist.
 
-- [ ] **Step 3: Implement immutable domain values**
+- [x] **Step 3: Implement immutable domain values**
 
 Use frozen dataclasses, `Decimal(str(value))`, `ROUND_HALF_UP`, explicit compatible units, and stable error codes:
 
@@ -151,11 +151,11 @@ def portion_from_food(food: FoodDefinition, *, amount: float, unit: str) -> Food
     )
 ```
 
-- [ ] **Step 4: Run the domain tests and verify GREEN**
+- [x] **Step 4: Run the domain tests and verify GREEN**
 
 Expected: all `backend/tests/domain/test_meals.py` tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add backend/domain/meals.py backend/tests/domain/test_meals.py
