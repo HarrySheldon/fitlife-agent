@@ -6,6 +6,7 @@ import { ProtectedRoute } from '../components/ProtectedRoute'
 import { Auth } from '../pages/Auth'
 import { Evaluation } from '../pages/Evaluation'
 import { Logbook } from '../pages/Logbook'
+import { MealEntry } from '../pages/MealEntry'
 import { Onboarding } from '../pages/Onboarding'
 import { Plan } from '../pages/Plan'
 import { Profile } from '../pages/Profile'
@@ -29,6 +30,7 @@ export function AppRoutes() {
         <Route element={<OnboardingGate />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Today />} />
+            <Route path="/today/meal/new" element={<MealEntry />} />
             <Route path="/logbook" element={<Logbook />} />
             <Route path="/review" element={<Review />} />
             <Route path="/plan" element={<Plan />} />

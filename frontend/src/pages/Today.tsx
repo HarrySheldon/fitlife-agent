@@ -2,6 +2,7 @@ import { Bot, CalendarDays, Dumbbell, Plus, Utensils } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 
 import { CoachPanel } from '../components/CoachPanel'
 import { EmptyState } from '../components/EmptyState'
@@ -12,13 +13,9 @@ import { displayWeight, metricWeight, weightUnit } from '../domain/units'
 import { usePreferences } from '../hooks/usePreferences'
 import { useToday } from '../hooks/useToday'
 import { api } from '../services/api'
-import type { MealRecord, WorkoutRecord } from '../types'
+import type { WorkoutRecord } from '../types'
 
-type EntryMode = 'smart' | 'meal' | 'workout'
-
-const emptyMeal: Omit<MealRecord, 'date'> = {
-  meal: 'lunch', food: '', amount: '', calories: 0, protein: 0, carbs: 0, fat: 0,
-}
+type EntryMode = 'smart' | 'workout'
 
 const emptyWorkout: Omit<WorkoutRecord, 'date'> = {
   type: 'strength', exercise: '', muscle_group: '', sets: 0, reps: 0, weight: 0, duration_min: 0,
@@ -26,11 +23,11 @@ const emptyWorkout: Omit<WorkoutRecord, 'date'> = {
 
 export function Today() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { preferences, localDate } = usePreferences()
   const [selectedDate, setSelectedDate] = useState(localDate())
   const [entryMode, setEntryMode] = useState<EntryMode>('smart')
   const [agentText, setAgentText] = useState('')
-  const [meal, setMeal] = useState(emptyMeal)
   const [workout, setWorkout] = useState(emptyWorkout)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -65,14 +62,6 @@ export function Today() {
     await save(async () => {
       await api.addAgentEntry(selectedDate, agentText)
       setAgentText('')
-    })
-  }
-
-  async function submitMeal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await save(async () => {
-      await api.addMeal({ date: selectedDate, ...meal })
-      setMeal(emptyMeal)
     })
   }
 
@@ -137,7 +126,7 @@ export function Today() {
                 <div><Plus size={18} /><h2>{t('today.addRecord')}</h2></div>
                 <div className="entry-mode" aria-label={t('today.entryMethod')}>
                   <button type="button" className={entryMode === 'smart' ? 'active' : ''} onClick={() => setEntryMode('smart')}><Bot size={16} />{t('today.smart')}</button>
-                  <button type="button" className={entryMode === 'meal' ? 'active' : ''} onClick={() => setEntryMode('meal')}><Utensils size={16} />{t('today.meal')}</button>
+                  <button type="button" onClick={() => navigate(`/today/meal/new?date=${encodeURIComponent(selectedDate)}`)}><Utensils size={16} />{t('today.meal')}</button>
                   <button type="button" className={entryMode === 'workout' ? 'active' : ''} onClick={() => setEntryMode('workout')}><Dumbbell size={16} />{t('today.training')}</button>
                 </div>
               </header>
@@ -146,15 +135,6 @@ export function Today() {
                 <form className="record-form" onSubmit={(event) => void submitSmart(event)}>
                   <textarea required placeholder={t('today.smartPlaceholder')} value={agentText} onChange={(event) => setAgentText(event.target.value)} />
                   <button className="primary-button" type="submit" disabled={saving}>{t('today.parseAndSave')}</button>
-                </form>
-              ) : null}
-              {entryMode === 'meal' ? (
-                <form className="record-form compact-entry-form" onSubmit={(event) => void submitMeal(event)}>
-                  <input required placeholder={t('today.food')} value={meal.food} onChange={(event) => setMeal({ ...meal, food: event.target.value })} />
-                  <input required placeholder={t('today.amount')} value={meal.amount} onChange={(event) => setMeal({ ...meal, amount: event.target.value })} />
-                  <input type="number" min="0" placeholder={t('today.calories')} value={meal.calories} onChange={(event) => setMeal({ ...meal, calories: Number(event.target.value) })} />
-                  <input type="number" min="0" placeholder={t('today.protein')} value={meal.protein} onChange={(event) => setMeal({ ...meal, protein: Number(event.target.value) })} />
-                  <button className="primary-button" type="submit" disabled={saving}>{t('today.saveMeal')}</button>
                 </form>
               ) : null}
               {entryMode === 'workout' ? (

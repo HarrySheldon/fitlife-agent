@@ -143,6 +143,7 @@ describe.each([
     language: 'en-US' as const,
     routes: [
       ['/login', 'Create your fitness workspace'], ['/', 'Today'], ['/logbook', 'Logbook'],
+      ['/today/meal/new?date=2026-07-14', 'Add a meal'],
       ['/review', 'Review'], ['/plan', 'Plan'], ['/profile', 'Profile'], ['/evaluation', 'Agent evaluation'],
       ['/settings', 'Settings'], ['/settings/general', 'General settings'], ['/settings/model', 'Model connection'],
     ],
@@ -152,6 +153,7 @@ describe.each([
     language: 'zh-CN' as const,
     routes: [
       ['/login', '创建你的健身空间'], ['/', '今天'], ['/logbook', '日志'],
+      ['/today/meal/new?date=2026-07-14', '添加餐食'],
       ['/review', '复盘'], ['/plan', '计划'], ['/profile', '个人资料'], ['/evaluation', 'Agent 评测'],
       ['/settings', '设置'], ['/settings/general', '通用设置'], ['/settings/model', '模型连接'],
     ],
@@ -177,6 +179,18 @@ describe.each([
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
     }
   })
+})
+
+it('opens the dedicated meal task from Today with the selected date', async () => {
+  state.language = 'en-US'
+  await i18n.changeLanguage('en-US')
+  renderRoute('/')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Meal' }))
+
+  expect(await screen.findByRole('heading', { level: 1, name: 'Add a meal' })).toBeInTheDocument()
+  expect(screen.getByLabelText('Date')).toHaveValue('2026-07-14')
+  expect(screen.queryByRole('button', { name: 'Save meal' })).not.toBeInTheDocument()
 })
 
 it('localizes loading, empty, and validation states in Chinese', async () => {

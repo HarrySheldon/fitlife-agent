@@ -452,7 +452,7 @@ git commit -m "feat: add meal draft client state"
 - Modify: `frontend/src/i18n/trackedStrings.test.ts`
 - Modify: `frontend/src/styles/index.css`
 
-- [ ] **Step 1: Write failing interaction tests**
+- [x] **Step 1: Write failing interaction tests**
 
 Cover:
 
@@ -466,11 +466,11 @@ Cover:
 - confirmation is disabled while saving and redirects only after success;
 - `409` shows recovery without clearing inputs.
 
-- [ ] **Step 2: Run interaction tests and verify RED**
+- [x] **Step 2: Run interaction tests and verify RED**
 
 Expected: route falls through to Today and `MealEntry` is missing.
 
-- [ ] **Step 3: Implement the task page**
+- [x] **Step 3: Implement the task page**
 
 Use an unframed two-column desktop layout and one-column mobile layout:
 
@@ -482,7 +482,7 @@ Right: selected items, amount controls, nutrient totals, save state, confirm
 
 Do not nest cards. Use icon buttons for remove/favorite and tooltips for unfamiliar icons. Keep the primary confirm command visible without overlaying content.
 
-- [ ] **Step 4: Replace the Today inline meal form**
+- [x] **Step 4: Replace the Today inline meal form**
 
 The Today meal action navigates to:
 
@@ -492,11 +492,11 @@ The Today meal action navigates to:
 
 Smart entry and workout behavior remain unchanged until their phases.
 
-- [ ] **Step 5: Run frontend tests and production build**
+- [x] **Step 5: Run frontend tests and production build**
 
 Run the complete Vitest suite and `npm run build`. Expected: all pass; only the existing bundle-size warning may remain.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add frontend/src/pages/MealEntry.tsx frontend/src/pages/MealEntry.test.tsx frontend/src/routes/AppRoutes.tsx frontend/src/pages/Today.tsx frontend/src/i18n frontend/src/styles/index.css
