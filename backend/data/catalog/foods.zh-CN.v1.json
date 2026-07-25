@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "source_name": "USDA FoodData Central",
-  "dataset_version": "2026-07-24",
+  "dataset_version": "2026-07-25",
   "license": "CC0-1.0",
   "attribution": "USDA FoodData Central",
   "foods": [
     {
       "source_name": "USDA FoodData Central",
       "source_record_id": "169756",
-      "dataset_version": "2026-07-24",
+      "dataset_version": "2026-07-25",
       "license": "CC0-1.0",
       "attribution": "USDA FoodData Central",
       "name": "生白米（长粒）",
@@ -28,6 +28,186 @@
       "provenance": {
         "description": "Rice, white, long-grain, regular, raw, unenriched",
         "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/169756/nutrients"
+      }
+    },
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "173424",
+      "dataset_version": "2026-07-25",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "水煮全蛋",
+      "basis_type": "per_100g",
+      "basis_amount": 100,
+      "unit": "g",
+      "calories": 155,
+      "carbs": 1.12,
+      "protein": 12.6,
+      "fat": 10.6,
+      "aliases": [
+        "水煮蛋",
+        "白煮蛋",
+        "boiled egg",
+        "hard boiled egg",
+        "jidan"
+      ],
+      "provenance": {
+        "description": "Egg, whole, cooked, hard-boiled",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/173424/nutrients"
+      }
+    },
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "171477",
+      "dataset_version": "2026-07-25",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "烤鸡胸肉（去皮）",
+      "basis_type": "per_100g",
+      "basis_amount": 100,
+      "unit": "g",
+      "calories": 165,
+      "carbs": 0,
+      "protein": 31,
+      "fat": 3.57,
+      "aliases": [
+        "鸡胸肉",
+        "烤鸡胸",
+        "chicken breast",
+        "roasted chicken breast",
+        "jixiong"
+      ],
+      "provenance": {
+        "description": "Chicken, broilers or fryers, breast, meat only, cooked, roasted",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/171477/nutrients"
+      }
+    },
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "173944",
+      "dataset_version": "2026-07-25",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "生香蕉",
+      "basis_type": "per_100g",
+      "basis_amount": 100,
+      "unit": "g",
+      "calories": 89,
+      "carbs": 22.8,
+      "protein": 1.09,
+      "fat": 0.33,
+      "aliases": [
+        "香蕉",
+        "banana",
+        "raw banana",
+        "xiangjiao"
+      ],
+      "provenance": {
+        "description": "Bananas, raw",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/173944/nutrients"
+      }
+    },
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "171265",
+      "dataset_version": "2026-07-25",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "全脂牛奶",
+      "basis_type": "per_100ml",
+      "basis_amount": 100,
+      "unit": "ml",
+      "calories": 61,
+      "carbs": 4.8,
+      "protein": 3.15,
+      "fat": 3.25,
+      "aliases": [
+        "纯牛奶",
+        "whole milk",
+        "milk",
+        "niunai"
+      ],
+      "provenance": {
+        "description": "Milk, whole, 3.25% milkfat, with added vitamin D",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/171265/nutrients"
+      }
+    },
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "173904",
+      "dataset_version": "2026-07-25",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "干燕麦片",
+      "basis_type": "per_100g",
+      "basis_amount": 100,
+      "unit": "g",
+      "calories": 379,
+      "carbs": 67.7,
+      "protein": 13.2,
+      "fat": 6.52,
+      "aliases": [
+        "燕麦",
+        "燕麦片",
+        "oats",
+        "rolled oats",
+        "yanmai"
+      ],
+      "provenance": {
+        "description": "Cereals, oats, regular and quick, not fortified, dry",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/173904/nutrients"
+      }
+    },
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "169967",
+      "dataset_version": "2026-07-25",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "水煮西兰花（无盐）",
+      "basis_type": "per_100g",
+      "basis_amount": 100,
+      "unit": "g",
+      "calories": 35,
+      "carbs": 7.18,
+      "protein": 2.38,
+      "fat": 0.41,
+      "aliases": [
+        "西兰花",
+        "花椰菜",
+        "broccoli",
+        "cooked broccoli",
+        "xilanhua"
+      ],
+      "provenance": {
+        "description": "Broccoli, cooked, boiled, drained, without salt",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/169967/nutrients"
+      }
+    },
+    {
+      "source_name": "USDA FoodData Central",
+      "source_record_id": "172475",
+      "dataset_version": "2026-07-25",
+      "license": "CC0-1.0",
+      "attribution": "USDA FoodData Central",
+      "name": "硬豆腐（硫酸钙）",
+      "basis_type": "per_100g",
+      "basis_amount": 100,
+      "unit": "g",
+      "calories": 144,
+      "carbs": 2.78,
+      "protein": 17.3,
+      "fat": 8.72,
+      "aliases": [
+        "硬豆腐",
+        "北豆腐",
+        "firm tofu",
+        "tofu",
+        "doufu"
+      ],
+      "provenance": {
+        "description": "Tofu, raw, firm, prepared with calcium sulfate",
+        "source_url": "https://fdc.nal.usda.gov/fdc-app.html#/food-details/172475/nutrients"
       }
     }
   ]

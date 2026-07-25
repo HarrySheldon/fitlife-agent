@@ -21,6 +21,17 @@ SEED_PATH = (
     / "foods.zh-CN.v1.json"
 )
 
+EXPECTED_FOODS = {
+    "169756": (365, 79.95, 7.13, 0.66, "dami"),
+    "173424": (155, 1.12, 12.6, 10.6, "boiled egg"),
+    "171477": (165, 0, 31, 3.57, "chicken breast"),
+    "173944": (89, 22.8, 1.09, 0.33, "banana"),
+    "171265": (61, 4.8, 3.15, 3.25, "whole milk"),
+    "173904": (379, 67.7, 13.2, 6.52, "oats"),
+    "169967": (35, 7.18, 2.38, 0.41, "broccoli"),
+    "172475": (144, 2.78, 17.3, 8.72, "firm tofu"),
+}
+
 
 def _database(tmp_path) -> SQLiteDatabase:
     database = SQLiteDatabase(tmp_path / "food-seed.sqlite3")
@@ -30,14 +41,27 @@ def _database(tmp_path) -> SQLiteDatabase:
 
 def test_seed_records_are_self_contained_auditable_documents():
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
-    record = payload["foods"][0]
-
-    assert record["source_name"] == "USDA FoodData Central"
-    assert record["source_record_id"] == "169756"
-    assert record["dataset_version"] == "2026-07-24"
-    assert record["license"] == "CC0-1.0"
-    assert record["attribution"] == "USDA FoodData Central"
-    assert all(isinstance(alias, str) for alias in record["aliases"])
+    assert {
+        record["source_record_id"] for record in payload["foods"]
+    } == set(EXPECTED_FOODS)
+    for record in payload["foods"]:
+        assert record["source_name"] == "USDA FoodData Central"
+        assert record["dataset_version"] == "2026-07-25"
+        assert record["license"] == "CC0-1.0"
+        assert record["attribution"] == "USDA FoodData Central"
+        assert all(isinstance(alias, str) for alias in record["aliases"])
+        assert record["provenance"]["source_url"].endswith(
+            f'/{record["source_record_id"]}/nutrients'
+        )
+        calories, carbs, protein, fat, _ = EXPECTED_FOODS[
+            record["source_record_id"]
+        ]
+        assert (
+            record["calories"],
+            record["carbs"],
+            record["protein"],
+            record["fat"],
+        ) == (calories, carbs, protein, fat)
 
 
 def test_seed_is_idempotent_searchable_and_preserves_source_metadata(tmp_path):
@@ -46,22 +70,21 @@ def test_seed_is_idempotent_searchable_and_preserves_source_metadata(tmp_path):
     first = seed_bundled_foods(database, SEED_PATH)
     second = seed_bundled_foods(database, SEED_PATH)
 
-    assert first.inserted_count == 1
+    assert first.inserted_count == len(EXPECTED_FOODS)
     assert first.updated_count == 0
     assert second.inserted_count == 0
     assert second.updated_count == 0
-    assert second.unchanged_count == 1
-    results = SQLiteFoodCatalogRepository(database).search(
-        "user-a",
-        "dami",
-        limit=20,
-    )
-    assert len(results) == 1
-    rice = results[0]
+    assert second.unchanged_count == len(EXPECTED_FOODS)
+    repository = SQLiteFoodCatalogRepository(database)
+    for source_record_id, expected in EXPECTED_FOODS.items():
+        results = repository.search("user-a", expected[4], limit=20)
+        assert len(results) == 1
+        assert results[0].source_record_id == source_record_id
+    rice = repository.search("user-a", "dami", limit=20)[0]
     assert rice.source == "public"
     assert rice.source_name == "USDA FoodData Central"
     assert rice.source_record_id == "169756"
-    assert rice.dataset_version == "2026-07-24"
+    assert rice.dataset_version == "2026-07-25"
     assert rice.license == "CC0-1.0"
     assert rice.attribution == "USDA FoodData Central"
     assert rice.calories == 365
@@ -152,7 +175,7 @@ def test_removed_seed_record_is_deactivated_and_no_longer_searchable(tmp_path):
 
     result = seed_bundled_foods(database, removed_path)
 
-    assert result.deactivated_count == 1
+    assert result.deactivated_count == len(EXPECTED_FOODS)
     assert SQLiteFoodCatalogRepository(database).search(
         "user-a",
         "dami",
