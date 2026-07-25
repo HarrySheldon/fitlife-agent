@@ -1,7 +1,7 @@
 # Today Records Product Program Roadmap
 
 **Source specification:** `docs/superpowers/specs/2026-07-19-today-nutrition-training-records-design.md`  
-**Status:** Phases 1-2 complete; Phases 3-6 pending
+**Status:** Phases 1-3 complete; Phases 4-6 pending
 
 **Excluded:** Account data export, recipe builder, barcode/image recognition, PostgreSQL, external runtime catalog APIs
 
@@ -17,7 +17,7 @@ The work is therefore split into six ordered, independently verifiable plans. Ea
 | --- | --- | --- | --- |
 | 1 (complete) | SQLite foundation and migration runtime | None | App starts against a versioned local database without changing current API behavior |
 | 2 (complete) | Versioned profile and deterministic daily targets | Phase 1 | New users confirm profile, overall goal, activity and four daily targets |
-| 3 | Food catalog and meal drafts | Phases 1-2 | Users search foods, build a multi-item meal draft and atomically confirm it |
+| 3 (complete) | Food catalog and meal drafts | Phases 1-2 | Users search foods, build a multi-item meal draft and atomically confirm it |
 | 4 | Exercise catalog, workout sessions and Today summary | Phases 1-3 | Users record strength/cardio sessions and Today shows four nutrients plus optional training |
 | 5 | Smart entry and Agent analysis drafts | Phases 2-4 | Deterministic parsing runs first and Agent only fills unresolved draft fields |
 | 6 | Controlled catalog imports, legacy cutover and release hardening | Phases 1-5 | Imports and CSV migration are idempotent, licensed, verified and Docker-tested |
@@ -61,3 +61,17 @@ Plans 3-6 are written after the preceding phase lands so their exact paths and s
 - Final review regression coverage verifies deletion/write lifecycle exclusion, narrow training-personalization writes, stable effective-time conflicts, latest-target legacy projection, coded safety conditions, and accurately scoped legacy-record export messaging.
 
 Phase 3 and account data export were not implemented as part of this verification.
+
+## Phase 3 Verification Evidence
+
+**Verified:** 2026-07-25
+
+- Backend full suite: `650 passed`, one known Starlette/httpx warning, `76.65s`.
+- Frontend full suite: `123 passed` across `21` files. One initial run hit the existing `5s` Profile test timeout; the focused test and a fresh full run passed.
+- Production frontend build: success with `2454` modules transformed in `49.59s`; the existing chunk-size warning above `500 kB` remains.
+- `docker compose config --quiet`, rebuild, startup, backend health, and frontend Nginx response passed on ports `8000` and `3000`.
+- Desktop browser acceptance confirmed a three-item meal containing two audited public foods and one complete private custom food. There was no horizontal overflow and no console warning or error.
+- Mobile browser acceptance at `390x844` confirmed a second three-item meal containing two audited public foods and one complete private custom food. There was no horizontal overflow and no console warning or error.
+- After reload, SQLite contained exactly two meals in positions `1` and `2`, each with three immutable item snapshots; no duplicate confirmation occurred.
+- Final review covered authorization, FTS query safety, optimistic locking, idempotency, transaction rollback, historical snapshots, account deletion, and the excluded export boundary with no Critical or Important findings.
+- Today continues to read the legacy record projection. Phase 4 owns the SQLite meal/workout summary cutover.

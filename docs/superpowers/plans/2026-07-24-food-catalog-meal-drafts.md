@@ -510,15 +510,15 @@ git commit -m "feat: build catalog-first meal entry"
 - Modify: `docs/superpowers/plans/2026-07-19-today-records-program-roadmap.md`
 - Modify: `docs/superpowers/plans/2026-07-24-food-catalog-meal-drafts.md`
 
-- [ ] **Step 1: Run complete backend verification**
+- [x] **Step 1: Run complete backend verification**
 
 Expected: every backend test passes with only documented warnings.
 
-- [ ] **Step 2: Run complete frontend verification and build**
+- [x] **Step 2: Run complete frontend verification and build**
 
 Expected: every frontend test and the production build pass.
 
-- [ ] **Step 3: Rebuild Docker and verify health**
+- [x] **Step 3: Rebuild Docker and verify health**
 
 ```powershell
 docker compose config --quiet
@@ -526,7 +526,7 @@ docker compose up --build -d
 curl.exe --fail http://127.0.0.1:8000/health
 ```
 
-- [ ] **Step 4: Perform browser acceptance**
+- [x] **Step 4: Perform browser acceptance**
 
 Desktop and `390x844` mobile:
 
@@ -539,11 +539,11 @@ Desktop and `390x844` mobile:
 7. verify success and no duplicate after retry/reload;
 8. verify no horizontal overflow or console errors.
 
-- [ ] **Step 5: Review and harden**
+- [x] **Step 5: Review and harden**
 
 Request a read-only final review focused on authorization, FTS query safety, optimistic locking, idempotency, transaction rollback, historical snapshots, account deletion and the excluded export boundary. Fix every Critical or Important finding and rerun affected verification.
 
-- [ ] **Step 6: Mark Phase 3 complete and commit**
+- [x] **Step 6: Mark Phase 3 complete and commit**
 
 Update evidence with real counts and timings only after verification.
 
@@ -567,3 +567,17 @@ Push `codex/food-catalog-meal-drafts`, verify local and remote SHAs match, then 
 - No Agent call is required or available in this workflow.
 - Existing legacy APIs remain functional until the documented cutover.
 - Backend, frontend, production build, Docker and desktop/mobile acceptance pass.
+
+## Verification Evidence
+
+**Verified:** 2026-07-25
+
+- Backend: `650 passed` in `76.65s`; one known Starlette/httpx warning.
+- Frontend: `123 passed` across `21` files. One initial complete run hit the existing `5s` Profile test timeout; its focused rerun and a fresh complete run passed.
+- Production build: `2454` modules transformed in `49.59s`; only the existing chunk-size warning remained.
+- Docker: configuration, rebuild, startup, backend health, and frontend Nginx response passed on ports `8000` and `3000`.
+- Desktop: two audited public foods plus one complete custom food were confirmed as one three-item meal without horizontal overflow or console errors.
+- Mobile `390x844`: two audited public foods plus one complete custom food were confirmed as a second three-item meal without horizontal overflow or console errors.
+- Reload verification found exactly two meals and three item snapshots per meal, with no duplicate confirmation.
+- Read-only review found no Critical or Important issue in authorization, FTS safety, optimistic locking, idempotency, transaction rollback, snapshots, account deletion, or the unchanged export boundary.
+- Today remains on the legacy summary projection until Phase 4.

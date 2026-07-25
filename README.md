@@ -1,6 +1,6 @@
 # FitLife Agent
 
-FitLife Agent is an open-source Agentic RAG project for personal fitness and diet management. It combines versioned user profile and nutrition-target data in SQLite, per-user meal and workout records in CSV, a small Markdown knowledge base, deterministic Python analysis tools, a LangGraph-ready agent workflow, FastAPI APIs, and a React + Vite frontend.
+FitLife Agent is an open-source Agentic RAG project for personal fitness and diet management. It combines versioned user profile, nutrition-target, food-catalog, meal-draft, and confirmed-meal data in SQLite, legacy per-user meal and workout records in CSV, a small Markdown knowledge base, deterministic Python analysis tools, a LangGraph-ready agent workflow, FastAPI APIs, and a React + Vite frontend.
 
 The project is designed as a resume-ready AI Agent engineering internship portfolio project and a locally deliverable product. Its main loop is record-driven: register or log in, maintain meal and workout records from Today, review history and weekly trends, generate the next plan, and ask the contextual Coach for analysis without leaving the active workspace.
 
@@ -13,6 +13,7 @@ The project is designed as a resume-ready AI Agent engineering internship portfo
 - Demo user management with username, email, or phone login, bearer-token sessions, and per-user local data files
 - Authenticated, append-only profile, overall-goal, and daily-target versions in SQLite
 - Deterministic four-target nutrition calculation with preview and explicit user confirmation
+- Local, source-aware food search with private custom foods and atomic multi-item meal confirmation
 - Required first-run onboarding and separately editable Profile sections
 - FastAPI backend with typed Pydantic schemas
 - Today-first React + Vite + TypeScript frontend with contextual Coach actions
@@ -27,10 +28,12 @@ flowchart LR
   API --> APP["Application Use Cases"]
   APP --> DOMAIN["Deterministic Domain Tools"]
   APP --> PROFILE_REPO["Versioned Profile Target Repository"]
-  APP --> RECORD_REPO["Legacy Record Repository"]
+  APP --> MEAL_REPO["Catalog And Meal Repository"]
+  APP --> RECORD_REPO["Legacy Workout And Import Repository"]
   AGENT["FitLife Coach Agent"] --> APP
   AGENT --> MODEL["ModelGateway"]
   PROFILE_REPO --> SQLITE["SQLite"]
+  MEAL_REPO --> SQLITE
   RECORD_REPO --> FILES["Per-user JSON / CSV"]
   MODEL --> OPENAI["OpenAI Responses API"]
   DOMAIN --> KB["Markdown Knowledge Base"]
@@ -54,7 +57,7 @@ See [docs/AGENT_TERMINOLOGY_AND_DESIGN.md](docs/AGENT_TERMINOLOGY_AND_DESIGN.md)
 
 ## Data Formats
 
-`meals.csv` requires:
+The legacy `meals.csv` import and compatibility path requires:
 
 ```text
 date,meal,food,amount,calories,protein,carbs,fat
@@ -68,11 +71,13 @@ date,type,exercise,muscle_group,sets,reps,weight,duration_min
 
 `user_profile.json` remains a compatibility projection for legacy features. The authenticated setup workflow stores append-only body-profile, overall-goal, and four-target versions in SQLite. The four daily targets are calories, carbohydrates, protein, and fat.
 
-The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. After registration or login, API requests with a bearer token read and write `backend/data/users/<user_id>/...` so each local demo account has isolated profile, meal, and workout data. Registration asks the user to choose one primary identifier type: username, email, or phone. Login accepts any of those identifiers in one account field. Email and phone are local demo identifiers only; the app does not send verification emails or SMS messages.
+The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. After registration or login, API requests with a bearer token isolate account-owned data by user ID. New catalog-first meal drafts and confirmed meals use SQLite; legacy records, workouts, and imports continue to use `backend/data/users/<user_id>/...` until the remaining cutover phases. Registration asks the user to choose one primary identifier type: username, email, or phone. Login accepts any of those identifiers in one account field. Email and phone are local demo identifiers only; the app does not send verification emails or SMS messages.
 
 ### Records database
 
-The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. Authenticated profile, overall-goal, and confirmed daily-target writes use this versioned SQLite model. Meal and workout records continue to use isolated per-user CSV files until a later migration phase; do not delete those files.
+The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. Authenticated profile, overall-goal, confirmed daily-target, local food-catalog, meal-draft, and catalog-first confirmed-meal writes use this SQLite model. Workout records and legacy meal compatibility paths continue to use isolated per-user CSV files until the remaining migration phases; do not delete those files.
+
+Bundled food facts are seeded locally from audited USDA FoodData Central records. Runtime search never calls an external food API. Confirmed meal items snapshot quantities, four nutrient values, source metadata, and provenance so later catalog changes cannot rewrite history. Draft confirmation uses optimistic versions, an idempotency key, and one SQLite transaction. The current Today summary still reads the legacy record projection; the Phase 4 read-model cutover will expose these SQLite meals in Today.
 
 Daily targets are calculated deterministically from the saved body profile, activity level, and overall goal. Profile or goal changes create a recalculation preview only. A target version is written only after the user explicitly confirms the preview; the Agent does not write overall goals or confirmed targets.
 
@@ -153,7 +158,7 @@ The endpoint `/calendar/agent-entry` retains its current compatibility name, but
 1. Start the backend and frontend.
 2. Register or log in with a local username, email, or phone identifier.
 3. Complete the required onboarding flow with body profile, overall goal, activity level, and an explicitly confirmed four-target nutrition plan.
-4. Open Today and record a meal or workout with smart entry or a compact form.
+4. Open Today and use the catalog-first meal task to search local foods, add complete custom foods, build a multi-item draft, and confirm it. Legacy smart entry and workout forms remain available during the staged cutover.
 5. Use the contextual Coach to explain daily progress, suggest the next meal, or adjust today's training.
 6. Open Logbook to inspect calendar history, add records for an earlier date, or import CSV data.
 7. Open Review to inspect trends, generate a weekly report, and ask the Coach to explain patterns.
@@ -206,6 +211,19 @@ The versioned profile and daily-target workflow was verified on 2026-07-24:
 - Final review: lifecycle-guarded writes, narrow training-personalization updates, stable effective-time conflicts, latest-target compatibility projection, coded safety conditions, and accurately scoped legacy-record export messaging were regression tested.
 
 The first Docker build exposed a frontend `node_modules` junction conflict in the build context. Commit `457fa8e` added `frontend/.dockerignore`; the subsequent Compose build and startup passed.
+
+## Phase 3 Verification
+
+The local food catalog and meal-draft workflow was verified on 2026-07-25:
+
+- Backend: `650 passed` in `76.65s`; one known Starlette/httpx warning remains.
+- Frontend: `123 passed` across `21` files. One initial full-suite run hit the existing `5s` Profile test timeout; the focused test and a fresh complete run passed.
+- Production build: succeeded with `2454` modules transformed in `49.59s`; the existing chunk-size warning above `500 kB` remains.
+- Docker: Compose configuration, rebuild, startup, backend health, and frontend Nginx response passed on ports `8000` and `3000`.
+- Desktop acceptance: searched the audited rice and oats records, added quantities, created a complete private custom food, and atomically confirmed one three-item meal. The page had no horizontal overflow and the console had no warnings or errors.
+- Mobile acceptance at `390x844`: searched banana and milk, added quantities, created a complete private custom food, and confirmed a second three-item meal. The task page and Today had no horizontal overflow and the console had no warnings or errors.
+- Idempotency proof: after reload, SQLite contained exactly two meals in positions `1` and `2`, each with exactly three immutable item snapshots; no duplicate was created.
+- Final review: authentication scope, FTS query construction, private-food visibility, optimistic locking, transaction rollback, idempotency fingerprints, historical snapshots, account deletion, and the unchanged export boundary were reviewed with no Critical or Important findings.
 
 ## Verification Report
 

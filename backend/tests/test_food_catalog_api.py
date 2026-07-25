@@ -63,7 +63,7 @@ def test_catalog_search_custom_food_favorite_and_owner_isolation(client):
             "carbs": 62,
             "protein": 24,
             "fat": 9,
-            "aliases": ["我的燕麦碗"],
+            "aliases": ["我的燕麦碗", "catalog-owner-private-oat-bowl"],
         },
     )
     assert custom.status_code == 200
@@ -72,7 +72,7 @@ def test_catalog_search_custom_food_favorite_and_owner_isolation(client):
     assert custom_food["owner_user_id"] is not None
     assert client.get(
         "/api/v1/catalog/foods/search",
-        params={"q": "燕麦"},
+        params={"q": "catalog-owner-private-oat-bowl"},
         headers=second,
     ).json()["data"] == []
 
