@@ -552,7 +552,7 @@ git add README.md docs/superpowers/plans
 git commit -m "docs: verify food catalog and meal drafts"
 ```
 
-- [ ] **Step 7: Push the clean branch**
+- [x] **Step 7: Push the clean branch**
 
 Push `codex/food-catalog-meal-drafts`, verify local and remote SHAs match, then begin the Phase 4 design-to-plan cycle from this commit.
 
