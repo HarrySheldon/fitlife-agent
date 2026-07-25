@@ -63,15 +63,15 @@ Phase 4 preserves these boundaries:
 
 ## Task 3: Workout Drafts And Atomic Confirmation
 
-- [ ] Add workout repository port, use case, and SQLite adapter.
-- [ ] Support create/get/update/delete for 30-day workout drafts.
-- [ ] Resolve catalog exercises into immutable snapshots at draft save time.
-- [ ] Validate strength exercises, ordered sets, cardio duration, and custom
+- [x] Add workout repository port, use case, and SQLite adapter.
+- [x] Support create/get/update/delete for 30-day workout drafts.
+- [x] Resolve catalog exercises into immutable snapshots at draft save time.
+- [x] Validate strength exercises, ordered sets, cardio duration, and custom
   exercise requirements.
-- [ ] Reject stale versions and expired drafts.
-- [ ] Confirm the session, strength exercises, strength sets, cardio items,
+- [x] Reject stale versions and expired drafts.
+- [x] Confirm the session, strength exercises, strength sets, cardio items,
   usage rows, custom catalog rows, and idempotency result in one transaction.
-- [ ] Test owner isolation, rollback, concurrent retries, catalog mutation
+- [x] Test owner isolation, rollback, concurrent retries, catalog mutation
   stability, and mixed-session confirmation.
 - [ ] Commit `feat: confirm workout drafts atomically`.
 
