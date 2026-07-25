@@ -180,6 +180,94 @@ PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
         "en-US": "The meal draft version is invalid.",
         "zh-CN": "餐食草稿版本无效。",
     },
+    "EXERCISE_NOT_VISIBLE": {
+        "en-US": "The exercise was not found.",
+        "zh-CN": "未找到该训练动作。",
+    },
+    "WORKOUT_DRAFT_NOT_FOUND": {
+        "en-US": "The workout draft was not found.",
+        "zh-CN": "未找到该训练草稿。",
+    },
+    "WORKOUT_DRAFT_EXPIRED": {
+        "en-US": "The workout draft has expired.",
+        "zh-CN": "该训练草稿已过期。",
+    },
+    "WORKOUT_DRAFT_VERSION_CONFLICT": {
+        "en-US": "The workout draft changed. Reload it and try again.",
+        "zh-CN": "训练草稿已发生变化，请重新加载后再试。",
+    },
+    "WORKOUT_DRAFT_INCOMPLETE": {
+        "en-US": "Add at least one complete exercise before confirming.",
+        "zh-CN": "确认前请至少添加一项完整训练。",
+    },
+    "WORKOUT_DRAFT_VERSION_REQUIRED": {
+        "en-US": "The workout draft version is required.",
+        "zh-CN": "缺少训练草稿版本。",
+    },
+    "WORKOUT_DRAFT_VERSION_INVALID": {
+        "en-US": "The workout draft version is invalid.",
+        "zh-CN": "训练草稿版本无效。",
+    },
+    "WORKOUT_PROFILE_REQUIRED": {
+        "en-US": "Complete a body profile before recording training.",
+        "zh-CN": "记录训练前请先完成身体档案。",
+    },
+    "EXERCISE_TYPE_MISMATCH": {
+        "en-US": "The selected exercise type does not match this entry.",
+        "zh-CN": "所选动作类型与当前记录不匹配。",
+    },
+    "WORKOUT_MET_REQUIRED": {
+        "en-US": "A MET value or device calorie value is required.",
+        "zh-CN": "需要 MET 值或设备消耗值。",
+    },
+    "WORKOUT_INTENSITY_REQUIRED": {
+        "en-US": "Select an intensity when workout duration is provided.",
+        "zh-CN": "填写训练时长时请选择训练强度。",
+    },
+    "WORKOUT_WEIGHT_REQUIRED": {
+        "en-US": "Complete a valid body weight before estimating training.",
+        "zh-CN": "估算训练消耗前请完善有效体重。",
+    },
+    "WORKOUT_DATE_INVALID": {
+        "en-US": "Enter a valid workout date.",
+        "zh-CN": "请输入有效的训练日期。",
+    },
+    "WORKOUT_DURATION_INVALID": {
+        "en-US": "Enter a valid workout duration.",
+        "zh-CN": "请输入有效的训练时长。",
+    },
+    "WORKOUT_INTENSITY_INVALID": {
+        "en-US": "Select a valid workout intensity.",
+        "zh-CN": "请选择有效的训练强度。",
+    },
+    "STRENGTH_SETS_REQUIRED": {
+        "en-US": "Add at least one strength set.",
+        "zh-CN": "请至少添加一组力量训练。",
+    },
+    "STRENGTH_SET_ORDER_INVALID": {
+        "en-US": "Strength sets must be numbered in order from one.",
+        "zh-CN": "力量训练组数必须从 1 开始连续编号。",
+    },
+    "STRENGTH_BODYWEIGHT_INVALID": {
+        "en-US": "Bodyweight sets cannot include an external load.",
+        "zh-CN": "自重训练组不能同时填写外部负重。",
+    },
+    "EXERCISE_SOURCE_INVALID": {
+        "en-US": "Select one catalog exercise or enter one custom exercise.",
+        "zh-CN": "请选择一个目录动作或填写一个自定义动作。",
+    },
+    "EXERCISE_TYPE_INVALID": {
+        "en-US": "Select a valid exercise type.",
+        "zh-CN": "请选择有效的训练类型。",
+    },
+    "EXERCISE_ALIAS_INVALID": {
+        "en-US": "Enter valid exercise aliases.",
+        "zh-CN": "请输入有效的动作别名。",
+    },
+    "EXERCISE_SECONDARY_MUSCLE_INVALID": {
+        "en-US": "Enter valid secondary muscle names.",
+        "zh-CN": "请输入有效的辅助肌群名称。",
+    },
     "FOOD_NAME_REQUIRED": {
         "en-US": "Enter a food name.",
         "zh-CN": "请输入食物名称。",

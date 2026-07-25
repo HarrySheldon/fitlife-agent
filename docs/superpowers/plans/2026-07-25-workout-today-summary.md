@@ -46,7 +46,7 @@ Phase 4 preserves these boundaries:
   duration is present.
 - [x] Test positive bounds, bodyweight sets, repeated compact sets, snapshots,
   estimate metadata, and missing-estimate behavior.
-- [ ] Commit `feat: calculate deterministic workout estimates`.
+- [x] Commit `feat: calculate deterministic workout estimates`.
 
 ## Task 2: Local Exercise Catalog
 
@@ -59,7 +59,7 @@ Phase 4 preserves these boundaries:
   cardio/MET catalog with source, version, license, attribution, and aliases.
 - [x] Test idempotency, provenance retention, deactivation, aliases, ownership,
   favorites, and account deletion.
-- [ ] Commit `feat: add local searchable exercise catalog`.
+- [x] Commit `feat: add local searchable exercise catalog`.
 
 ## Task 3: Workout Drafts And Atomic Confirmation
 
@@ -73,23 +73,23 @@ Phase 4 preserves these boundaries:
   usage rows, custom catalog rows, and idempotency result in one transaction.
 - [x] Test owner isolation, rollback, concurrent retries, catalog mutation
   stability, and mixed-session confirmation.
-- [ ] Commit `feat: confirm workout drafts atomically`.
+- [x] Commit `feat: confirm workout drafts atomically`.
 
 ## Task 4: Authenticated Workout APIs
 
-- [ ] Add focused request/response schemas and authenticated routes:
+- [x] Add focused request/response schemas and authenticated routes:
   - `GET /api/v1/catalog/exercises/search`
   - `POST /api/v1/catalog/exercises/custom`
   - `PUT|DELETE /api/v1/catalog/exercises/{id}/favorite`
   - `POST /api/v1/workout-drafts`
   - `GET|PATCH|DELETE /api/v1/workout-drafts/{id}`
   - `POST /api/v1/workout-drafts/{id}/confirm`
-- [ ] Require `If-Match` for updates/confirmation and a UUID
+- [x] Require `If-Match` for updates/confirmation and a UUID
   `Idempotency-Key` for confirmation.
-- [ ] Reuse lifecycle guards and localized stable errors.
-- [ ] Test authentication, validation, owner isolation, `404`, `409`, and
+- [x] Reuse lifecycle guards and localized stable errors.
+- [x] Test authentication, validation, owner isolation, `404`, `409`, and
   `422` contracts.
-- [ ] Commit `feat: expose workout draft workflow`.
+- [x] Commit `feat: expose workout draft workflow`.
 
 ## Task 5: SQLite Daily Summary
 

@@ -79,3 +79,4 @@ def test_repository_conflict_maps_to_public_409():
         )
 
     assert raised.value.status_code == 409
+    assert raised.value.code == "WORKOUT_DRAFT_VERSION_CONFLICT"

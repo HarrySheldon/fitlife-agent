@@ -138,6 +138,12 @@ def _uuid(value: str) -> str:
 
 
 def _error(error: WorkoutRepositoryError) -> WorkoutServiceError:
+    public_code = {
+        "DRAFT_NOT_FOUND": "WORKOUT_DRAFT_NOT_FOUND",
+        "DRAFT_EXPIRED": "WORKOUT_DRAFT_EXPIRED",
+        "DRAFT_VERSION_CONFLICT": "WORKOUT_DRAFT_VERSION_CONFLICT",
+        "DRAFT_INCOMPLETE": "WORKOUT_DRAFT_INCOMPLETE",
+    }.get(error.code, error.code)
     if error.code == "DRAFT_NOT_FOUND":
         status = 404
     elif error.code == "DRAFT_EXPIRED":
@@ -148,7 +154,7 @@ def _error(error: WorkoutRepositoryError) -> WorkoutServiceError:
         status = 500
     else:
         status = 422
-    return WorkoutServiceError(error.code, status_code=status)
+    return WorkoutServiceError(public_code, status_code=status)
 
 
 def _timestamp(value: datetime) -> str:
