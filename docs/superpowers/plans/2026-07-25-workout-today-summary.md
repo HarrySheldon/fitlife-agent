@@ -50,14 +50,14 @@ Phase 4 preserves these boundaries:
 
 ## Task 2: Local Exercise Catalog
 
-- [ ] Add exercise catalog port, service, SQLite adapter, and seed loader.
-- [ ] Search names and aliases through the existing FTS table.
-- [ ] Enforce public/private visibility and active records in SQL.
-- [ ] Rank recent, favorite, private, then public entries.
-- [ ] Require a name, type, and primary muscle for custom exercises.
-- [ ] Seed a small audited Unlicense strength catalog and a small reviewed
+- [x] Add exercise catalog port, service, SQLite adapter, and seed loader.
+- [x] Search names and aliases through the existing FTS table.
+- [x] Enforce public/private visibility and active records in SQL.
+- [x] Rank recent, favorite, private, then public entries.
+- [x] Require a name, type, and primary muscle for custom exercises.
+- [x] Seed a small audited Unlicense strength catalog and a small reviewed
   cardio/MET catalog with source, version, license, attribution, and aliases.
-- [ ] Test idempotency, provenance retention, deactivation, aliases, ownership,
+- [x] Test idempotency, provenance retention, deactivation, aliases, ownership,
   favorites, and account deletion.
 - [ ] Commit `feat: add local searchable exercise catalog`.
 

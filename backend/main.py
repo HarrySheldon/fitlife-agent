@@ -18,6 +18,7 @@ from backend.i18n import (
 )
 from backend.infrastructure.sqlite.runtime import initialize_database
 from backend.infrastructure.catalog.seed_foods import seed_bundled_foods
+from backend.infrastructure.catalog.seed_exercises import seed_bundled_exercises
 from backend.infrastructure.sqlite.runtime import get_database
 from backend.schemas import ApiError, ApiResponse
 
@@ -33,6 +34,7 @@ def _safe_language_for_request(request: Request) -> AppLanguage:
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     initialize_database()
     seed_bundled_foods(get_database())
+    seed_bundled_exercises(get_database())
     yield
 
 

@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "managed_sources": [
+    "free-exercise-db",
+    "2024 Adult Compendium of Physical Activities"
+  ],
+  "exercises": [
+    {
+      "source_name": "free-exercise-db",
+      "source_record_id": "Barbell_Full_Squat",
+      "dataset_version": "2026-07-25",
+      "name": "杠铃深蹲",
+      "exercise_type": "strength",
+      "primary_muscle": "quadriceps",
+      "secondary_muscles": ["calves", "glutes", "hamstrings", "lower back"],
+      "met": null,
+      "license": "Unlicense",
+      "attribution": "free-exercise-db contributors",
+      "aliases": ["barbell full squat", "barbell squat", "squat", "深蹲", "gangling shendun"],
+      "provenance": {
+        "source_url": "https://github.com/yuhonas/free-exercise-db/blob/main/exercises/Barbell_Full_Squat.json"
+      }
+    },
+    {
+      "source_name": "free-exercise-db",
+      "source_record_id": "Barbell_Bench_Press_-_Medium_Grip",
+      "dataset_version": "2026-07-25",
+      "name": "杠铃卧推",
+      "exercise_type": "strength",
+      "primary_muscle": "chest",
+      "secondary_muscles": ["shoulders", "triceps"],
+      "met": null,
+      "license": "Unlicense",
+      "attribution": "free-exercise-db contributors",
+      "aliases": ["barbell bench press", "bench press", "卧推", "wotui"],
+      "provenance": {
+        "source_url": "https://github.com/yuhonas/free-exercise-db/blob/main/exercises/Barbell_Bench_Press_-_Medium_Grip.json"
+      }
+    },
+    {
+      "source_name": "free-exercise-db",
+      "source_record_id": "Pullups",
+      "dataset_version": "2026-07-25",
+      "name": "引体向上",
+      "exercise_type": "strength",
+      "primary_muscle": "lats",
+      "secondary_muscles": ["biceps", "middle back"],
+      "met": null,
+      "license": "Unlicense",
+      "attribution": "free-exercise-db contributors",
+      "aliases": ["pullups", "pull up", "引体", "yinti xiangshang"],
+      "provenance": {
+        "source_url": "https://github.com/yuhonas/free-exercise-db/blob/main/exercises/Pullups.json"
+      }
+    },
+    {
+      "source_name": "free-exercise-db",
+      "source_record_id": "Pushups",
+      "dataset_version": "2026-07-25",
+      "name": "俯卧撑",
+      "exercise_type": "strength",
+      "primary_muscle": "chest",
+      "secondary_muscles": ["shoulders", "triceps"],
+      "met": null,
+      "license": "Unlicense",
+      "attribution": "free-exercise-db contributors",
+      "aliases": ["pushups", "push up", "俯卧撑", "fuwocheng"],
+      "provenance": {
+        "source_url": "https://github.com/yuhonas/free-exercise-db/blob/main/exercises/Pushups.json"
+      }
+    },
+    {
+      "source_name": "free-exercise-db",
+      "source_record_id": "Bent_Over_Barbell_Row",
+      "dataset_version": "2026-07-25",
+      "name": "杠铃俯身划船",
+      "exercise_type": "strength",
+      "primary_muscle": "middle back",
+      "secondary_muscles": ["biceps", "lats", "shoulders"],
+      "met": null,
+      "license": "Unlicense",
+      "attribution": "free-exercise-db contributors",
+      "aliases": ["bent over barbell row", "barbell row", "俯身划船", "huachuan"],
+      "provenance": {
+        "source_url": "https://github.com/yuhonas/free-exercise-db/blob/main/exercises/Bent_Over_Barbell_Row.json"
+      }
+    },
+    {
+      "source_name": "free-exercise-db",
+      "source_record_id": "Dumbbell_Shoulder_Press",
+      "dataset_version": "2026-07-25",
+      "name": "哑铃肩推",
+      "exercise_type": "strength",
+      "primary_muscle": "shoulders",
+      "secondary_muscles": ["triceps"],
+      "met": null,
+      "license": "Unlicense",
+      "attribution": "free-exercise-db contributors",
+      "aliases": ["dumbbell shoulder press", "shoulder press", "肩推", "jiantui"],
+      "provenance": {
+        "source_url": "https://github.com/yuhonas/free-exercise-db/blob/main/exercises/Dumbbell_Shoulder_Press.json"
+      }
+    },
+    {
+      "source_name": "2024 Adult Compendium of Physical Activities",
+      "source_record_id": "running-6-mph",
+      "dataset_version": "2026-07-25",
+      "name": "跑步（约 9.7 km/h）",
+      "exercise_type": "cardio",
+      "primary_muscle": "cardiovascular",
+      "secondary_muscles": [],
+      "met": 9.8,
+      "license": "citation-required",
+      "attribution": "2024 Adult Compendium of Physical Activities",
+      "aliases": ["running", "run", "jogging", "跑步", "paobu"],
+      "provenance": {
+        "source_url": "https://pacompendium.com/running/"
+      }
+    },
+    {
+      "source_name": "2024 Adult Compendium of Physical Activities",
+      "source_record_id": "cycling-12-13.9-mph",
+      "dataset_version": "2026-07-25",
+      "name": "骑行（约 19-22 km/h）",
+      "exercise_type": "cardio",
+      "primary_muscle": "cardiovascular",
+      "secondary_muscles": ["quadriceps", "glutes"],
+      "met": 8.0,
+      "license": "citation-required",
+      "attribution": "2024 Adult Compendium of Physical Activities",
+      "aliases": ["cycling", "bicycle", "骑行", "qixing"],
+      "provenance": {
+        "source_url": "https://pacompendium.com/bicycling/"
+      }
+    },
+    {
+      "source_name": "2024 Adult Compendium of Physical Activities",
+      "source_record_id": "walking-3-mph",
+      "dataset_version": "2026-07-25",
+      "name": "快走（约 4.8 km/h）",
+      "exercise_type": "cardio",
+      "primary_muscle": "cardiovascular",
+      "secondary_muscles": ["calves", "quadriceps"],
+      "met": 3.5,
+      "license": "citation-required",
+      "attribution": "2024 Adult Compendium of Physical Activities",
+      "aliases": ["walking", "brisk walk", "快走", "kuaizou"],
+      "provenance": {
+        "source_url": "https://pacompendium.com/walking/"
+      }
+    },
+    {
+      "source_name": "2024 Adult Compendium of Physical Activities",
+      "source_record_id": "swimming-freestyle-moderate",
+      "dataset_version": "2026-07-25",
+      "name": "自由泳（中等强度）",
+      "exercise_type": "cardio",
+      "primary_muscle": "cardiovascular",
+      "secondary_muscles": ["shoulders", "lats"],
+      "met": 5.8,
+      "license": "citation-required",
+      "attribution": "2024 Adult Compendium of Physical Activities",
+      "aliases": ["swimming", "freestyle swimming", "自由泳", "youyong"],
+      "provenance": {
+        "source_url": "https://pacompendium.com/water-activities/"
+      }
+    }
+  ]
+}
