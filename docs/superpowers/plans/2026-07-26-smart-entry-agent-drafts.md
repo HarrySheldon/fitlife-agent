@@ -73,7 +73,7 @@
 - [x] Mark unmatched or missing required fields with coded issues; ambiguous catalog resolution is covered by Task 2.
 - [x] Reject Agent patches that add observed workout fields or overwrite deterministic user values.
 - [x] Test Chinese and English examples, partial food data, mixed strength/cardio, and malicious Agent patches; ambiguous catalogs are covered by Task 2.
-- [ ] Commit `feat: parse deterministic smart entry candidates`.
+- [x] Commit `feat: parse deterministic smart entry candidates` (`4005a46`).
 
 ## Task 2: Local Catalog Resolution
 
@@ -83,13 +83,13 @@
 - Reuse `SQLiteFoodCatalogRepository` and `SQLiteExerciseCatalogRepository`.
 - Test `backend/tests/application/test_smart_entry.py`.
 
-- [ ] Search each normalized segment against the owner-visible local catalogs only.
-- [ ] Treat a case-folded exact name/alias match as unique only when exactly one visible item matches.
-- [ ] Return multiple candidate choices without selecting one when exact resolution is ambiguous.
-- [ ] Calculate food nutrition with existing deterministic portion rules.
-- [ ] Calculate cardio and strength estimates only through existing deterministic workout rules.
-- [ ] Preserve source, license, attribution, catalog ID, and value provenance in candidate snapshots.
-- [ ] Verify private catalog isolation and inactive-item exclusion.
+- [x] Search each normalized segment against the owner-visible local catalogs only.
+- [x] Treat a case-folded exact name/alias match as unique only when exactly one visible item matches.
+- [x] Return multiple candidate choices without selecting one when exact resolution is ambiguous.
+- [x] Calculate food nutrition with existing deterministic portion rules.
+- [x] Calculate cardio estimates only through existing deterministic workout rules; strength input has no duration/intensity and therefore receives no invented estimate.
+- [x] Preserve source, license, attribution, catalog ID, and value provenance in candidate snapshots.
+- [ ] Re-run private catalog isolation and inactive-item exclusion under Python 3.12/Docker; Python 3.13 test temp directories are ACL-blocked.
 - [ ] Commit `feat: resolve smart entry against local catalogs`.
 
 ## Task 3: Durable Smart Drafts
