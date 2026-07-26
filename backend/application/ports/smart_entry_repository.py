@@ -38,6 +38,15 @@ class SmartEntryDraft:
     updated_at: str
 
 
+@dataclass(frozen=True)
+class ConfirmedSmartEntry:
+    draft_id: str
+    log_date: str
+    meal_ids: tuple[str, ...]
+    training_session_id: str | None
+    replayed: bool = False
+
+
 @runtime_checkable
 class SmartEntryRepository(Protocol):
     def create_draft(
@@ -91,5 +100,16 @@ class SmartEntryRepository(Protocol):
         model: str | None,
         metadata: dict[str, object],
     ) -> SmartEntryDraft: ...
+
+    def confirm(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        idempotency_key: str,
+        request_fingerprint: str,
+        timezone_name: str = "UTC",
+    ) -> ConfirmedSmartEntry: ...
 
     def delete_draft(self, user_id: str, draft_id: str) -> None: ...

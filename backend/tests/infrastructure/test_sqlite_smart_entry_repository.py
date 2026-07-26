@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -64,6 +65,106 @@ def _cleanup(path: Path) -> None:
         target = Path(f"{path}{suffix}")
         if target.exists():
             target.unlink()
+
+
+def _food_candidate(
+    candidate_id: str,
+    meal_context: str,
+) -> ResolvedCandidate:
+    return ResolvedCandidate(
+        id=candidate_id,
+        kind="food",
+        raw_text="自制餐食 1份",
+        normalized_text="自制餐食 1份",
+        subject_text="自制餐食",
+        meal_context=meal_context,
+        selected=True,
+        selected_catalog_id=None,
+        catalog_choices=(),
+        issues=(),
+        values={
+            "name": "自制餐食",
+            "amount": 1,
+            "unit": "serving",
+            "basis_type": "per_serving",
+            "calories": 300,
+            "carbs": 40,
+            "protein": 20,
+            "fat": 8,
+            "source": "agent_estimate",
+            "is_estimate": True,
+            "uncertainty": {"calories": {"min": 240, "max": 360}},
+        },
+        provenance={"source": "agent_estimate"},
+        assumptions=("one serving",),
+        agent_estimate_accepted=True,
+    )
+
+
+def _cardio_candidate(candidate_id: str) -> ResolvedCandidate:
+    return ResolvedCandidate(
+        id=candidate_id,
+        kind="cardio",
+        raw_text="跑步 30分钟",
+        normalized_text="跑步 30分钟",
+        subject_text="跑步",
+        meal_context=None,
+        selected=True,
+        selected_catalog_id=None,
+        catalog_choices=(),
+        issues=(),
+        values={
+            "name": "跑步",
+            "exercise_type": "cardio",
+            "primary_muscle": "cardiovascular",
+            "secondary_muscles": ("legs",),
+            "duration_min": 30,
+            "device_calories": None,
+            "met": 8,
+            "estimated_calories": 294,
+            "is_estimate": True,
+            "source": "user_custom",
+        },
+        provenance={"entry_method": "smart_entry"},
+    )
+
+
+def _strength_candidate(candidate_id: str) -> ResolvedCandidate:
+    return ResolvedCandidate(
+        id=candidate_id,
+        kind="strength",
+        raw_text="深蹲 3x8 60kg",
+        normalized_text="深蹲 3x8 60kg",
+        subject_text="深蹲",
+        meal_context=None,
+        selected=True,
+        selected_catalog_id=None,
+        catalog_choices=(),
+        issues=(),
+        values={
+            "name": "深蹲",
+            "exercise_type": "strength",
+            "primary_muscle": "quadriceps",
+            "secondary_muscles": ("glutes",),
+            "set_count": 3,
+            "reps": 8,
+            "load_kg": 60,
+            "bodyweight": False,
+            "source": "user_custom",
+        },
+        provenance={"entry_method": "smart_entry"},
+    )
+
+
+def _confirmation_payload(
+    candidates: tuple[ResolvedCandidate, ...],
+) -> SmartEntryDraftPayload:
+    return SmartEntryDraftPayload(
+        log_date="2026-07-26",
+        raw_text="mixed smart entry",
+        parser_version="smart-entry-parser-v1",
+        candidates=candidates,
+    )
 
 
 def test_smart_entry_drafts_are_owner_scoped_versioned_and_date_searchable():
@@ -223,5 +324,212 @@ def test_agent_state_writes_are_version_checked_and_preserve_failure_payload():
                 metadata={},
             )
         assert raised.value.code == "DRAFT_VERSION_CONFLICT"
+    finally:
+        _cleanup(path)
+
+
+def test_confirmation_is_atomic_idempotent_and_raises_planned_meal_count():
+    database, path = _database()
+    repository = SQLiteSmartEntryRepository(
+        database,
+        clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
+    )
+    public_food = replace(
+        _food_candidate("food-1", "breakfast"),
+        selected_catalog_id="public-food",
+        values={
+            **_food_candidate("food-1", "breakfast").values,
+            "source": "public",
+            "is_estimate": False,
+        },
+        provenance={"source": "public", "license": "CC0-1.0"},
+        agent_estimate_accepted=False,
+    )
+    payload = _confirmation_payload(
+        (
+            public_food,
+            _food_candidate("food-2", "lunch"),
+            _food_candidate("food-3", "dinner"),
+            _food_candidate("food-4", "snack"),
+            _strength_candidate("strength-1"),
+            _cardio_candidate("cardio-1"),
+        )
+    )
+    try:
+        with database.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO food_catalog (
+                    id, owner_user_id, source, source_name, source_record_id,
+                    dataset_version, name, basis_type, basis_amount, unit,
+                    calories, carbs, protein, fat, license, attribution,
+                    provenance_json, content_hash, active
+                ) VALUES (
+                    'public-food', NULL, 'public', 'test', 'public-food',
+                    'v1', '自制餐食', 'per_serving', 1, 'serving',
+                    300, 40, 20, 8, 'CC0-1.0', 'Test', '{}', 'hash', 1
+                )
+                """
+            )
+        draft = repository.create_draft(
+            "user-a",
+            payload,
+            expires_at="2026-08-25T08:00:00Z",
+        )
+        confirmed = repository.confirm(
+            "user-a",
+            draft.id,
+            expected_version=1,
+            idempotency_key="key-1",
+            request_fingerprint="fingerprint-1",
+        )
+
+        assert len(confirmed.meal_ids) == 4
+        assert confirmed.training_session_id is not None
+        assert repository.get_draft("user-a", draft.id) is None
+        replayed = repository.confirm(
+            "user-a",
+            draft.id,
+            expected_version=1,
+            idempotency_key="key-1",
+            request_fingerprint="fingerprint-1",
+        )
+        assert replayed.replayed is True
+        assert replayed.meal_ids == confirmed.meal_ids
+        with pytest.raises(SmartEntryRepositoryError) as raised:
+            repository.confirm(
+                "user-a",
+                draft.id,
+                expected_version=1,
+                idempotency_key="key-1",
+                request_fingerprint="different-fingerprint",
+            )
+        assert raised.value.code == "IDEMPOTENCY_KEY_REUSED"
+
+        with database.connection() as connection:
+            counts = {
+                table: connection.execute(
+                    f"SELECT COUNT(*) AS count FROM {table}"
+                ).fetchone()["count"]
+                for table in (
+                    "meals",
+                    "meal_items",
+                    "training_sessions",
+                    "strength_exercises",
+                    "strength_sets",
+                    "cardio_items",
+                    "idempotency_keys",
+                    "catalog_usage",
+                )
+            }
+            planned = connection.execute(
+                """
+                SELECT planned_meal_count FROM daily_logs
+                WHERE user_id = 'user-a' AND log_date = '2026-07-26'
+                """
+            ).fetchone()["planned_meal_count"]
+        assert counts == {
+            "meals": 4,
+            "meal_items": 4,
+            "training_sessions": 1,
+            "strength_exercises": 1,
+            "strength_sets": 3,
+            "cardio_items": 1,
+            "idempotency_keys": 1,
+            "catalog_usage": 1,
+        }
+        assert planned == 4
+    finally:
+        _cleanup(path)
+
+
+def test_late_confirmation_failure_rolls_back_every_formal_row():
+    database, path = _database()
+    ids = iter(
+        (
+            "draft-id",
+            "daily-log-id",
+            "session-id",
+            "duplicate-cardio-id",
+            "duplicate-cardio-id",
+        )
+    )
+    repository = SQLiteSmartEntryRepository(
+        database,
+        clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
+        id_factory=lambda: next(ids),
+    )
+    try:
+        draft = repository.create_draft(
+            "user-a",
+            _confirmation_payload(
+                (
+                    _cardio_candidate("cardio-1"),
+                    _cardio_candidate("cardio-2"),
+                )
+            ),
+            expires_at="2026-08-25T08:00:00Z",
+        )
+
+        with pytest.raises(SmartEntryRepositoryError) as raised:
+            repository.confirm(
+                "user-a",
+                draft.id,
+                expected_version=1,
+                idempotency_key="key-rollback",
+                request_fingerprint="fingerprint-rollback",
+            )
+        assert raised.value.code == "SMART_ENTRY_CONFIRM_FAILED"
+
+        with database.connection() as connection:
+            assert all(
+                connection.execute(
+                    f"SELECT COUNT(*) AS count FROM {table}"
+                ).fetchone()["count"]
+                == 0
+                for table in (
+                    "daily_logs",
+                    "training_sessions",
+                    "cardio_items",
+                    "idempotency_keys",
+                )
+            )
+        assert repository.get_draft("user-a", draft.id) is not None
+    finally:
+        _cleanup(path)
+
+
+def test_confirmation_rejects_unaccepted_agent_estimates_before_writing():
+    database, path = _database()
+    repository = SQLiteSmartEntryRepository(
+        database,
+        clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
+    )
+    candidate = replace(
+        _food_candidate("food-agent", "breakfast"),
+        agent_estimate_accepted=False,
+    )
+    try:
+        draft = repository.create_draft(
+            "user-a",
+            _confirmation_payload((candidate,)),
+            expires_at="2026-08-25T08:00:00Z",
+        )
+        with pytest.raises(SmartEntryRepositoryError) as raised:
+            repository.confirm(
+                "user-a",
+                draft.id,
+                expected_version=1,
+                idempotency_key="key-unaccepted",
+                request_fingerprint="fingerprint-unaccepted",
+            )
+        assert (
+            raised.value.code
+            == "SMART_ENTRY_AGENT_ESTIMATE_NOT_ACCEPTED"
+        )
+        with database.connection() as connection:
+            assert connection.execute(
+                "SELECT COUNT(*) AS count FROM meals"
+            ).fetchone()["count"] == 0
     finally:
         _cleanup(path)

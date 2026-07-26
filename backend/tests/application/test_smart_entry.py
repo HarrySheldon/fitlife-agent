@@ -175,3 +175,30 @@ def test_create_draft_resolves_before_persistence_and_uses_lifecycle_lock():
         "2026-08-25T08:00:00Z"
     )
     assert events == ["enter:user-1", "exit:user-1"]
+
+
+def test_confirm_draft_validates_uuid_and_passes_a_stable_fingerprint():
+    repository = Mock()
+    service = SmartEntryService(repository, Mock(), Mock())
+    key = "2f8d44ca-9c6e-4cb4-b9af-3d8d991c2d33"
+
+    service.confirm_draft(
+        "user-1",
+        "draft-1",
+        expected_version=4,
+        idempotency_key=key,
+        timezone_name="Asia/Shanghai",
+    )
+    first = repository.confirm.call_args.kwargs
+    service.confirm_draft(
+        "user-1",
+        "draft-1",
+        expected_version=4,
+        idempotency_key=key,
+        timezone_name="Asia/Shanghai",
+    )
+    second = repository.confirm.call_args.kwargs
+
+    assert first["idempotency_key"] == key
+    assert first["request_fingerprint"] == second["request_fingerprint"]
+    assert first["timezone_name"] == "Asia/Shanghai"

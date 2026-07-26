@@ -4,7 +4,10 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 import unicodedata
+from uuid import UUID
 
 from backend.agent.smart_entry_analyzer import (
     PROMPT_VERSION,
@@ -20,6 +23,7 @@ from backend.application.ports.food_catalog_repository import (
     FoodCatalogRepository,
 )
 from backend.application.ports.smart_entry_repository import (
+    ConfirmedSmartEntry,
     SmartEntryDraft,
     SmartEntryDraftPayload,
     SmartEntryRepository,
@@ -232,6 +236,40 @@ class SmartEntryService:
                 )
             except SmartEntryRepositoryError as error:
                 raise _agent_repository_error(error) from None
+
+    def confirm_draft(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        idempotency_key: str,
+        timezone_name: str = "UTC",
+    ) -> ConfirmedSmartEntry:
+        key = _uuid(idempotency_key)
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "draft_id": draft_id,
+                    "expected_version": expected_version,
+                    "user_id": user_id,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        with self._mutation_scope(user_id):
+            try:
+                return self.repository.confirm(
+                    user_id,
+                    draft_id,
+                    expected_version=expected_version,
+                    idempotency_key=key,
+                    request_fingerprint=fingerprint,
+                    timezone_name=timezone_name,
+                )
+            except SmartEntryRepositoryError as error:
+                raise _service_error(error) from None
 
     def _mark_analysis_failed(
         self,
@@ -677,6 +715,9 @@ def _service_error(error: SmartEntryRepositoryError) -> SmartEntryServiceError:
         "DRAFT_VERSION_CONFLICT": 409,
         "SMART_ENTRY_DRAFT_CORRUPT": 500,
         "DRAFT_UPDATE_FAILED": 500,
+        "IDEMPOTENCY_KEY_REUSED": 409,
+        "SMART_ENTRY_CONFIRM_FAILED": 500,
+        "IDEMPOTENCY_RESPONSE_CORRUPT": 500,
     }.get(error.code, 422)
     return SmartEntryServiceError(error.code, status_code=status)
 
@@ -705,3 +746,13 @@ def _timestamp(value: datetime) -> str:
         "+00:00",
         "Z",
     )
+
+
+def _uuid(value: str) -> str:
+    try:
+        return str(UUID(value))
+    except (AttributeError, TypeError, ValueError):
+        raise SmartEntryServiceError(
+            "INVALID_IDEMPOTENCY_KEY",
+            status_code=422,
+        ) from None

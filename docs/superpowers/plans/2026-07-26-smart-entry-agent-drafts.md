@@ -131,7 +131,7 @@
 - [x] Preserve the draft and set `agent_status='failed'` on normalized model errors.
 - [x] Require explicit user acceptance before an Agent estimate becomes confirmable.
 - [x] Test no configuration, timeout, authentication, rate limit, invalid structure, extra fields, stale results, and successful merge; disabled model uses the same injected `ApplicationError` path as existing model settings tests.
-- [ ] Commit `feat: analyze unresolved smart entry fields`.
+- [x] Commit `feat: analyze unresolved smart entry fields` (`4e76e21`).
 
 ## Task 5: Atomic Multi-Record Confirmation
 
@@ -140,16 +140,16 @@
 - Implement confirmation in `sqlite_smart_entry_repository.py`.
 - Test atomic behavior in its infrastructure test.
 
-- [ ] Require at least one selected candidate.
-- [ ] Reject selected candidates with unresolved issues or unaccepted Agent estimates.
-- [ ] Insert every selected meal, meal item, training session, strength exercise/set, and cardio item in one SQLite transaction.
-- [ ] Use `entry_method='smart_entry'` and immutable value/provenance snapshots.
-- [ ] Update catalog usage only for matched catalog IDs; do not silently create private catalog entries from Agent estimates.
-- [ ] Ensure the daily log and persistently raise planned meal count when necessary.
-- [ ] Store and replay one response under `(user_id, smart_entry_confirm, Idempotency-Key)`.
-- [ ] Delete the source draft only after every formal row and idempotency response succeed.
-- [ ] Force a late insert failure in tests and prove zero formal rows remain.
-- [ ] Test retry replay, key reuse, owner isolation, and duplicate-click concurrency.
+- [x] Require at least one selected candidate.
+- [x] Reject selected candidates with unresolved issues or unaccepted Agent estimates.
+- [x] Insert every selected meal, meal item, training session, strength exercise/set, and cardio item in one SQLite transaction.
+- [x] Use `entry_method='smart_entry'` and immutable value/provenance snapshots.
+- [x] Update catalog usage only for matched catalog IDs; do not silently create private catalog entries from Agent estimates.
+- [x] Ensure the daily log and persistently raise planned meal count when necessary.
+- [x] Store and replay one response under `(user_id, smart_entry_confirm, Idempotency-Key)`.
+- [x] Delete the source draft only after every formal row and idempotency response succeed.
+- [x] Force a late insert failure in tests and prove zero formal rows remain.
+- [x] Test retry replay, key reuse, owner isolation, and transaction-serialized duplicate-click behavior.
 - [ ] Commit `feat: confirm smart entry drafts atomically`.
 
 ## Task 6: Authenticated API
