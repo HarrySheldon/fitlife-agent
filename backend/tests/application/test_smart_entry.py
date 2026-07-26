@@ -1,10 +1,16 @@
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
+from backend.application.ports.smart_entry_repository import SmartEntryDraft
 from backend.application.ports.exercise_catalog_repository import (
     ExerciseCatalogItem,
 )
 from backend.application.ports.food_catalog_repository import FoodCatalogItem
-from backend.application.use_cases.smart_entry import resolve_candidates
+from backend.application.use_cases.smart_entry import (
+    SmartEntryService,
+    resolve_candidates,
+)
 from backend.domain.smart_entry import parse_entry_text
 
 
@@ -131,3 +137,41 @@ def test_resolve_candidates_keeps_fuzzy_results_as_unselected_choices():
     assert candidate.selected_catalog_id is None
     assert [item.id for item in candidate.catalog_choices] == ["oats"]
     assert "SMART_ENTRY_CATALOG_UNMATCHED" in candidate.issues
+
+
+def test_create_draft_resolves_before_persistence_and_uses_lifecycle_lock():
+    repository = Mock()
+    repository.create_draft.return_value = Mock(spec=SmartEntryDraft)
+    foods = Mock()
+    foods.search.return_value = (_food("food-oats", "燕麦"),)
+    exercises = Mock()
+    events: list[str] = []
+
+    @contextmanager
+    def mutation_scope(user_id: str):
+        events.append(f"enter:{user_id}")
+        yield
+        events.append(f"exit:{user_id}")
+
+    service = SmartEntryService(
+        repository,
+        foods,
+        exercises,
+        clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
+        mutation_scope=mutation_scope,
+    )
+
+    result = service.create_draft(
+        "user-1",
+        log_date="2026-07-26",
+        raw_text="早餐：燕麦 50g",
+        weight_kg=70,
+    )
+
+    assert result is repository.create_draft.return_value
+    payload = repository.create_draft.call_args.args[1]
+    assert payload.candidates[0].selected_catalog_id == "food-oats"
+    assert repository.create_draft.call_args.kwargs["expires_at"] == (
+        "2026-08-25T08:00:00Z"
+    )
+    assert events == ["enter:user-1", "exit:user-1"]

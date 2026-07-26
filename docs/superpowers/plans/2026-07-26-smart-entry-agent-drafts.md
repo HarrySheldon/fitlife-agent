@@ -90,7 +90,7 @@
 - [x] Calculate cardio estimates only through existing deterministic workout rules; strength input has no duration/intensity and therefore receives no invented estimate.
 - [x] Preserve source, license, attribution, catalog ID, and value provenance in candidate snapshots.
 - [ ] Re-run private catalog isolation and inactive-item exclusion under Python 3.12/Docker; Python 3.13 test temp directories are ACL-blocked.
-- [ ] Commit `feat: resolve smart entry against local catalogs`.
+- [x] Commit `feat: resolve smart entry against local catalogs` (`3ff551b`).
 
 ## Task 3: Durable Smart Drafts
 
@@ -99,14 +99,14 @@
 - Create repository port/adapter files from the file map.
 - Test `backend/tests/infrastructure/test_sqlite_smart_entry_repository.py`.
 
-- [ ] Create/get/update/delete 30-day `kind='smart_entry'` drafts.
-- [ ] Persist raw text, log date, parser version, candidate list, selection, issues, assumptions, and per-value source.
-- [ ] Require `If-Match` for edits and return `409` on stale versions.
-- [ ] Keep Agent status/model/prompt/usage metadata in the existing draft columns.
-- [ ] Find the latest owner draft by date without exposing another user's row.
-- [ ] Bound raw text, candidates, assumptions, and total JSON size.
-- [ ] Include smart drafts in account deletion while keeping account export excluded.
-- [ ] Test expiry, owner isolation, conflicts, malformed JSON defense, and lifecycle locking.
+- [x] Create/get/update/delete 30-day `kind='smart_entry'` drafts.
+- [x] Persist raw text, log date, parser version, candidate list, selection, issues, assumptions, and per-value source.
+- [x] Require expected versions in the Repository/Application boundary; API `If-Match` is completed in Task 6.
+- [x] Keep Agent status/model/prompt/usage metadata in the existing draft columns.
+- [x] Find the latest owner draft by date without exposing another user's row.
+- [x] Bound raw text, candidates, assumptions, and total JSON size.
+- [x] Include smart drafts in existing account deletion while keeping account export excluded.
+- [x] Test expiry, owner isolation, conflicts, malformed JSON defense, and lifecycle locking.
 - [ ] Commit `feat: persist smart entry drafts`.
 
 ## Task 4: Strict Agent Analysis

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
+from datetime import datetime, timedelta, timezone
 import unicodedata
 
 from backend.application.ports.exercise_catalog_repository import (
@@ -11,39 +13,134 @@ from backend.application.ports.food_catalog_repository import (
     FoodCatalogItem,
     FoodCatalogRepository,
 )
+from backend.application.ports.smart_entry_repository import (
+    SmartEntryDraft,
+    SmartEntryDraftPayload,
+    SmartEntryRepository,
+    SmartEntryRepositoryError,
+)
+from backend.domain.errors import ApplicationError
 from backend.domain.meals import (
     FoodDefinition,
     MealDomainError,
     portion_from_food,
 )
-from backend.domain.smart_entry import ParsedEntry, ParsedSegment
+from backend.domain.smart_entry import (
+    CatalogChoice,
+    ParsedEntry,
+    ParsedSegment,
+    ResolvedCandidate,
+    parse_entry_text,
+)
 from backend.domain.workouts import WorkoutDomainError, cardio_calories
 
 
-@dataclass(frozen=True)
-class CatalogChoice:
-    id: str
-    name: str
-    source: str
-    aliases: tuple[str, ...]
+Clock = Callable[[], datetime]
 
 
-@dataclass(frozen=True)
-class ResolvedCandidate:
-    id: str
-    kind: str
-    raw_text: str
-    normalized_text: str
-    subject_text: str
-    meal_context: str | None
-    selected: bool
-    selected_catalog_id: str | None
-    catalog_choices: tuple[CatalogChoice, ...]
-    issues: tuple[str, ...]
-    values: dict[str, object]
-    provenance: dict[str, object]
-    assumptions: tuple[str, ...] = ()
-    agent_estimate_accepted: bool = False
+class SmartEntryServiceError(ApplicationError):
+    def __init__(self, code: str, *, status_code: int) -> None:
+        super().__init__(
+            code=code,
+            message=code,
+            status_code=status_code,
+            processing_mode="deterministic",
+        )
+
+
+class SmartEntryService:
+    def __init__(
+        self,
+        repository: SmartEntryRepository,
+        food_catalog: FoodCatalogRepository,
+        exercise_catalog: ExerciseCatalogRepository,
+        *,
+        clock: Clock | None = None,
+        mutation_scope: Callable[[str], AbstractContextManager] | None = None,
+    ) -> None:
+        self.repository = repository
+        self.food_catalog = food_catalog
+        self.exercise_catalog = exercise_catalog
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._mutation_scope = mutation_scope or (lambda _user_id: nullcontext())
+
+    def create_draft(
+        self,
+        user_id: str,
+        *,
+        log_date: str,
+        raw_text: str,
+        weight_kg: float | None,
+    ) -> SmartEntryDraft:
+        parsed = parse_entry_text(raw_text)
+        payload = SmartEntryDraftPayload(
+            log_date=log_date,
+            raw_text=parsed.raw_text,
+            parser_version=parsed.parser_version,
+            candidates=resolve_candidates(
+                user_id,
+                parsed,
+                food_catalog=self.food_catalog,
+                exercise_catalog=self.exercise_catalog,
+                weight_kg=weight_kg,
+            ),
+        )
+        expiry = _timestamp(self._clock() + timedelta(days=30))
+        with self._mutation_scope(user_id):
+            try:
+                return self.repository.create_draft(
+                    user_id,
+                    payload,
+                    expires_at=expiry,
+                )
+            except SmartEntryRepositoryError as error:
+                raise _service_error(error) from None
+
+    def get_draft(
+        self,
+        user_id: str,
+        draft_id: str,
+    ) -> SmartEntryDraft | None:
+        try:
+            return self.repository.get_draft(user_id, draft_id)
+        except SmartEntryRepositoryError as error:
+            raise _service_error(error) from None
+
+    def find_latest_draft(
+        self,
+        user_id: str,
+        log_date: str,
+    ) -> SmartEntryDraft | None:
+        try:
+            return self.repository.find_latest_draft(user_id, log_date)
+        except SmartEntryRepositoryError as error:
+            raise _service_error(error) from None
+
+    def update_draft(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        payload: SmartEntryDraftPayload,
+    ) -> SmartEntryDraft:
+        with self._mutation_scope(user_id):
+            try:
+                return self.repository.update_draft(
+                    user_id,
+                    draft_id,
+                    expected_version=expected_version,
+                    payload=payload,
+                )
+            except SmartEntryRepositoryError as error:
+                raise _service_error(error) from None
+
+    def delete_draft(self, user_id: str, draft_id: str) -> None:
+        with self._mutation_scope(user_id):
+            try:
+                self.repository.delete_draft(user_id, draft_id)
+            except SmartEntryRepositoryError as error:
+                raise _service_error(error) from None
 
 
 def resolve_candidates(
@@ -331,3 +428,21 @@ def _exercise_provenance(item: ExerciseCatalogItem) -> dict[str, object]:
 
 def _append_issue(issues: tuple[str, ...], code: str) -> tuple[str, ...]:
     return issues if code in issues else (*issues, code)
+
+
+def _service_error(error: SmartEntryRepositoryError) -> SmartEntryServiceError:
+    status = {
+        "DRAFT_NOT_FOUND": 404,
+        "DRAFT_EXPIRED": 410,
+        "DRAFT_VERSION_CONFLICT": 409,
+        "SMART_ENTRY_DRAFT_CORRUPT": 500,
+        "DRAFT_UPDATE_FAILED": 500,
+    }.get(error.code, 422)
+    return SmartEntryServiceError(error.code, status_code=status)
+
+
+def _timestamp(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00",
+        "Z",
+    )

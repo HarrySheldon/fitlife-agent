@@ -45,6 +45,32 @@ class ParsedEntry:
     parser_version: str = PARSER_VERSION
 
 
+@dataclass(frozen=True)
+class CatalogChoice:
+    id: str
+    name: str
+    source: str
+    aliases: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ResolvedCandidate:
+    id: str
+    kind: SegmentKind
+    raw_text: str
+    normalized_text: str
+    subject_text: str
+    meal_context: MealContext | None
+    selected: bool
+    selected_catalog_id: str | None
+    catalog_choices: tuple[CatalogChoice, ...]
+    issues: tuple[str, ...]
+    values: dict[str, object]
+    provenance: dict[str, object]
+    assumptions: tuple[str, ...] = ()
+    agent_estimate_accepted: bool = False
+
+
 _MEAL_LABELS: dict[str, MealContext] = {
     "\u65e9\u9910": "breakfast",
     "\u65e9\u996d": "breakfast",
