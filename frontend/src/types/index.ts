@@ -270,12 +270,49 @@ export interface TargetProgress {
   status: 'under' | 'met' | 'over'
 }
 
+export interface NutritionValues {
+  calories: number
+  carbs: number
+  protein: number
+  fat: number
+}
+
+export interface DailyTargetSnapshot extends NutritionValues {
+  id: string
+  source: string
+  effective_from: string
+}
+
+export interface TodayMealSummary {
+  id: string
+  name: string
+  meal_type: string
+  position: number
+  item_count: number
+  nutrition: NutritionValues
+}
+
+export interface TodayWorkoutSummary {
+  id: string
+  title: string
+  started_at: string | null
+  duration_min: number | null
+  intensity: string | null
+  calories: number | null
+  contains_estimates: boolean
+  strength_exercise_count: number
+  strength_set_count: number
+  cardio_item_count: number
+}
+
 export interface TodayOverview {
   date: string
-  summary: DailySummary
-  meals: MealRecord[]
-  workouts: WorkoutRecord[]
-  targets: TargetProgress[]
+  target: DailyTargetSnapshot | null
+  consumed: NutritionValues
+  planned_meal_count: number
+  recorded_meal_count: number
+  meals?: TodayMealSummary[]
+  workouts?: TodayWorkoutSummary[]
   coach_actions: CoachAction[]
 }
 

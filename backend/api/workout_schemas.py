@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import json
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 MuscleName = Annotated[str, Field(min_length=1, max_length=60)]
@@ -86,6 +87,14 @@ class WorkoutDraftMutationRequest(BaseModel):
         default_factory=list,
         max_length=50,
     )
+    recovery_state: dict[str, Any] | None = None
+
+    @field_validator("recovery_state")
+    @classmethod
+    def limit_recovery_state(cls, value):
+        if value is not None and len(json.dumps(value, ensure_ascii=False)) > 131_072:
+            raise ValueError("recovery state is too large")
+        return value
 
 
 class StrengthSetResponse(BaseModel):
@@ -140,6 +149,7 @@ class WorkoutDraftPayloadResponse(BaseModel):
     estimate: dict[str, Any]
     strength_exercises: list[StrengthExerciseResponse]
     cardio_items: list[CardioItemResponse]
+    recovery_state: dict[str, Any] | None = None
 
 
 class WorkoutDraftResponse(BaseModel):

@@ -162,6 +162,11 @@ export const api = {
   testModelConnection: () => request<ModelConnectionTestResult>('/settings/model/test', { method: 'POST' }),
   chat: (question: string) => request<ChatResponse>('/chat', { method: 'POST', body: JSON.stringify({ question }) }),
   today: (date: string) => request<TodayOverview>(`/today?date=${encodeURIComponent(date)}`),
+  setPlannedMealCount: (date: string, plannedMealCount: number) =>
+    requestV1<TodayOverview>(`/daily-logs/${encodeURIComponent(date)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ planned_meal_count: plannedMealCount }),
+    }),
   coachAction: (payload: CoachActionRequest) =>
     request<CoachActionResponse>('/coach/action', { method: 'POST', body: JSON.stringify(payload) }),
   weeklyReport: () => request<WeeklyReport>('/report/weekly', { method: 'POST' }),

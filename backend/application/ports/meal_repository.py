@@ -128,6 +128,7 @@ class MealRepository(Protocol):
         expected_version: int,
         idempotency_key: str,
         request_fingerprint: str,
+        timezone_name: str = "UTC",
     ) -> ConfirmedMeal: ...
 
     def list_meals(

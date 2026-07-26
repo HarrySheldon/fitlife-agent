@@ -26,6 +26,9 @@ from backend.domain.workouts import (
 from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
     _replace_search,
 )
+from backend.infrastructure.repositories.sqlite_daily_log import (
+    ensure_daily_log,
+)
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 
 
@@ -95,6 +98,27 @@ class SQLiteWorkoutRepository:
         if row is None or _expired(row["expires_at"], self._clock()):
             return None
         return _draft(row)
+
+    def find_latest_draft(
+        self,
+        user_id: str,
+        log_date: str,
+    ) -> WorkoutDraft | None:
+        now = _timestamp(self._clock())
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT *
+                FROM record_drafts
+                WHERE user_id = ? AND kind = 'workout'
+                  AND json_extract(payload_json, '$.log_date') = ?
+                  AND expires_at > ?
+                ORDER BY updated_at DESC, created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (user_id, log_date, now),
+            ).fetchone()
+        return _draft(row) if row is not None else None
 
     def update_draft(
         self,
@@ -171,6 +195,7 @@ class SQLiteWorkoutRepository:
         expected_version: int,
         idempotency_key: str,
         request_fingerprint: str,
+        timezone_name: str = "UTC",
     ) -> ConfirmedWorkout:
         with self.database.transaction() as connection:
             existing = connection.execute(
@@ -198,12 +223,13 @@ class SQLiteWorkoutRepository:
                 and not draft.payload.cardio_items
             ):
                 raise WorkoutRepositoryError("DRAFT_INCOMPLETE")
-            _ensure_daily_log(
+            ensure_daily_log(
                 connection,
                 self._id_factory,
                 user_id,
                 draft.payload.log_date,
                 now,
+                timezone_name,
             )
             session_id = self._id_factory()
             connection.execute(
@@ -463,6 +489,7 @@ def _resolve_payload(
         },
         strength_exercises=strength,
         cardio_items=cardio,
+        recovery_state=payload.recovery_state,
     )
 
 
@@ -708,24 +735,6 @@ def _usage(
     )
 
 
-def _ensure_daily_log(
-    connection,
-    id_factory: IdFactory,
-    user_id: str,
-    log_date: str,
-    now: str,
-) -> None:
-    connection.execute(
-        """
-        INSERT INTO daily_logs (
-            id, user_id, log_date, planned_meal_count, created_at, updated_at
-        ) VALUES (?, ?, ?, 3, ?, ?)
-        ON CONFLICT(user_id, log_date) DO NOTHING
-        """,
-        (id_factory(), user_id, log_date, now, now),
-    )
-
-
 def _load_session(connection, session_id: str) -> ConfirmedWorkout:
     row = connection.execute(
         "SELECT * FROM training_sessions WHERE id = ?",
@@ -896,6 +905,7 @@ def _payload(raw: dict[str, object]) -> WorkoutDraftPayload:
         estimate=raw["estimate"],
         strength_exercises=strength,
         cardio_items=cardio,
+        recovery_state=raw.get("recovery_state"),
     )
 
 

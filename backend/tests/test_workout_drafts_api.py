@@ -54,8 +54,13 @@ def _profile(client: TestClient, headers: dict[str, str]) -> None:
     assert response.status_code == 200
 
 
-def _payload(squat_id: str, running_id: str, title: str = "Mixed") -> dict:
-    return {
+def _payload(
+    squat_id: str,
+    running_id: str,
+    title: str = "Mixed",
+    recovery_state: dict | None = None,
+) -> dict:
+    payload = {
         "log_date": "2026-07-25",
         "title": title,
         "duration_min": 45,
@@ -83,6 +88,9 @@ def _payload(squat_id: str, running_id: str, title: str = "Mixed") -> dict:
             }
         ],
     }
+    if recovery_state is not None:
+        payload["recovery_state"] = recovery_state
+    return payload
 
 
 def test_catalog_custom_ownership_and_workout_draft_contract(client):
@@ -118,16 +126,40 @@ def test_catalog_custom_ownership_and_workout_draft_contract(client):
         headers=other,
     ).json()["data"] == []
 
+    editor_state = {
+        "session": {"logDate": "2026-07-25", "title": "Mixed"},
+        "strength": [{"catalogId": squat["id"], "reps": ""}],
+        "cardio": [],
+        "draftId": None,
+        "pendingConfirmation": None,
+    }
     created = client.post(
         "/api/v1/workout-drafts",
         headers=owner,
-        json=_payload(squat["id"], running["id"]),
+        json=_payload(
+            squat["id"],
+            running["id"],
+            recovery_state=editor_state,
+        ),
     )
     assert created.status_code == 200
     draft = created.json()["data"]
     assert draft["version"] == 1
     assert draft["payload"]["weight_kg_snapshot"] == 70
     assert draft["payload"]["estimated_calories"] == 515.7
+    assert draft["payload"]["recovery_state"] == editor_state
+    latest = client.get(
+        "/api/v1/workout-drafts",
+        params={"date": "2026-07-25"},
+        headers=owner,
+    )
+    assert latest.status_code == 200
+    assert latest.json()["data"]["id"] == draft["id"]
+    assert client.get(
+        "/api/v1/workout-drafts",
+        params={"date": "2026-07-25"},
+        headers=other,
+    ).json()["data"] is None
     assert client.get(
         f"/api/v1/workout-drafts/{draft['id']}",
         headers=other,
@@ -287,6 +319,72 @@ def test_workout_owner_headers_and_idempotency_contract(client):
     assert reused.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
 
 
+def test_incomplete_editor_state_is_recoverable_by_owner_and_date(client):
+    owner = _register(client, "workout-recovery-owner")
+    other = _register(client, "workout-recovery-other")
+    _profile(client, owner)
+    editor_state = {
+        "session": {
+            "logDate": "2026-07-26",
+            "title": "Partial session",
+            "startedAt": "",
+            "duration": "",
+            "intensity": "",
+        },
+        "strength": [{"catalogId": "exercise-squat", "reps": ""}],
+        "cardio": [],
+        "draftId": None,
+        "pendingConfirmation": None,
+    }
+    created = client.post(
+        "/api/v1/workout-drafts",
+        headers=owner,
+        json={
+            "log_date": "2026-07-26",
+            "title": "Partial session",
+            "entry_method": "form",
+            "strength_exercises": [],
+            "cardio_items": [],
+            "recovery_state": editor_state,
+        },
+    )
+
+    assert created.status_code == 200
+    assert created.json()["data"]["payload"]["recovery_state"] == editor_state
+    latest = client.get(
+        "/api/v1/workout-drafts",
+        params={"date": "2026-07-26"},
+        headers=owner,
+    )
+    assert latest.json()["data"]["id"] == created.json()["data"]["id"]
+    assert client.get(
+        "/api/v1/workout-drafts",
+        params={"date": "2026-07-26"},
+        headers=other,
+    ).json()["data"] is None
+
+
+def test_workout_recovery_state_has_a_bounded_payload(client):
+    owner = _register(client, "workout-recovery-size")
+    _profile(client, owner)
+
+    response = client.post(
+        "/api/v1/workout-drafts",
+        headers=owner,
+        json={
+            "log_date": "2026-07-26",
+            "title": "Oversized",
+            "entry_method": "form",
+            "strength_exercises": [],
+            "cardio_items": [],
+            "recovery_state": {"value": "x" * 131_073},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 def test_exercise_favorites_are_authenticated_and_owner_scoped(client):
     owner = _register(client, "favorite-owner")
     other = _register(client, "favorite-other")
@@ -404,6 +502,7 @@ def test_custom_exercise_rejects_invalid_secondary_muscle(client):
         ("put", "/api/v1/catalog/exercises/missing/favorite"),
         ("delete", "/api/v1/catalog/exercises/missing/favorite"),
         ("post", "/api/v1/workout-drafts"),
+        ("get", "/api/v1/workout-drafts?date=2026-07-25"),
         ("get", "/api/v1/workout-drafts/missing"),
         ("patch", "/api/v1/workout-drafts/missing"),
         ("delete", "/api/v1/workout-drafts/missing"),

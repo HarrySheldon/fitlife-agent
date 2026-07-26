@@ -47,6 +47,7 @@ class WorkoutDraftInput:
     entry_method: Literal["form"]
     strength_exercises: tuple[StrengthExerciseInput, ...]
     cardio_items: tuple[CardioItemInput, ...]
+    recovery_state: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ class WorkoutDraftPayload:
     estimate: dict[str, object]
     strength_exercises: tuple[StrengthExerciseSnapshot, ...]
     cardio_items: tuple[CardioItemSnapshot, ...]
+    recovery_state: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,12 @@ class WorkoutRepository(Protocol):
         draft_id: str,
     ) -> WorkoutDraft | None: ...
 
+    def find_latest_draft(
+        self,
+        user_id: str,
+        log_date: str,
+    ) -> WorkoutDraft | None: ...
+
     def update_draft(
         self,
         user_id: str,
@@ -156,6 +164,7 @@ class WorkoutRepository(Protocol):
         expected_version: int,
         idempotency_key: str,
         request_fingerprint: str,
+        timezone_name: str = "UTC",
     ) -> ConfirmedWorkout: ...
 
     def list_sessions(

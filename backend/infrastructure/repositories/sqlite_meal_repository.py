@@ -23,6 +23,9 @@ from backend.domain.meals import (
     portion_from_food,
 )
 from backend.infrastructure.sqlite.database import SQLiteDatabase
+from backend.infrastructure.repositories.sqlite_daily_log import (
+    ensure_daily_log,
+)
 from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
     _source_tokens,
 )
@@ -175,6 +178,7 @@ class SQLiteMealRepository:
         expected_version: int,
         idempotency_key: str,
         request_fingerprint: str,
+        timezone_name: str = "UTC",
     ) -> ConfirmedMeal:
         with self.database.transaction() as connection:
             now_value = self._clock()
@@ -204,12 +208,13 @@ class SQLiteMealRepository:
             if not draft.payload.items:
                 raise MealRepositoryError("DRAFT_INCOMPLETE")
 
-            _ensure_daily_log(
+            ensure_daily_log(
                 connection,
                 self._id_factory,
                 user_id,
                 draft.payload.log_date,
                 now,
+                timezone_name,
             )
             position = _next_meal_position(
                 connection,
@@ -262,6 +267,29 @@ class SQLiteMealRepository:
                     catalog_food_id,
                     now,
                 )
+
+            connection.execute(
+                """
+                UPDATE daily_logs
+                SET planned_meal_count = MAX(
+                        planned_meal_count,
+                        (
+                            SELECT COUNT(*)
+                            FROM meals
+                            WHERE user_id = ? AND log_date = ?
+                        )
+                    ),
+                    updated_at = ?
+                WHERE user_id = ? AND log_date = ?
+                """,
+                (
+                    user_id,
+                    draft.payload.log_date,
+                    now,
+                    user_id,
+                    draft.payload.log_date,
+                ),
+            )
 
             confirmed = _load_meal(connection, meal_id)
             response = json.dumps(
@@ -439,24 +467,6 @@ def _validate_meal_header(payload: MealDraftInput) -> None:
         raise MealRepositoryError("MEAL_TYPE_INVALID")
     if payload.entry_method != "form":
         raise MealRepositoryError("MEAL_ENTRY_METHOD_INVALID")
-
-
-def _ensure_daily_log(
-    connection: sqlite3.Connection,
-    id_factory: IdFactory,
-    user_id: str,
-    log_date: str,
-    now: str,
-) -> None:
-    connection.execute(
-        """
-        INSERT INTO daily_logs (
-            id, user_id, log_date, planned_meal_count, created_at, updated_at
-        ) VALUES (?, ?, ?, 3, ?, ?)
-        ON CONFLICT(user_id, log_date) DO NOTHING
-        """,
-        (id_factory(), user_id, log_date, now, now),
-    )
 
 
 def _next_meal_position(

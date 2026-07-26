@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header
 
 from backend.api.dependencies import require_current_user
+from backend.api.preference_context import preferences_for
 from backend.api.meal_schemas import (
     DraftCustomFoodRequest,
     MealDraftItemRequest,
@@ -106,6 +107,7 @@ def confirm_draft(
         draft_id,
         expected_version=_draft_version(if_match),
         idempotency_key=_idempotency_key(idempotency_key),
+        timezone_name=preferences_for(user).timezone,
     )
     return ok(asdict(confirmed), processing_mode="deterministic")
 

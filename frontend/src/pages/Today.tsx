@@ -1,37 +1,31 @@
-import { Bot, CalendarDays, Dumbbell, Plus, Utensils } from 'lucide-react'
-import type { FormEvent } from 'react'
+import {
+  CalendarDays,
+  Dumbbell,
+  Flame,
+  Plus,
+  Utensils,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { CoachPanel } from '../components/CoachPanel'
-import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { TargetProgress } from '../components/TargetProgress'
-import { displayWeight, metricWeight, weightUnit } from '../domain/units'
 import { usePreferences } from '../hooks/usePreferences'
 import { useToday } from '../hooks/useToday'
 import { api } from '../services/api'
-import type { WorkoutRecord } from '../types'
-
-type EntryMode = 'smart' | 'workout'
-
-const emptyWorkout: Omit<WorkoutRecord, 'date'> = {
-  type: 'strength', exercise: '', muscle_group: '', sets: 0, reps: 0, weight: 0, duration_min: 0,
-}
+import type { NutritionValues, TargetProgress as TargetProgressType } from '../types'
 
 export function Today() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { preferences, localDate } = usePreferences()
+  const { localDate } = usePreferences()
   const [selectedDate, setSelectedDate] = useState(localDate())
-  const [entryMode, setEntryMode] = useState<EntryMode>('smart')
-  const [agentText, setAgentText] = useState('')
-  const [workout, setWorkout] = useState(emptyWorkout)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
   const { data, loading, error, refresh } = useToday(selectedDate)
+  const [updatingMealCount, setUpdatingMealCount] = useState(false)
+  const [mealCountError, setMealCountError] = useState<string | null>(null)
 
   const coachActions = useMemo(() => {
     const labels = {
@@ -44,33 +38,21 @@ export function Today() {
       .map((action) => ({ action, label: labels[action] }))
   }, [data?.coach_actions, t])
 
-  async function save(action: () => Promise<unknown>) {
-    setSaving(true)
-    setSaveError(null)
+  const progress = data
+    ? nutritionProgress(data.consumed, data.target, t)
+    : []
+
+  async function setPlannedMealCount(value: number) {
+    setUpdatingMealCount(true)
+    setMealCountError(null)
     try {
-      await action()
+      await api.setPlannedMealCount(selectedDate, value)
       await refresh()
-    } catch (err) {
-      setSaveError((err as Error).message)
+    } catch (cause) {
+      setMealCountError((cause as Error).message)
     } finally {
-      setSaving(false)
+      setUpdatingMealCount(false)
     }
-  }
-
-  async function submitSmart(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await save(async () => {
-      await api.addAgentEntry(selectedDate, agentText)
-      setAgentText('')
-    })
-  }
-
-  async function submitWorkout(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await save(async () => {
-      await api.addWorkout({ date: selectedDate, ...workout })
-      setWorkout(emptyWorkout)
-    })
   }
 
   return (
@@ -82,7 +64,12 @@ export function Today() {
         </div>
         <label className="date-picker">
           <CalendarDays size={18} />
-          <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+          <input
+            aria-label={t('today.date')}
+            type="date"
+            value={selectedDate}
+            onChange={(event) => setSelectedDate(event.target.value)}
+          />
         </label>
       </header>
 
@@ -92,66 +79,145 @@ export function Today() {
       {data ? (
         <div className="today-workspace">
           <div className="today-main">
-            <section className="target-grid" aria-label={t('today.targetsLabel')}>
-              {data.targets.map((target) => <TargetProgress key={target.label} target={target} />)}
+            <section className="target-grid nutrition-target-grid" aria-label={t('today.targetsLabel')}>
+              {progress.map((target) => <TargetProgress key={target.label} target={target} />)}
             </section>
 
-            <div className="daily-log-grid">
-              <section className="daily-log-section">
-                <header><Utensils size={18} /><h2>{t('today.meals')}</h2><span>{data.summary.meal_count}</span></header>
-                <div className="record-list">
-                  {data.meals.length ? data.meals.map((row, index) => (
-                    <div className="record-row" key={`${row.meal}-${row.food}-${index}`}>
-                      <Utensils size={16} /><span>{row.meal}</span><strong>{row.food}</strong>
-                      <small>{row.calories} kcal · {row.protein} {t('common.proteinUnit')}</small>
-                    </div>
-                  )) : <EmptyState label={t('today.noMeals')} />}
-                </div>
-              </section>
-              <section className="daily-log-section">
-                <header><Dumbbell size={18} /><h2>{t('today.training')}</h2><span>{data.summary.training_sessions}</span></header>
-                <div className="record-list">
-                  {data.workouts.length ? data.workouts.map((row, index) => (
-                    <div className="record-row" key={`${row.exercise}-${index}`}>
-                      <Dumbbell size={16} /><span>{row.type}</span><strong>{row.exercise}</strong>
-                      <small>{row.duration_min} {t('common.minutesShort')} · {row.muscle_group}{row.weight ? ` · ${displayWeight(row.weight, preferences.unit_system)} ${weightUnit(preferences.unit_system)}` : ''}</small>
-                    </div>
-                  )) : <EmptyState label={t('today.noTraining')} />}
-                </div>
-              </section>
-            </div>
-
-            <section className="entry-composer">
-              <header>
-                <div><Plus size={18} /><h2>{t('today.addRecord')}</h2></div>
-                <div className="entry-mode" aria-label={t('today.entryMethod')}>
-                  <button type="button" className={entryMode === 'smart' ? 'active' : ''} onClick={() => setEntryMode('smart')}><Bot size={16} />{t('today.smart')}</button>
-                  <button type="button" onClick={() => navigate(`/today/meal/new?date=${encodeURIComponent(selectedDate)}`)}><Utensils size={16} />{t('today.meal')}</button>
-                  <button type="button" className={entryMode === 'workout' ? 'active' : ''} onClick={() => setEntryMode('workout')}><Dumbbell size={16} />{t('today.training')}</button>
-                </div>
-              </header>
-              {saveError ? <p className="form-error">{saveError}</p> : null}
-              {entryMode === 'smart' ? (
-                <form className="record-form" onSubmit={(event) => void submitSmart(event)}>
-                  <textarea required placeholder={t('today.smartPlaceholder')} value={agentText} onChange={(event) => setAgentText(event.target.value)} />
-                  <button className="primary-button" type="submit" disabled={saving}>{t('today.parseAndSave')}</button>
-                </form>
-              ) : null}
-              {entryMode === 'workout' ? (
-                <form className="record-form compact-entry-form" onSubmit={(event) => void submitWorkout(event)}>
-                  <input required placeholder={t('today.exercise')} value={workout.exercise} onChange={(event) => setWorkout({ ...workout, exercise: event.target.value })} />
-                  <input required placeholder={t('today.muscleGroup')} value={workout.muscle_group} onChange={(event) => setWorkout({ ...workout, muscle_group: event.target.value })} />
-                  <input type="number" min="0" placeholder={t('today.sets')} value={workout.sets} onChange={(event) => setWorkout({ ...workout, sets: Number(event.target.value) })} />
-                  <input type="number" min="0" step="0.1" placeholder={t('logbook.weight', { unit: weightUnit(preferences.unit_system) })} value={displayWeight(workout.weight, preferences.unit_system)} onChange={(event) => setWorkout({ ...workout, weight: metricWeight(Number(event.target.value), preferences.unit_system) })} />
-                  <input type="number" min="0" placeholder={t('today.minutes')} value={workout.duration_min} onChange={(event) => setWorkout({ ...workout, duration_min: Number(event.target.value) })} />
-                  <button className="primary-button" type="submit" disabled={saving}>{t('today.saveTraining')}</button>
-                </form>
-              ) : null}
+            <section className="today-record-actions" aria-labelledby="today-add-record">
+              <div>
+                <span>{t('today.recordEyebrow')}</span>
+                <h2 id="today-add-record">{t('today.addRecord')}</h2>
+              </div>
+              <div>
+                <label className="planned-meal-count">
+                  <span>{t('today.plannedMeals')}</span>
+                  <select
+                    aria-label={t('today.plannedMeals')}
+                    value={data.planned_meal_count}
+                    disabled={updatingMealCount}
+                    onChange={(event) => void setPlannedMealCount(Number(event.target.value))}
+                  >
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map((count) => (
+                      <option key={count} value={count}>{count}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => navigate(`/today/meal/new?date=${encodeURIComponent(selectedDate)}`)}
+                >
+                  <Utensils size={17} />
+                  {t('today.addMeal')}
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => navigate(`/today/workout/new?date=${encodeURIComponent(selectedDate)}`)}
+                >
+                  <Plus size={17} />
+                  {t('today.addTraining')}
+                </button>
+              </div>
             </section>
+            {mealCountError ? <p className="form-error">{mealCountError}</p> : null}
+
+            {data.meals?.length ? (
+              <section className="daily-log-section">
+                <header>
+                  <Utensils size={18} />
+                  <h2>{t('today.meals')}</h2>
+                  <span>{t('today.mealCount', {
+                    recorded: data.recorded_meal_count,
+                    planned: data.planned_meal_count,
+                  })}</span>
+                </header>
+                <div className="record-list">
+                  {data.meals.map((meal) => (
+                    <div className="record-row today-meal-row" key={meal.id}>
+                      <Utensils size={16} />
+                      <span>{t(`mealEntry.types.${meal.meal_type}`, {
+                        defaultValue: meal.meal_type,
+                      })}</span>
+                      <strong>{meal.name}</strong>
+                      <small>
+                        {Math.round(meal.nutrition.calories)} kcal
+                        {' · '}
+                        {Math.round(meal.nutrition.protein)} {t('common.proteinUnit')}
+                        {' · '}
+                        {t('today.itemCount', { count: meal.item_count })}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {data.workouts?.length ? (
+              <section className="daily-log-section">
+                <header>
+                  <Dumbbell size={18} />
+                  <h2>{t('today.training')}</h2>
+                  <span>{data.workouts.length}</span>
+                </header>
+                <div className="record-list">
+                  {data.workouts.map((workout) => (
+                    <div className="record-row today-workout-row" key={workout.id}>
+                      <Dumbbell size={16} />
+                      <span>{workout.intensity
+                        ? t(`workoutEntry.intensities.${workout.intensity}`, {
+                          defaultValue: workout.intensity,
+                        })
+                        : t('today.training')}</span>
+                      <strong>{workout.title}</strong>
+                      <small>
+                        {workout.duration_min != null
+                          ? `${Math.round(workout.duration_min)} ${t('common.minutesShort')} · `
+                          : ''}
+                        {workout.calories != null ? (
+                          <>
+                            <Flame size={13} />
+                            {Math.round(workout.calories)} kcal
+                            {workout.contains_estimates
+                              ? ` · ${t('today.containsEstimates')}`
+                              : ''}
+                          </>
+                        ) : t('today.noCalorieEstimate')}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </div>
           <CoachPanel surface="today" date={selectedDate} actions={coachActions} />
         </div>
       ) : null}
     </div>
   )
+}
+
+function nutritionProgress(
+  consumed: NutritionValues,
+  target: NutritionValues | null,
+  t: (key: string) => string,
+): TargetProgressType[] {
+  return ([
+    ['calories', 'kcal'],
+    ['carbs', 'g'],
+    ['protein', 'g'],
+    ['fat', 'g'],
+  ] as const).map(([key, unit]) => {
+    const current = consumed[key]
+    const goal = target?.[key] ?? 0
+    const remaining = goal - current
+    return {
+      label: t(`today.nutrients.${key}`),
+      current,
+      target: goal,
+      unit,
+      remaining,
+      status: goal > 0 && current > goal ? 'over' : goal > 0 && current >= goal ? 'met' : 'under',
+    }
+  })
 }

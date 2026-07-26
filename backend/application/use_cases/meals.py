@@ -94,6 +94,7 @@ class MealService:
         *,
         expected_version: int,
         idempotency_key: str,
+        timezone_name: str = "UTC",
     ) -> ConfirmedMeal:
         canonical_key = _require_uuid(idempotency_key)
         fingerprint = _fingerprint(
@@ -111,6 +112,7 @@ class MealService:
                     expected_version=expected_version,
                     idempotency_key=canonical_key,
                     request_fingerprint=fingerprint,
+                    timezone_name=timezone_name,
                 )
             except MealRepositoryError as error:
                 raise _repository_error(error) from None

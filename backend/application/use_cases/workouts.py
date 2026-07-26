@@ -61,6 +61,13 @@ class WorkoutService:
     def get_draft(self, user_id: str, draft_id: str) -> WorkoutDraft | None:
         return self.repository.get_draft(user_id, draft_id)
 
+    def find_latest_draft(
+        self,
+        user_id: str,
+        log_date: str,
+    ) -> WorkoutDraft | None:
+        return self.repository.find_latest_draft(user_id, log_date)
+
     def update_draft(
         self,
         user_id: str,
@@ -94,6 +101,7 @@ class WorkoutService:
         *,
         expected_version: int,
         idempotency_key: str,
+        timezone_name: str = "UTC",
     ) -> ConfirmedWorkout:
         key = _uuid(idempotency_key)
         fingerprint = hashlib.sha256(
@@ -115,6 +123,7 @@ class WorkoutService:
                     expected_version=expected_version,
                     idempotency_key=key,
                     request_fingerprint=fingerprint,
+                    timezone_name=timezone_name,
                 )
             except WorkoutRepositoryError as error:
                 raise _error(error) from None

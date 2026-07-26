@@ -4,9 +4,12 @@ from dataclasses import asdict
 import re
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from datetime import date
+
+from fastapi import APIRouter, Depends, Header, Query
 
 from backend.api.dependencies import require_current_user
+from backend.api.preference_context import preferences_for
 from backend.api.utils import ok
 from backend.api.workout_schemas import (
     CardioItemRequest,
@@ -58,6 +61,19 @@ def create_draft(
 ):
     return ok(
         asdict(service.create_draft(user.user_id, _input(payload))),
+        processing_mode="deterministic",
+    )
+
+
+@router.get("", response_model=ApiResponse[WorkoutDraftResponse | None])
+def find_latest_draft(
+    log_date: date = Query(alias="date"),
+    user: AuthenticatedUser = Depends(require_current_user),
+    service: WorkoutService = Depends(get_workout_service),
+):
+    draft = service.find_latest_draft(user.user_id, log_date.isoformat())
+    return ok(
+        asdict(draft) if draft is not None else None,
         processing_mode="deterministic",
     )
 
@@ -120,6 +136,7 @@ def confirm_draft(
         draft_id,
         expected_version=_version(if_match),
         idempotency_key=_idempotency_key(idempotency_key),
+        timezone_name=preferences_for(user).timezone,
     )
     return ok(asdict(confirmed), processing_mode="deterministic")
 
@@ -138,6 +155,7 @@ def _input(payload: WorkoutDraftMutationRequest) -> WorkoutDraftInput:
             _strength(item) for item in payload.strength_exercises
         ),
         cardio_items=tuple(_cardio(item) for item in payload.cardio_items),
+        recovery_state=payload.recovery_state,
     )
 
 

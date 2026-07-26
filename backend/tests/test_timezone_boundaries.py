@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
+from backend.infrastructure.sqlite.runtime import initialize_database
 from backend.main import create_app
 
 
@@ -50,6 +51,7 @@ def build_client(monkeypatch) -> TestClient:
         lambda: datetime(2026, 7, 13, 0, 30, tzinfo=timezone.utc),
     )
     get_settings.cache_clear()
+    initialize_database()
     return TestClient(create_app())
 
 

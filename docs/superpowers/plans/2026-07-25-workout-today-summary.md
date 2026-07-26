@@ -93,38 +93,50 @@ Phase 4 preserves these boundaries:
 
 ## Task 5: SQLite Daily Summary
 
-- [ ] Add a read-model port/service/SQLite adapter for one authenticated day.
-- [ ] Return effective four-target snapshots, consumed calories/carbohydrates/
+- [x] Add a read-model port/service/SQLite adapter for one authenticated day.
+- [x] Return effective four-target snapshots, consumed calories/carbohydrates/
   protein/fat, planned and recorded meal counts, meal summaries, and optional
   workout summaries.
-- [ ] Do not subtract training calories from nutrition progress.
-- [ ] Hide empty meals and the training section when no session exists.
-- [ ] Keep the unauthenticated demo path on legacy files.
-- [ ] Replace authenticated `/today` reads with the SQLite read model.
-- [ ] Test timezone-selected dates, target history, empty days, meal-only days,
+- [x] Do not subtract training calories from nutrition progress.
+- [x] Hide empty meals and the training section when no session exists.
+- [x] Keep the unauthenticated demo path on legacy files.
+- [x] Replace authenticated `/today` reads with the SQLite read model.
+- [x] Test timezone-selected dates, target history, empty days, meal-only days,
   workout-only days, mixed days, owner isolation, and legacy compatibility.
-- [ ] Commit `feat: aggregate authenticated days from sqlite`.
+- [x] Add an owner-scoped daily-log update for `planned_meal_count` and
+  persistently raise it when confirmed meals exceed the plan.
+- [ ] Commit the aggregate with the Phase 4 product slice.
 
 ## Task 6: Workout Task Page And Today Product View
 
-- [ ] Add focused workout types, API client, recoverable draft hook, and tests.
-- [ ] Add `/today/workout/new?date=YYYY-MM-DD`.
-- [ ] Build a catalog-first task page with session metadata, separate strength
+- [x] Add focused workout types, API client, recoverable draft hook, and tests.
+- [x] Add `/today/workout/new?date=YYYY-MM-DD`.
+- [x] Build a catalog-first task page with session metadata, separate strength
   and cardio sections, compact set input, optional expanded per-set editing,
   deterministic estimate labels, draft save state, and explicit confirmation.
-- [ ] Keep numeric fields empty until the user enters values.
-- [ ] Support complete custom exercises when catalog search has no result.
-- [ ] Replace Today's inline workout form with route navigation.
-- [ ] Show four nutrition progress metrics, meal count vs planned meals,
+- [x] Keep numeric fields empty until the user enters values.
+- [x] Support complete custom exercises when catalog search has no result.
+- [x] Replace Today's inline workout form with route navigation.
+- [x] Show four nutrition progress metrics, an editable planned meal count,
+  recorded meal count,
   confirmed meal rows, and training only when present.
-- [ ] Add complete English/Chinese strings and responsive styles.
-- [ ] Run focused and complete frontend tests plus the production build.
+- [x] Add complete English/Chinese strings and responsive styles.
+- [x] Persist recovery by account and editable date, preserve an in-flight
+  idempotency key across refresh, discover the latest owner-scoped server
+  draft by date, and save bounded incomplete editor state on the server.
+- [x] Run focused and complete frontend tests and TypeScript compilation.
+  Evidence: 149 tests pass and `tsc -b` exits zero. Vite production bundling
+  is still pending because the managed Windows sandbox denies the esbuild
+  child process with `spawn EPERM`.
 - [ ] Commit `feat: build workout entry and sqlite today view`.
 
 ## Task 7: Integration And Acceptance
 
-- [ ] Run the complete backend suite.
-- [ ] Run the complete frontend suite and production build.
+- [ ] Run the complete backend suite. Relevant API tests pass 32/32; the full
+  suite remains blocked by a managed-sandbox ACL denial on pytest's temporary
+  directory, not by an assertion failure.
+- [ ] Run the complete frontend suite and production build. The suite passes
+  149/149 and TypeScript passes; production bundling is pending as noted above.
 - [ ] Rebuild Docker and verify backend/frontend health.
 - [ ] Desktop acceptance: search strength/cardio exercises, add a mixed
   session, confirm it, and verify Today shows four nutrition values plus
