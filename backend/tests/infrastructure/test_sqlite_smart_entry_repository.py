@@ -171,3 +171,57 @@ def test_smart_entry_draft_bounds_raw_text_and_candidate_count():
         assert raised.value.code == "SMART_ENTRY_CANDIDATES_INVALID"
     finally:
         _cleanup(path)
+
+
+def test_agent_state_writes_are_version_checked_and_preserve_failure_payload():
+    database, path = _database()
+    repository = SQLiteSmartEntryRepository(
+        database,
+        clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
+        id_factory=lambda: "smart-draft-agent",
+    )
+    try:
+        created = repository.create_draft(
+            "user-a",
+            _payload(),
+            expires_at="2026-08-25T08:00:00Z",
+        )
+        failed = repository.mark_agent_failed(
+            "user-a",
+            created.id,
+            expected_version=1,
+            prompt_version="smart-entry-analysis-v1",
+            model="model-a",
+            metadata={"error_code": "MODEL_TIMEOUT"},
+        )
+        assert failed.version == 2
+        assert failed.agent_status == "failed"
+        assert failed.payload == created.payload
+
+        completed = repository.save_analysis(
+            "user-a",
+            created.id,
+            expected_version=2,
+            payload=_payload(raw_text="早餐：燕麦 50g，已分析"),
+            prompt_version="smart-entry-analysis-v1",
+            model="model-b",
+            metadata={"usage": {"total_tokens": 20}},
+        )
+        assert completed.version == 3
+        assert completed.agent_status == "completed"
+        assert completed.agent_model == "model-b"
+        assert completed.agent_metadata["usage"]["total_tokens"] == 20
+
+        with pytest.raises(SmartEntryRepositoryError) as raised:
+            repository.save_analysis(
+                "user-a",
+                created.id,
+                expected_version=2,
+                payload=_payload(),
+                prompt_version="smart-entry-analysis-v1",
+                model="model-b",
+                metadata={},
+            )
+        assert raised.value.code == "DRAFT_VERSION_CONFLICT"
+    finally:
+        _cleanup(path)

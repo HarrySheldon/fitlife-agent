@@ -4,6 +4,10 @@ import json
 from typing import Any
 
 from backend.agent.planner import PlannerRoute
+from backend.application.ports.structured_model_gateway import (
+    StructuredModelResult,
+    StructuredOutput,
+)
 from backend.config import Settings, get_settings
 
 
@@ -45,6 +49,28 @@ class OpenAIResponsesAdapter:
         if not text:
             raise ValueError("Writer response did not contain text")
         return text
+
+    def parse_structured(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        response_model: type[StructuredOutput],
+    ) -> StructuredModelResult:
+        response = self.client.responses.parse(
+            model=self.model,
+            instructions=instructions,
+            input=input_text,
+            text_format=response_model,
+        )
+        parsed = _extract_parsed_output(response)
+        if parsed is None:
+            raise ValueError("Response did not contain structured output")
+        return StructuredModelResult(
+            output=response_model.model_validate(parsed),
+            model=str(getattr(response, "model", None) or self.model),
+            usage=_responses_usage(getattr(response, "usage", None)),
+        )
 
     def list_models(self) -> list[str]:
         return _model_ids(self.client.models.list())
@@ -131,4 +157,19 @@ def _probe_tool() -> dict:
             "additionalProperties": False,
         },
         "strict": True,
+    }
+
+
+def _responses_usage(value: Any) -> dict[str, int]:
+    if value is None:
+        return {}
+    fields = {
+        "input_tokens": getattr(value, "input_tokens", None),
+        "output_tokens": getattr(value, "output_tokens", None),
+        "total_tokens": getattr(value, "total_tokens", None),
+    }
+    return {
+        key: int(item)
+        for key, item in fields.items()
+        if isinstance(item, int) and not isinstance(item, bool) and item >= 0
     }

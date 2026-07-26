@@ -178,6 +178,113 @@ class SQLiteSmartEntryRepository:
                 (draft_id, user_id),
             )
 
+    def save_analysis(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        payload: SmartEntryDraftPayload,
+        prompt_version: str,
+        model: str,
+        metadata: dict[str, object],
+    ) -> SmartEntryDraft:
+        return self._update_agent_state(
+            user_id,
+            draft_id,
+            expected_version=expected_version,
+            payload_json=_payload_json(payload),
+            status="completed",
+            prompt_version=prompt_version,
+            model=model,
+            metadata=metadata,
+        )
+
+    def mark_agent_failed(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        prompt_version: str,
+        model: str | None,
+        metadata: dict[str, object],
+    ) -> SmartEntryDraft:
+        return self._update_agent_state(
+            user_id,
+            draft_id,
+            expected_version=expected_version,
+            payload_json=None,
+            status="failed",
+            prompt_version=prompt_version,
+            model=model,
+            metadata=metadata,
+        )
+
+    def _update_agent_state(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        payload_json: str | None,
+        status: str,
+        prompt_version: str,
+        model: str | None,
+        metadata: dict[str, object],
+    ) -> SmartEntryDraft:
+        metadata_json = _metadata_json(metadata)
+        with self.database.transaction() as connection:
+            now_value = self._clock()
+            now = _timestamp(now_value)
+            _require_draft(
+                connection,
+                user_id,
+                draft_id,
+                expected_version=expected_version,
+                now=now_value,
+            )
+            cursor = connection.execute(
+                """
+                UPDATE record_drafts
+                SET payload_json = COALESCE(?, payload_json),
+                    version = version + 1,
+                    agent_status = ?,
+                    agent_prompt_version = ?,
+                    agent_model = ?,
+                    agent_metadata_json = ?,
+                    updated_at = ?
+                WHERE id = ? AND user_id = ? AND kind = 'smart_entry'
+                  AND version = ? AND expires_at > ?
+                """,
+                (
+                    payload_json,
+                    status,
+                    prompt_version,
+                    model,
+                    metadata_json,
+                    now,
+                    draft_id,
+                    user_id,
+                    expected_version,
+                    now,
+                ),
+            )
+            if cursor.rowcount != 1:
+                _require_draft(
+                    connection,
+                    user_id,
+                    draft_id,
+                    expected_version=expected_version,
+                    now=now_value,
+                )
+                raise SmartEntryRepositoryError("DRAFT_UPDATE_FAILED")
+            row = connection.execute(
+                "SELECT * FROM record_drafts WHERE id = ?",
+                (draft_id,),
+            ).fetchone()
+        return _draft(row)
+
 
 def _payload_json(payload: SmartEntryDraftPayload) -> str:
     if (
@@ -211,6 +318,20 @@ def _payload_json(payload: SmartEntryDraftPayload) -> str:
     )
     if len(serialized.encode("utf-8")) > _MAX_JSON_BYTES:
         raise SmartEntryRepositoryError("SMART_ENTRY_DRAFT_TOO_LARGE")
+    return serialized
+
+
+def _metadata_json(value: dict[str, object]) -> str:
+    if not isinstance(value, dict):
+        raise SmartEntryRepositoryError("SMART_ENTRY_AGENT_METADATA_INVALID")
+    serialized = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    if len(serialized.encode("utf-8")) > 32 * 1024:
+        raise SmartEntryRepositoryError("SMART_ENTRY_AGENT_METADATA_INVALID")
     return serialized
 
 

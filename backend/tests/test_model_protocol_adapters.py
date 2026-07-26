@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+from pydantic import BaseModel, ConfigDict
+
 from backend.agent.planner import PlannerRoute
 from backend.domain.model_connection import ModelConnection
 from backend.infrastructure.model_gateway.factory import create_model_gateway
@@ -12,9 +14,22 @@ class ResponsesApi:
         self.create_calls: list[dict] = []
 
     def parse(self, **kwargs):
-        route = PlannerRoute(intent="knowledge_qa")
-        content = SimpleNamespace(type="output_text", parsed=route)
-        return SimpleNamespace(output=[SimpleNamespace(type="message", content=[content])])
+        output_type = kwargs["text_format"]
+        parsed = (
+            StrictExample(value="ok")
+            if output_type is StrictExample
+            else PlannerRoute(intent="knowledge_qa")
+        )
+        content = SimpleNamespace(type="output_text", parsed=parsed)
+        return SimpleNamespace(
+            output=[SimpleNamespace(type="message", content=[content])],
+            model="resolved-responses-model",
+            usage=SimpleNamespace(
+                input_tokens=11,
+                output_tokens=7,
+                total_tokens=18,
+            ),
+        )
 
     def create(self, **kwargs):
         self.create_calls.append(kwargs)
@@ -31,8 +46,22 @@ class ChatCompletionsApi:
         self.create_calls: list[dict] = []
 
     def parse(self, **kwargs):
-        message = SimpleNamespace(parsed=PlannerRoute(intent="knowledge_qa"), content=None)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+        output_type = kwargs["response_format"]
+        parsed = (
+            StrictExample(value="ok")
+            if output_type is StrictExample
+            else PlannerRoute(intent="knowledge_qa")
+        )
+        message = SimpleNamespace(parsed=parsed, content=None)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message)],
+            model="resolved-chat-model",
+            usage=SimpleNamespace(
+                prompt_tokens=13,
+                completion_tokens=5,
+                total_tokens=18,
+            ),
+        )
 
     def create(self, **kwargs):
         self.create_calls.append(kwargs)
@@ -47,6 +76,12 @@ class ChatCompletionsApi:
 class ModelsApi:
     def list(self):
         return SimpleNamespace(data=[SimpleNamespace(id="model-b"), SimpleNamespace(id="model-a")])
+
+
+class StrictExample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str
 
 
 def test_responses_adapter_supports_unified_planner_writer_list_and_probe():
@@ -88,6 +123,43 @@ def test_chat_completions_adapter_supports_unified_planner_writer_list_and_probe
     assert adapter.list_models() == ["model-a", "model-b"]
     adapter.probe_tool_call()
     assert completions.create_calls[-1]["tool_choice"]["function"]["name"] == "connection_probe"
+
+
+def test_both_protocols_return_validated_structured_output_and_usage():
+    responses_api = ResponsesApi()
+    responses = OpenAIResponsesAdapter(
+        client=SimpleNamespace(responses=responses_api),
+        model="response-model",
+    )
+    chat_api = ChatCompletionsApi()
+    chat = OpenAIChatCompletionsAdapter(
+        client=SimpleNamespace(
+            chat=SimpleNamespace(completions=chat_api),
+        ),
+        model="chat-model",
+    )
+
+    response_result = responses.parse_structured(
+        instructions="Return strict output.",
+        input_text="input",
+        response_model=StrictExample,
+    )
+    chat_result = chat.parse_structured(
+        instructions="Return strict output.",
+        input_text="input",
+        response_model=StrictExample,
+    )
+
+    assert response_result.output == StrictExample(value="ok")
+    assert response_result.model == "resolved-responses-model"
+    assert response_result.usage == {
+        "input_tokens": 11,
+        "output_tokens": 7,
+        "total_tokens": 18,
+    }
+    assert chat_result.output == StrictExample(value="ok")
+    assert chat_result.model == "resolved-chat-model"
+    assert chat_result.usage["total_tokens"] == 18
 
 
 def test_factory_uses_explicit_protocol_without_auto_detection():

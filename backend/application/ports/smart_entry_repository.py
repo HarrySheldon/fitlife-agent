@@ -69,4 +69,27 @@ class SmartEntryRepository(Protocol):
         payload: SmartEntryDraftPayload,
     ) -> SmartEntryDraft: ...
 
+    def save_analysis(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        payload: SmartEntryDraftPayload,
+        prompt_version: str,
+        model: str,
+        metadata: dict[str, object],
+    ) -> SmartEntryDraft: ...
+
+    def mark_agent_failed(
+        self,
+        user_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        prompt_version: str,
+        model: str | None,
+        metadata: dict[str, object],
+    ) -> SmartEntryDraft: ...
+
     def delete_draft(self, user_id: str, draft_id: str) -> None: ...

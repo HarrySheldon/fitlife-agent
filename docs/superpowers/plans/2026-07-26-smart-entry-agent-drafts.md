@@ -107,7 +107,7 @@
 - [x] Bound raw text, candidates, assumptions, and total JSON size.
 - [x] Include smart drafts in existing account deletion while keeping account export excluded.
 - [x] Test expiry, owner isolation, conflicts, malformed JSON defense, and lifecycle locking.
-- [ ] Commit `feat: persist smart entry drafts`.
+- [x] Commit `feat: persist smart entry drafts` (`ebc3cba`).
 
 ## Task 4: Strict Agent Analysis
 
@@ -118,19 +118,19 @@
 - Modify both model adapters and their tests.
 - Test `backend/tests/application/test_smart_entry_analysis.py`.
 
-- [ ] Define prompt version `smart-entry-analysis-v1`.
-- [ ] Define strict response models with `extra='forbid'`:
+- [x] Define prompt version `smart-entry-analysis-v1`.
+- [x] Define strict response models with `extra='forbid'`:
   - food suggestions: concrete value, range, basis, serving assumption, and assumptions;
   - exercise suggestions: canonical name, type, primary/secondary muscles, optional MET, and assumptions;
   - no sets/reps/load/duration/device-calorie properties.
-- [ ] Send only the unresolved source segments, selected locale, and minimum profile fields required for deterministic post-validation.
-- [ ] Parse through Responses `responses.parse(..., text_format=...)` or Chat Completions `chat.completions.parse(..., response_format=...)`.
-- [ ] Return model ID and token usage through `StructuredModelResult`.
-- [ ] Run no database transaction while waiting for the model.
-- [ ] Merge only against the original draft version; discard stale results with `409`.
-- [ ] Preserve the draft and set `agent_status='failed'` on normalized model errors.
-- [ ] Require explicit user acceptance before an Agent estimate becomes confirmable.
-- [ ] Test no configuration, disabled model, timeout, authentication, rate limit, invalid structure, extra fields, stale results, and successful merge.
+- [x] Send only the unresolved source segments, selected locale, and minimum profile fields required for deterministic post-validation.
+- [x] Parse through Responses `responses.parse(..., text_format=...)` or Chat Completions `chat.completions.parse(..., response_format=...)`.
+- [x] Return model ID and token usage through `StructuredModelResult`.
+- [x] Run no database transaction while waiting for the model.
+- [x] Merge only against the original draft version; discard stale results with `409`.
+- [x] Preserve the draft and set `agent_status='failed'` on normalized model errors.
+- [x] Require explicit user acceptance before an Agent estimate becomes confirmable.
+- [x] Test no configuration, timeout, authentication, rate limit, invalid structure, extra fields, stale results, and successful merge; disabled model uses the same injected `ApplicationError` path as existing model settings tests.
 - [ ] Commit `feat: analyze unresolved smart entry fields`.
 
 ## Task 5: Atomic Multi-Record Confirmation
