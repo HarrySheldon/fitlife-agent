@@ -120,6 +120,7 @@ def update_draft(
         draft_id,
         expected_version=_version(if_match),
         payload=_payload(payload),
+        weight_kg=_weight(user.user_id),
     )
     return ok(asdict(draft), processing_mode="deterministic")
 

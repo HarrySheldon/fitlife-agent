@@ -3,11 +3,12 @@ import {
   Dumbbell,
   Flame,
   Plus,
+  Sparkles,
   Utensils,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { CoachPanel } from '../components/CoachPanel'
 import { ErrorState } from '../components/ErrorState'
@@ -21,8 +22,11 @@ import type { NutritionValues, TargetProgress as TargetProgressType } from '../t
 export function Today() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const { localDate } = usePreferences()
-  const [selectedDate, setSelectedDate] = useState(localDate())
+  const [selectedDate, setSelectedDate] = useState(
+    () => validDate(params.get('date')) ?? localDate(),
+  )
   const { data, loading, error, refresh } = useToday(selectedDate)
   const [updatingMealCount, setUpdatingMealCount] = useState(false)
   const [mealCountError, setMealCountError] = useState<string | null>(null)
@@ -118,6 +122,14 @@ export function Today() {
                   <Plus size={17} />
                   {t('today.addTraining')}
                 </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => navigate(`/today/smart-entry?date=${encodeURIComponent(selectedDate)}`)}
+                >
+                  <Sparkles size={17} />
+                  {t('today.smartEntry')}
+                </button>
               </div>
             </section>
             {mealCountError ? <p className="form-error">{mealCountError}</p> : null}
@@ -195,6 +207,10 @@ export function Today() {
       ) : null}
     </div>
   )
+}
+
+function validDate(value: string | null): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
 }
 
 function nutritionProgress(

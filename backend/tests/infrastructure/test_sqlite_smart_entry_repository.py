@@ -533,3 +533,44 @@ def test_confirmation_rejects_unaccepted_agent_estimates_before_writing():
             ).fetchone()["count"] == 0
     finally:
         _cleanup(path)
+
+
+def test_confirmation_rejects_cardio_without_device_calories_or_met():
+    database, path = _database()
+    repository = SQLiteSmartEntryRepository(
+        database,
+        clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
+    )
+    candidate = replace(
+        _cardio_candidate("cardio-no-energy"),
+        values={
+            **_cardio_candidate("cardio-no-energy").values,
+            "device_calories": None,
+            "met": None,
+            "estimated_calories": None,
+        },
+    )
+    try:
+        draft = repository.create_draft(
+            "user-a",
+            _confirmation_payload((candidate,)),
+            expires_at="2026-08-25T08:00:00Z",
+        )
+
+        with pytest.raises(SmartEntryRepositoryError) as raised:
+            repository.confirm(
+                "user-a",
+                draft.id,
+                expected_version=1,
+                idempotency_key="key-cardio-energy",
+                request_fingerprint="fingerprint-cardio-energy",
+            )
+
+        assert raised.value.code == "SMART_ENTRY_DRAFT_INCOMPLETE"
+        with database.connection() as connection:
+            assert connection.execute(
+                "SELECT COUNT(*) AS count FROM training_sessions"
+            ).fetchone()["count"] == 0
+        assert repository.get_draft("user-a", draft.id) is not None
+    finally:
+        _cleanup(path)

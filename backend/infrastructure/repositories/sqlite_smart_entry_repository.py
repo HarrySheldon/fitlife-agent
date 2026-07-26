@@ -770,6 +770,11 @@ def _validate_selected_candidates(
             )
             if not _positive(values["duration_min"]):
                 raise SmartEntryRepositoryError("SMART_ENTRY_DRAFT_INCOMPLETE")
+            if not (
+                _nonnegative(values.get("device_calories"))
+                or _positive(values.get("met"))
+            ):
+                raise SmartEntryRepositoryError("SMART_ENTRY_DRAFT_INCOMPLETE")
         else:
             raise SmartEntryRepositoryError("SMART_ENTRY_DRAFT_INCOMPLETE")
 

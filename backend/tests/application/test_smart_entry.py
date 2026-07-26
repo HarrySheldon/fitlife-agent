@@ -1,8 +1,12 @@
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
-from backend.application.ports.smart_entry_repository import SmartEntryDraft
+from backend.application.ports.smart_entry_repository import (
+    SmartEntryDraft,
+    SmartEntryDraftPayload,
+)
 from backend.application.ports.exercise_catalog_repository import (
     ExerciseCatalogItem,
 )
@@ -202,3 +206,45 @@ def test_confirm_draft_validates_uuid_and_passes_a_stable_fingerprint():
     assert first["idempotency_key"] == key
     assert first["request_fingerprint"] == second["request_fingerprint"]
     assert first["timezone_name"] == "Asia/Shanghai"
+
+
+def test_update_reloads_selected_catalog_values_instead_of_trusting_client():
+    repository = Mock()
+    repository.update_draft.return_value = Mock(spec=SmartEntryDraft)
+    foods = Mock()
+    foods.search.return_value = (
+        _food("oats-a", "Rolled oats", aliases=("燕麦",)),
+        _food("oats-b", "Steel-cut oats", aliases=("燕麦",)),
+    )
+    exercises = Mock()
+    candidate = resolve_candidates(
+        "user-1",
+        parse_entry_text("早餐：燕麦 50g"),
+        food_catalog=foods,
+        exercise_catalog=exercises,
+        weight_kg=70,
+    )[0]
+    tampered = replace(
+        candidate,
+        selected_catalog_id="oats-b",
+        values={**candidate.values, "calories": 99_999},
+    )
+    service = SmartEntryService(repository, foods, exercises)
+
+    service.update_draft(
+        "user-1",
+        "draft-1",
+        expected_version=1,
+        payload=SmartEntryDraftPayload(
+            log_date="2026-07-26",
+            raw_text="早餐：燕麦 50g",
+            parser_version="smart-entry-parser-v1",
+            candidates=(tampered,),
+        ),
+        weight_kg=70,
+    )
+
+    saved = repository.update_draft.call_args.kwargs["payload"].candidates[0]
+    assert saved.selected_catalog_id == "oats-b"
+    assert saved.values["calories"] == 190
+    assert saved.issues == ()

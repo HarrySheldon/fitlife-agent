@@ -172,7 +172,7 @@
 - [x] Localize stable errors while preserving codes.
 - [x] Deprecate authenticated writes through `/calendar/agent-entry`; it must not create CSV records for signed-in users.
 - [x] Test OpenAPI contracts, auth, validation, owner isolation, conflicts, and processing mode.
-- [ ] Commit `feat: expose smart entry draft workflow`.
+- [x] Commit `feat: expose smart entry draft workflow` (`e6374ab`).
 
 ## Task 7: Smart Entry Task Page
 
@@ -181,17 +181,17 @@
 - Create frontend files from the file map.
 - Test `frontend/src/pages/SmartEntry.test.tsx`, `frontend/src/hooks/useSmartEntryDraft.test.tsx`, and `frontend/src/services/smartEntryApi.test.ts`.
 
-- [ ] Add `/today/smart-entry?date=YYYY-MM-DD` and a Today action.
-- [ ] Start with a large multiline text input and deterministic Parse command.
-- [ ] Show each candidate as a selectable unframed row with source, issues, assumptions, and candidate choices.
-- [ ] Provide labeled multiline fields rather than one compressed row.
-- [ ] Keep unknown numeric values empty.
-- [ ] Enable Analyze only when unresolved candidates exist and only after explicit click.
-- [ ] Preserve deterministic candidates and local edits when Agent analysis fails.
-- [ ] Require explicit acceptance of every Agent-estimated food or exercise value.
-- [ ] Confirm only selected complete candidates and navigate to the selected day after success.
-- [ ] Persist confirmation replay state across refresh with account/date-scoped recovery keys.
-- [ ] Add complete Chinese/English strings and responsive styles with no horizontal overflow at `390x844`.
+- [x] Add `/today/smart-entry?date=YYYY-MM-DD` and a Today action.
+- [x] Start with a large multiline text input and deterministic Parse command.
+- [x] Show each candidate as a selectable unframed row with source, issues, assumptions, and candidate choices.
+- [x] Provide labeled multiline fields rather than one compressed row.
+- [x] Keep unknown numeric values empty.
+- [x] Enable Analyze only when unresolved candidates exist and only after explicit click.
+- [x] Preserve deterministic candidates and local edits when Agent analysis fails.
+- [x] Require explicit acceptance of every Agent-estimated food or exercise value.
+- [x] Confirm only selected complete candidates and navigate to the selected day after success.
+- [x] Persist confirmation replay state across refresh with account/date-scoped recovery keys.
+- [x] Add complete Chinese/English strings and responsive styles with no horizontal overflow at `390x844`.
 - [ ] Commit `feat: build smart entry review task`.
 
 ## Task 8: Phase Verification

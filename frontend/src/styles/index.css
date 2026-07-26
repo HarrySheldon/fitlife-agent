@@ -3771,6 +3771,284 @@ pre {
   margin-top: 18px;
 }
 
+.smart-entry-page {
+  width: min(100%, 1380px);
+  margin: 0 auto;
+}
+
+.smart-entry-header {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 180px;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #cfc4b3;
+}
+
+.smart-entry-header > div > span,
+.smart-review-pane > header > div > span {
+  display: block;
+  color: #216869;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.smart-entry-header h1 {
+  margin: 4px 0 0;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.smart-entry-header label,
+.smart-source-pane > label {
+  display: grid;
+  gap: 6px;
+  color: #5d574f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.smart-entry-header input,
+.smart-source-pane textarea,
+.smart-field input,
+.smart-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #bcb3a6;
+  border-radius: 6px;
+  background: #fff;
+  color: #22201d;
+}
+
+.smart-entry-header input,
+.smart-field input,
+.smart-field select {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.smart-entry-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.7fr);
+  min-height: 620px;
+}
+
+.smart-source-pane {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  padding: 24px 24px 24px 0;
+  border-right: 1px solid #cfc4b3;
+}
+
+.smart-source-pane > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #216869;
+}
+
+.smart-source-pane h2,
+.smart-review-pane h2 {
+  margin: 0;
+  color: #22201d;
+  font-size: 20px;
+}
+
+.smart-source-pane textarea {
+  min-height: 260px;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.smart-source-pane .primary-button,
+.smart-source-pane .text-button {
+  justify-content: center;
+  width: 100%;
+}
+
+.destructive-text {
+  color: #9b3a33;
+}
+
+.smart-review-pane {
+  min-width: 0;
+  padding: 24px 0 24px 28px;
+}
+
+.smart-review-pane > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #cfc4b3;
+}
+
+.smart-review-pane > header > span {
+  color: #6d665c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.smart-candidate-list {
+  display: grid;
+}
+
+.smart-candidate-row {
+  min-width: 0;
+  padding: 22px 0;
+  border-bottom: 1px solid #d8cebf;
+}
+
+.smart-candidate-heading {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(100px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.smart-candidate-select,
+.smart-estimate-acceptance,
+.smart-checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #34312d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.smart-candidate-select input,
+.smart-estimate-acceptance input,
+.smart-checkbox-field input {
+  width: 17px;
+  height: 17px;
+  accent-color: #216869;
+}
+
+.smart-candidate-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #216869;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.smart-candidate-source {
+  min-width: 0;
+  overflow: hidden;
+  color: #777066;
+  font-size: 12px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-candidate-raw {
+  margin: 11px 0 16px;
+  color: #3f3a34;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.smart-candidate-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.smart-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.smart-field > span {
+  color: #5d574f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.smart-field-wide {
+  grid-column: span 2;
+}
+
+.smart-field input:disabled,
+.smart-field select:disabled {
+  background: #e9e5dc;
+  color: #5f5a52;
+}
+
+.smart-checkbox-field {
+  align-self: end;
+  min-height: 40px;
+  padding: 0 4px;
+}
+
+.smart-candidate-assumptions {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed #cfc4b3;
+  color: #5d574f;
+  font-size: 13px;
+}
+
+.smart-candidate-assumptions ul,
+.smart-candidate-issues ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.smart-estimate-acceptance {
+  margin-top: 16px;
+  color: #6b4a1f;
+}
+
+.smart-candidate-issues {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+  color: #9b3a33;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.smart-entry-empty {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
+  gap: 8px;
+  color: #777066;
+  text-align: center;
+}
+
+.smart-entry-empty strong {
+  color: #34312d;
+}
+
+.smart-review-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 0;
+  border-top: 1px solid #cfc4b3;
+  background: #f4f1ea;
+}
+
 @media (max-width: 1120px) {
   .meal-entry-header {
     grid-template-columns: 40px minmax(180px, 1fr) repeat(2, minmax(145px, 0.7fr));
@@ -3947,5 +4225,77 @@ pre {
 
   .workout-draft-actions {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .smart-entry-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .smart-source-pane {
+    padding: 20px 0;
+    border-right: 0;
+    border-bottom: 1px solid #cfc4b3;
+  }
+
+  .smart-source-pane textarea {
+    min-height: 190px;
+  }
+
+  .smart-review-pane {
+    padding: 22px 0 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .smart-entry-header {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .smart-entry-header > label {
+    grid-column: 1 / -1;
+  }
+
+  .smart-candidate-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .smart-candidate-source {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  .smart-candidate-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .smart-field-wide {
+    grid-column: 1 / -1;
+  }
+
+  .smart-candidate-assumptions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .smart-review-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .smart-review-actions button {
+    justify-content: center;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .smart-candidate-fields,
+  .smart-review-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .smart-field-wide {
+    grid-column: auto;
   }
 }

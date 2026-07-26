@@ -20,6 +20,7 @@ import { SecuritySettings } from '../pages/settings/SecuritySettings'
 import { SessionSettings } from '../pages/settings/SessionSettings'
 import { SettingsHome } from '../pages/settings/SettingsHome'
 import { Today } from '../pages/Today'
+import { SmartEntry } from '../pages/SmartEntry'
 import { WorkoutEntry } from '../pages/WorkoutEntry'
 
 export function AppRoutes() {
@@ -33,6 +34,7 @@ export function AppRoutes() {
             <Route path="/" element={<Today />} />
             <Route path="/today/meal/new" element={<MealEntry />} />
             <Route path="/today/workout/new" element={<WorkoutEntry />} />
+            <Route path="/today/smart-entry" element={<SmartEntry />} />
             <Route path="/logbook" element={<Logbook />} />
             <Route path="/review" element={<Review />} />
             <Route path="/plan" element={<Plan />} />

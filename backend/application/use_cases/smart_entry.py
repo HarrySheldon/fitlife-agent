@@ -139,17 +139,90 @@ class SmartEntryService:
         *,
         expected_version: int,
         payload: SmartEntryDraftPayload,
+        weight_kg: float | None = None,
     ) -> SmartEntryDraft:
+        normalized = replace(
+            payload,
+            candidates=tuple(
+                self._normalize_catalog_selection(
+                    user_id,
+                    candidate,
+                    weight_kg=weight_kg,
+                )
+                for candidate in payload.candidates
+            ),
+        )
         with self._mutation_scope(user_id):
             try:
                 return self.repository.update_draft(
                     user_id,
                     draft_id,
                     expected_version=expected_version,
-                    payload=payload,
+                    payload=normalized,
                 )
             except SmartEntryRepositoryError as error:
                 raise _service_error(error) from None
+
+    def _normalize_catalog_selection(
+        self,
+        user_id: str,
+        candidate: ResolvedCandidate,
+        *,
+        weight_kg: float | None,
+    ) -> ResolvedCandidate:
+        if candidate.selected_catalog_id is None:
+            return candidate
+        segment = _segment_from_candidate(candidate)
+        if candidate.kind == "food":
+            results = self.food_catalog.search(
+                user_id,
+                candidate.subject_text,
+                limit=50,
+            )
+            selected = tuple(
+                item
+                for item in results
+                if item.id == candidate.selected_catalog_id
+            )
+            if len(selected) != 1:
+                raise SmartEntryServiceError(
+                    "SMART_ENTRY_CATALOG_NOT_VISIBLE",
+                    status_code=422,
+                )
+            resolved = _food_candidate(segment, selected, selected)
+        elif candidate.kind in {"strength", "cardio"}:
+            results = self.exercise_catalog.search(
+                user_id,
+                candidate.subject_text,
+                limit=50,
+            )
+            selected = tuple(
+                item
+                for item in results
+                if item.id == candidate.selected_catalog_id
+                and item.exercise_type == candidate.kind
+            )
+            if len(selected) != 1:
+                raise SmartEntryServiceError(
+                    "SMART_ENTRY_CATALOG_NOT_VISIBLE",
+                    status_code=422,
+                )
+            resolved = _exercise_candidate(
+                segment,
+                selected,
+                selected,
+                weight_kg=weight_kg,
+            )
+        else:
+            raise SmartEntryServiceError(
+                "SMART_ENTRY_CATALOG_NOT_VISIBLE",
+                status_code=422,
+            )
+        return replace(
+            resolved,
+            selected=candidate.selected,
+            agent_estimate_accepted=False,
+        )
 
     def delete_draft(self, user_id: str, draft_id: str) -> None:
         with self._mutation_scope(user_id):
@@ -522,6 +595,59 @@ def _explicit_values(segment: ParsedSegment) -> dict[str, object]:
         "duration_min": segment.duration_min,
         "device_calories": segment.device_calories,
     }
+
+
+def _segment_from_candidate(
+    candidate: ResolvedCandidate,
+) -> ParsedSegment:
+    values = candidate.values
+    resolved_issue_codes = {
+        "SMART_ENTRY_CATALOG_UNMATCHED",
+        "SMART_ENTRY_CATALOG_AMBIGUOUS",
+    }
+    if values.get("amount") is not None and values.get("unit"):
+        resolved_issue_codes.add("SMART_ENTRY_FOOD_AMOUNT_REQUIRED")
+    if values.get("set_count") is not None and values.get("reps") is not None:
+        resolved_issue_codes.add("SMART_ENTRY_STRENGTH_VOLUME_REQUIRED")
+    if values.get("duration_min") is not None:
+        resolved_issue_codes.add("SMART_ENTRY_CARDIO_DURATION_REQUIRED")
+    return ParsedSegment(
+        id=candidate.id,
+        kind=candidate.kind,
+        raw_text=candidate.raw_text,
+        normalized_text=candidate.normalized_text,
+        subject_text=candidate.subject_text,
+        issues=tuple(
+            code
+            for code in candidate.issues
+            if code not in resolved_issue_codes
+        ),
+        meal_context=candidate.meal_context,
+        food_amount=_optional_number(values.get("amount")),
+        food_unit=_optional_text(values.get("unit")),
+        set_count=_optional_integer(values.get("set_count")),
+        reps=_optional_integer(values.get("reps")),
+        load_kg=_optional_number(values.get("load_kg")),
+        bodyweight=bool(values.get("bodyweight")),
+        duration_min=_optional_number(values.get("duration_min")),
+        device_calories=_optional_number(values.get("device_calories")),
+    )
+
+
+def _optional_number(value: object) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _optional_integer(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _exact_matches(query: str, items: tuple) -> tuple:
