@@ -63,16 +63,16 @@
 
 - Create `backend/tests/domain/test_smart_entry.py`.
 
-- [ ] Parse newline, semicolon, Chinese comma, and labeled meal/training segments without writing data.
-- [ ] Extract only explicit quantities:
+- [x] Parse newline, semicolon, Chinese comma, and labeled meal/training segments without writing data.
+- [x] Extract only explicit quantities:
   - food `g`, `ml`, or serving amounts;
   - strength `sets x reps`, optional explicit load/bodyweight;
   - cardio duration and optional explicit device calories.
-- [ ] Normalize full-width punctuation and case without changing the original text.
-- [ ] Produce stable candidate IDs from the draft parser, not from model output.
-- [ ] Mark unmatched, ambiguous, or missing required fields with coded issues.
-- [ ] Reject Agent patches that add observed workout fields or overwrite deterministic user values.
-- [ ] Test Chinese and English examples, ambiguous catalogs, partial food data, mixed strength/cardio, and malicious Agent patches.
+- [x] Normalize full-width punctuation and case without changing the original text.
+- [x] Produce stable candidate IDs from the draft parser, not from model output.
+- [x] Mark unmatched or missing required fields with coded issues; ambiguous catalog resolution is covered by Task 2.
+- [x] Reject Agent patches that add observed workout fields or overwrite deterministic user values.
+- [x] Test Chinese and English examples, partial food data, mixed strength/cardio, and malicious Agent patches; ambiguous catalogs are covered by Task 2.
 - [ ] Commit `feat: parse deterministic smart entry candidates`.
 
 ## Task 2: Local Catalog Resolution
