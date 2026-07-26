@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from backend.api.dependencies import optional_current_user
 from backend.api.utils import ok
+from backend.domain.errors import ApplicationError
 from backend.i18n import message_for_request
 from backend.schemas import AgentEntryRequest, AuthenticatedUser, MealRecord, WorkoutRecord
 from backend.tools.calendar_store import create_agent_entry, create_meal, create_workout, get_daily_detail, list_daily_summaries
@@ -51,6 +52,16 @@ def add_workout(request: Request, record: WorkoutRecord, user: AuthenticatedUser
 
 @router.post("/agent-entry")
 def add_agent_entry(http_request: Request, request: AgentEntryRequest, user: AuthenticatedUser | None = Depends(optional_current_user)):
+    if user is not None:
+        raise ApplicationError(
+            code="LEGACY_AGENT_ENTRY_DEPRECATED",
+            message=(
+                "Use /api/v1/smart-entry-drafts for authenticated "
+                "smart entry."
+            ),
+            status_code=410,
+            processing_mode="deterministic",
+        )
     return ok(
         create_agent_entry(request, _user_id(user)).model_dump(),
         message_for_request("ENTRY_PARSED", http_request, user),

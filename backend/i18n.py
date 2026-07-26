@@ -180,6 +180,34 @@ PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
         "en-US": "The meal draft version is invalid.",
         "zh-CN": "餐食草稿版本无效。",
     },
+    "SMART_ENTRY_SELECTION_REQUIRED": {
+        "en-US": "Select at least one entry before confirming.",
+        "zh-CN": "\u786e\u8ba4\u524d\u8bf7\u81f3\u5c11\u9009\u62e9\u4e00\u6761\u8bb0\u5f55\u3002",
+    },
+    "SMART_ENTRY_DRAFT_INCOMPLETE": {
+        "en-US": "Complete the selected entries before confirming.",
+        "zh-CN": "\u786e\u8ba4\u524d\u8bf7\u8865\u5168\u6240\u9009\u8bb0\u5f55\u3002",
+    },
+    "SMART_ENTRY_AGENT_ESTIMATE_NOT_ACCEPTED": {
+        "en-US": "Review and accept every AI estimate before confirming.",
+        "zh-CN": "\u786e\u8ba4\u524d\u8bf7\u5ba1\u6838\u5e76\u63a5\u53d7\u6bcf\u9879 AI \u4f30\u7b97\u3002",
+    },
+    "SMART_ENTRY_CATALOG_NOT_VISIBLE": {
+        "en-US": "A selected catalog item is unavailable.",
+        "zh-CN": "\u6240\u9009\u76ee\u5f55\u6570\u636e\u4e0d\u53ef\u7528\u3002",
+    },
+    "SMART_ENTRY_CONFIRM_FAILED": {
+        "en-US": "The entries could not be confirmed. The draft was preserved.",
+        "zh-CN": "\u8bb0\u5f55\u786e\u8ba4\u5931\u8d25\uff0c\u8349\u7a3f\u5df2\u4fdd\u7559\u3002",
+    },
+    "SMART_ENTRY_DRAFT_CORRUPT": {
+        "en-US": "The smart entry draft could not be read.",
+        "zh-CN": "\u65e0\u6cd5\u8bfb\u53d6\u667a\u80fd\u8f93\u5165\u8349\u7a3f\u3002",
+    },
+    "LEGACY_AGENT_ENTRY_DEPRECATED": {
+        "en-US": "Use the smart entry draft workflow for signed-in records.",
+        "zh-CN": "\u767b\u5f55\u540e\u8bf7\u4f7f\u7528\u667a\u80fd\u8f93\u5165\u8349\u7a3f\u6d41\u7a0b\u3002",
+    },
     "EXERCISE_NOT_VISIBLE": {
         "en-US": "The exercise was not found.",
         "zh-CN": "未找到该训练动作。",

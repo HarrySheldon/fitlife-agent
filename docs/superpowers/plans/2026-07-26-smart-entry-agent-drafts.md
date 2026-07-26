@@ -150,7 +150,7 @@
 - [x] Delete the source draft only after every formal row and idempotency response succeed.
 - [x] Force a late insert failure in tests and prove zero formal rows remain.
 - [x] Test retry replay, key reuse, owner isolation, and transaction-serialized duplicate-click behavior.
-- [ ] Commit `feat: confirm smart entry drafts atomically`.
+- [x] Commit `feat: confirm smart entry drafts atomically` (`50b5787`).
 
 ## Task 6: Authenticated API
 
@@ -160,18 +160,18 @@
 - Modify `backend/main.py`.
 - Test `backend/tests/test_smart_entry_api.py`.
 
-- [ ] Add:
+- [x] Add:
   - `POST /api/v1/smart-entry-drafts`;
   - `GET /api/v1/smart-entry-drafts?date=YYYY-MM-DD`;
   - `GET|PATCH|DELETE /api/v1/smart-entry-drafts/{id}`;
   - `POST /api/v1/smart-entry-drafts/{id}/analyze`;
   - `POST /api/v1/smart-entry-drafts/{id}/confirm`.
-- [ ] Require authentication on every route.
-- [ ] Use `If-Match` for update/analyze/confirm and UUID `Idempotency-Key` for confirmation.
-- [ ] Return `processing_mode='deterministic'` for parse/edit/confirm and `processing_mode='agent'` only for analyze.
-- [ ] Localize stable errors while preserving codes.
-- [ ] Deprecate authenticated writes through `/calendar/agent-entry`; it must not create CSV records for signed-in users.
-- [ ] Test OpenAPI contracts, auth, validation, owner isolation, conflicts, and processing mode.
+- [x] Require authentication on every route.
+- [x] Use `If-Match` for update/analyze/confirm and UUID `Idempotency-Key` for confirmation.
+- [x] Return `processing_mode='deterministic'` for parse/edit/confirm and `processing_mode='agent'` only for analyze.
+- [x] Localize stable errors while preserving codes.
+- [x] Deprecate authenticated writes through `/calendar/agent-entry`; it must not create CSV records for signed-in users.
+- [x] Test OpenAPI contracts, auth, validation, owner isolation, conflicts, and processing mode.
 - [ ] Commit `feat: expose smart entry draft workflow`.
 
 ## Task 7: Smart Entry Task Page

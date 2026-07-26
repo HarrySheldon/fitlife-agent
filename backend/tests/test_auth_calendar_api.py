@@ -188,7 +188,7 @@ def test_calendar_records_drive_day_detail_and_dashboard_summary(monkeypatch):
     assert dashboard.json()["data"]["weekly_training_count"] == 1
 
 
-def test_agent_entry_can_append_meal_and_workout_records(monkeypatch):
+def test_authenticated_legacy_agent_entry_is_deprecated(monkeypatch):
     client = build_client(make_test_data_dir(), monkeypatch)
     headers = register_and_authorize(client)
 
@@ -197,11 +197,8 @@ def test_agent_entry_can_append_meal_and_workout_records(monkeypatch):
         headers=headers,
         json={"date": "2026-07-08", "text": "午餐牛肉饭 650 kcal 蛋白质 42g，晚上跑步 30 分钟"},
     )
-    day = client.get("/calendar/day/2026-07-08", headers=headers)
-
-    assert response.status_code == 200
+    assert response.status_code == 410
     assert response.json()["processing_mode"] == "deterministic"
-    assert response.json()["data"]["parsed_actions"] == ["meal_record_created", "workout_record_created"]
-    assert day.json()["data"]["summary"]["calories"] == 650
-    assert day.json()["data"]["summary"]["protein"] == 42
-    assert day.json()["data"]["summary"]["training_duration_min"] == 30
+    assert response.json()["error"]["code"] == (
+        "LEGACY_AGENT_ENTRY_DEPRECATED"
+    )
