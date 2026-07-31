@@ -1,6 +1,6 @@
 # FitLife Agent
 
-FitLife Agent is an open-source Agentic RAG project for personal fitness and diet management. It combines versioned user profile, nutrition-target, food-catalog, meal-draft, and confirmed-meal data in SQLite, legacy per-user meal and workout records in CSV, a small Markdown knowledge base, deterministic Python analysis tools, a LangGraph-ready agent workflow, FastAPI APIs, and a React + Vite frontend.
+FitLife Agent is an open-source Agentic RAG product for personal fitness and diet management. It combines versioned profiles and targets, local catalogs, meal/workout records and drafts in SQLite, verified legacy CSV cutover, deterministic Python analysis tools, a LangGraph Agent workflow, FastAPI APIs, and a React + Vite frontend.
 
 The project is designed as a resume-ready AI Agent engineering internship portfolio project and a locally deliverable product. Its main loop is record-driven: register or log in, maintain meal and workout records from Today, review history and weekly trends, generate the next plan, and ask the contextual Coach for analysis without leaving the active workspace.
 
@@ -34,7 +34,9 @@ flowchart LR
   AGENT --> MODEL["ModelGateway"]
   PROFILE_REPO --> SQLITE["SQLite"]
   MEAL_REPO --> SQLITE
-  RECORD_REPO --> FILES["Per-user JSON / CSV"]
+  RECORD_REPO --> ROUTER["Per-user cutover router"]
+  ROUTER --> SQLITE
+  ROUTER --> FILES["Compatibility JSON / CSV"]
   MODEL --> OPENAI["OpenAI Responses API"]
   DOMAIN --> KB["Markdown Knowledge Base"]
 ```
@@ -71,13 +73,13 @@ date,type,exercise,muscle_group,sets,reps,weight,duration_min
 
 `user_profile.json` remains a compatibility projection for legacy features. The authenticated setup workflow stores append-only body-profile, overall-goal, and four-target versions in SQLite. The four daily targets are calories, carbohydrates, protein, and fat.
 
-The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. After registration or login, API requests with a bearer token isolate account-owned data by user ID. New catalog-first meal drafts and confirmed meals use SQLite; legacy records, workouts, and imports continue to use `backend/data/users/<user_id>/...` until the remaining cutover phases. Registration asks the user to choose one primary identifier type: username, email, or phone. Login accepts any of those identifiers in one account field. Email and phone are local demo identifiers only; the app does not send verification emails or SMS messages.
+The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. Startup creates a read-only, checksummed ZIP of each registered user's old meal/workout CSV files and migrates them transactionally. Only a user with a completed migration ledger switches to SQLite; failed users remain file-backed and completed users never silently fall back when retained CSV files drift. Registration accepts username, email, or phone identifiers without external email/SMS verification.
 
 ### Records database
 
-The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. Authenticated profile, overall-goal, confirmed daily-target, local food-catalog, meal-draft, and catalog-first confirmed-meal writes use this SQLite model. Workout records and legacy meal compatibility paths continue to use isolated per-user CSV files until the remaining migration phases; do not delete those files.
+The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. Authenticated profile, goal, targets, catalogs, drafts, confirmed meals, workout sessions and completed legacy cutovers use this SQLite model. Retained CSV files and their ZIP backups must not be deleted; they are recovery evidence, not the active source after cutover. See [docs/data-sources.md](docs/data-sources.md).
 
-Bundled food facts are seeded locally from audited USDA FoodData Central records. Runtime search never calls an external food API. Confirmed meal items snapshot quantities, four nutrient values, source metadata, and provenance so later catalog changes cannot rewrite history. Draft confirmation uses optimistic versions, an idempotency key, and one SQLite transaction. The current Today summary still reads the legacy record projection; the Phase 4 read-model cutover will expose these SQLite meals in Today.
+Bundled food facts are seeded locally from audited USDA FoodData Central records. Runtime search never calls an external food API. Confirmed meal items snapshot quantities, four nutrient values, source metadata, and provenance so later catalog changes cannot rewrite history. Draft confirmation uses optimistic versions, an idempotency key, and one SQLite transaction. Today, Logbook, reports, plans and Agent context read the per-user cutover repository, so completed users see SQLite-backed meal and workout records while incomplete users retain the compatibility source.
 
 Daily targets are calculated deterministically from the saved body profile, activity level, and overall goal. Profile or goal changes create a recalculation preview only. A target version is written only after the user explicitly confirms the preview; the Agent does not write overall goals or confirmed targets.
 
@@ -111,7 +113,14 @@ Docker frontend: `http://127.0.0.1:3000`
 
 Docker backend: `http://127.0.0.1:8000`
 
-Set `FRONTEND_PORT` in `.env` to override the default host port when needed.
+Set `FRONTEND_PORT` in `.env` to override the default host port when needed. Add every resulting browser origin to `BACKEND_CORS_ORIGINS`, including the matching `localhost` and/or `127.0.0.1` form used to open the app.
+Set `BACKEND_PORT` to override backend host port `8000`; when changing it, set both `VITE_API_BASE_URL` and `VITE_API_V1_BASE_URL` to the same public host port before rebuilding the frontend. Compose waits for backend `/health/ready` before starting the frontend and exposes health checks for both services.
+
+Create a verified release backup with:
+
+```powershell
+.venv\Scripts\python.exe scripts\backup_sqlite.py --output backups\fitlife.sqlite3
+```
 
 ## Secure Model Configuration
 

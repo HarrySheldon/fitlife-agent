@@ -1,7 +1,7 @@
 # Today Records Product Program Roadmap
 
 **Source specification:** `docs/superpowers/specs/2026-07-19-today-nutrition-training-records-design.md`  
-**Status:** Phases 1-3 complete; Phases 4-6 pending
+**Status:** Phases 1-6 implemented; Phase 6 runtime acceptance evidence is tracked in its implementation plan.
 
 **Excluded:** Account data export, recipe builder, barcode/image recognition, PostgreSQL, external runtime catalog APIs
 
@@ -18,9 +18,9 @@ The work is therefore split into six ordered, independently verifiable plans. Ea
 | 1 (complete) | SQLite foundation and migration runtime | None | App starts against a versioned local database without changing current API behavior |
 | 2 (complete) | Versioned profile and deterministic daily targets | Phase 1 | New users confirm profile, overall goal, activity and four daily targets |
 | 3 (complete) | Food catalog and meal drafts | Phases 1-2 | Users search foods, build a multi-item meal draft and atomically confirm it |
-| 4 | Exercise catalog, workout sessions and Today summary | Phases 1-3 | Users record strength/cardio sessions and Today shows four nutrients plus optional training |
-| 5 | Smart entry and Agent analysis drafts | Phases 2-4 | Deterministic parsing runs first and Agent only fills unresolved draft fields |
-| 6 | Controlled catalog imports, legacy cutover and release hardening | Phases 1-5 | Imports and CSV migration are idempotent, licensed, verified and Docker-tested |
+| 4 (complete) | Exercise catalog, workout sessions and Today summary | Phases 1-3 | Users record strength/cardio sessions and Today shows four nutrients plus optional training |
+| 5 (complete) | Smart entry and Agent analysis drafts | Phases 2-4 | Deterministic parsing runs first and Agent only fills unresolved draft fields |
+| 6 (complete) | Controlled catalog imports, legacy cutover and release hardening | Phases 1-5 | Imports and CSV migration are idempotent, licensed, verified and readiness-tested |
 
 ## Cross-Phase Invariants
 
@@ -60,7 +60,22 @@ Plans 3-6 are written after the preceding phase lands so their exact paths and s
 - The legacy per-user CSV-backed dashboard summary still responded after confirmation; CSV meal and workout storage remains active.
 - Final review regression coverage verifies deletion/write lifecycle exclusion, narrow training-personalization writes, stable effective-time conflicts, latest-target legacy projection, coded safety conditions, and accurately scoped legacy-record export messaging.
 
-Phase 3 and account data export were not implemented as part of this verification.
+Account data export remains explicitly excluded from this program.
+
+## Phase 6 Verification Evidence
+
+**Verified:** 2026-07-31
+
+- Backend full suite: `770 passed`, one known Starlette/httpx warning, `74.12s`.
+- Frontend full suite: `157 passed` across `28` files, `33.84s`.
+- TypeScript and production Vite build: success with `2466` modules transformed in `20.00s`; the existing chunk-size warning above `500 kB` remains.
+- `docker compose config --quiet`: passed with configurable frontend/backend ports, persistent backend data, two health checks and frontend dependency on backend readiness.
+- Focused migration evidence covers canonical catalog checksums, rollback, read-only source archives, reconciliation, sticky per-user cutover, transactional upload replay, account deletion, startup ordering and degraded readiness.
+- Final Docker rebuild passed on isolated ports `18000` and `13000`; readiness reported schema `3` and zero catalog/migration failures. Both containers returned to `healthy` after an explicit full-stack restart.
+- Desktop browser acceptance migrated a real legacy meal/workout account, confirmed catalog meal entry without a model, verified an explicit unresolved Agent request fails clearly without configuration, and replayed the same signed-in CSV upload. Desktop and `390x844` had no document overflow or console warnings/errors.
+- `npm audit` reported zero vulnerabilities for both production-only and complete dependency trees.
+- The live backup CLI created a `552960` byte SQLite image and reported SHA-256 `ff33137b3457c7dc1da34f48beae48b79977184ef7c858ecb3bf5968967d9c45` after `quick_check`.
+- Runtime deletion of the migrated acceptance account removed its read-only archive and directory, invalidated login with `401`, and preserved the account deletion contract.
 
 ## Phase 3 Verification Evidence
 

@@ -89,14 +89,24 @@
 
 ## Task 5: Phase Verification And Release Evidence
 
-- [ ] Run catalog, migration, cutover, upload, health and Agent-boundary focused tests.
-- [ ] Run the complete backend suite with an accessible `--basetemp` and the complete frontend suite.
-- [ ] Run `tsc -b`, production frontend build and `docker compose config --quiet`.
-- [ ] Rebuild Docker, verify both health checks and restart recovery when Docker Desktop is available.
-- [ ] Browser acceptance: migrated legacy account, catalog/form flow without a model, explicit smart-entry Agent action, signed-in CSV upload replay, desktop and `390x844` no-overflow/console-error checks when local browser access is permitted.
-- [ ] Add `docs/data-sources.md`, backup/recovery instructions, exact verification evidence and roadmap status.
-- [ ] Run a standards/spec/security review covering license boundaries, checksums, rollback, source routing, ownership, logs and excluded features.
+- [x] Run catalog, migration, cutover, upload, health and Agent-boundary focused tests.
+- [x] Run the complete backend suite with an accessible `--basetemp` and the complete frontend suite.
+- [x] Run `tsc -b`, production frontend build and `docker compose config --quiet`.
+- [x] Rebuild Docker, verify both health checks and restart recovery when Docker Desktop is available.
+- [x] Browser acceptance: migrated legacy account, catalog/form flow without a model, explicit smart-entry Agent action, signed-in CSV upload replay, desktop and `390x844` no-overflow/console-error checks when local browser access is permitted.
+- [x] Add `docs/data-sources.md`, backup/recovery instructions, exact verification evidence and roadmap status.
+- [x] Run a standards/spec/security review covering license boundaries, checksums, rollback, source routing, ownership, logs and excluded features.
 - [ ] Commit `docs: verify controlled imports and legacy cutover`, push the clean branch and verify local/remote SHA equality.
+
+### Verification Evidence
+
+- Backend: `770 passed`, one known Starlette/httpx deprecation warning, `74.12s`.
+- Frontend: `28` files and `157` tests passed, `33.84s`; production build transformed `2466` modules in `20.00s` with the existing chunk-size warning.
+- Dependencies: production-only and complete `npm audit` runs both reported zero vulnerabilities.
+- Compose: `docker compose config --quiet` passed. An isolated final rebuild exposed backend `18000` and frontend `13000`; readiness reported `ready`, schema `3`, zero catalog failures and zero legacy migration failures. Both health checks returned to `healthy` after `docker compose restart`.
+- Browser: a dedicated old CSV account surfaced `Legacy tofu` (`288 kcal`) and `Legacy squat` (`45 min`) after startup cutover. A local catalog meal confirmed without a model; a user-triggered unresolved smart-entry analysis returned the model-configuration error; the same signed-in meal CSV uploaded successfully twice. Desktop `1280x720` and mobile `390x844` had no document-level horizontal overflow and no console warnings/errors.
+- Recovery: `scripts/backup_sqlite.py` produced a verified `552960` byte image with SHA-256 `ff33137b3457c7dc1da34f48beae48b79977184ef7c858ecb3bf5968967d9c45`. Deleting the migrated acceptance account removed its read-only backup and invalidated subsequent login with `401`.
+- Review: no open Critical or Important findings. License/attribution partitions, immutable checksums, transaction rollback, sticky source routing, user ownership, sanitized logs, explicit Agent invocation and excluded-feature boundaries were checked. The review found and fixed Windows deletion of read-only migration archives; `26` focused deletion tests and the complete backend suite cover the correction.
 
 ## Completion Criteria
 
