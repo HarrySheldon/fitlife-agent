@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.infrastructure.catalog.import_ledger import CatalogImportError
 from backend.infrastructure.catalog.seed_foods import seed_bundled_foods
 from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
     SQLiteFoodCatalogRepository,
@@ -125,6 +126,9 @@ def test_changed_seed_upserts_food_and_rebuilds_only_its_search_row(tmp_path):
         ).fetchone()["rowid"]
 
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    payload["dataset_version"] = "2026-07-26"
+    for food in payload["foods"]:
+        food["dataset_version"] = "2026-07-26"
     payload["foods"][0]["calories"] = 366
     payload["foods"][0]["aliases"].append("稻米")
     changed_path = tmp_path / "changed-foods.json"
@@ -136,7 +140,7 @@ def test_changed_seed_upserts_food_and_rebuilds_only_its_search_row(tmp_path):
     result = seed_bundled_foods(database, changed_path)
 
     assert result.inserted_count == 0
-    assert result.updated_count == 1
+    assert result.updated_count == len(EXPECTED_FOODS)
     changed = SQLiteFoodCatalogRepository(database).search(
         "user-a",
         "稻米",
@@ -166,6 +170,7 @@ def test_removed_seed_record_is_deactivated_and_no_longer_searchable(tmp_path):
     database = _database(tmp_path)
     seed_bundled_foods(database, SEED_PATH)
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    payload["dataset_version"] = "2026-07-26"
     payload["foods"] = []
     removed_path = tmp_path / "removed-foods.json"
     removed_path.write_text(
@@ -190,6 +195,20 @@ def test_removed_seed_record_is_deactivated_and_no_longer_searchable(tmp_path):
             """
         ).fetchone()["active"]
     assert active == 0
+
+
+def test_seed_rejects_changed_content_for_completed_version(tmp_path):
+    database = _database(tmp_path)
+    seed_bundled_foods(database, SEED_PATH)
+    payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    payload["foods"][0]["calories"] += 1
+    changed = tmp_path / "drifted-foods.json"
+    changed.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(CatalogImportError) as captured:
+        seed_bundled_foods(database, changed)
+
+    assert captured.value.code == "CATALOG_IMPORT_CHECKSUM_MISMATCH"
 
 
 @pytest.mark.parametrize(

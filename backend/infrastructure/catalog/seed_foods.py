@@ -10,6 +10,10 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from backend.domain.meals import FoodDefinition
+from backend.infrastructure.catalog.import_ledger import (
+    CatalogImportLedger,
+    CatalogMutationResult,
+)
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 
 
@@ -27,6 +31,7 @@ class FoodSeedResult:
     updated_count: int
     unchanged_count: int
     deactivated_count: int
+    skipped: bool = False
 
 
 def seed_bundled_foods(
@@ -59,79 +64,128 @@ def seed_bundled_foods(
         source_ids.add(source_record_id)
         records.append(record)
 
-    inserted = 0
-    updated = 0
-    unchanged = 0
-    deactivated = 0
-    with database.transaction() as connection:
-        for record in records:
-            existing = connection.execute(
-                """
-                SELECT id, content_hash, active
-                FROM food_catalog
-                WHERE owner_user_id IS NULL
-                  AND source_name = ?
-                  AND source_record_id = ?
-                """,
-                (source_name, record["source_record_id"]),
-            ).fetchone()
-            if (
-                existing is not None
-                and existing["content_hash"] == record["content_hash"]
-                and existing["active"] == 1
-            ):
-                unchanged += 1
-                continue
+    checksum = _partition_checksum(source_name, dataset_version, records)
+    run = CatalogImportLedger(database).run(
+        source_name,
+        dataset_version,
+        checksum,
+        lambda connection: _import_records(
+            connection,
+            source_name=source_name,
+            records=records,
+            source_ids=source_ids,
+        ),
+    )
+    mutation = (
+        CatalogMutationResult(unchanged_count=run.mutation.imported_count)
+        if run.status == "skipped"
+        else run.mutation
+    )
+    return FoodSeedResult(
+        inserted_count=mutation.inserted_count,
+        updated_count=mutation.updated_count,
+        unchanged_count=mutation.unchanged_count,
+        deactivated_count=mutation.deactivated_count,
+        skipped=run.status == "skipped",
+    )
 
-            if existing is None:
-                food_id = uuid5(
-                    NAMESPACE_URL,
-                    f"food:{source_name}:{record['source_record_id']}",
-                ).hex
-                _insert_food(connection, food_id, record)
-                inserted += 1
-            else:
-                food_id = existing["id"]
-                _update_food(connection, food_id, record)
-                updated += 1
-            _replace_aliases_and_search(connection, food_id, record)
 
-        existing_source_rows = connection.execute(
+def _import_records(
+    connection: sqlite3.Connection,
+    *,
+    source_name: str,
+    records: list[dict[str, object]],
+    source_ids: set[str],
+) -> CatalogMutationResult:
+    inserted = updated = unchanged = deactivated = 0
+    for record in records:
+        existing = connection.execute(
             """
-            SELECT id, source_record_id
+            SELECT id, content_hash, active
             FROM food_catalog
             WHERE owner_user_id IS NULL
               AND source_name = ?
-              AND active = 1
+              AND source_record_id = ?
             """,
-            (source_name,),
-        ).fetchall()
-        for existing_source in existing_source_rows:
-            if existing_source["source_record_id"] in source_ids:
-                continue
-            connection.execute(
-                """
-                UPDATE food_catalog
-                SET active = 0, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (existing_source["id"],),
-            )
-            connection.execute(
-                """
-                DELETE FROM catalog_search
-                WHERE catalog_kind = 'food' AND catalog_id = ?
-                """,
-                (existing_source["id"],),
-            )
-            deactivated += 1
+            (source_name, record["source_record_id"]),
+        ).fetchone()
+        if (
+            existing is not None
+            and existing["content_hash"] == record["content_hash"]
+            and existing["active"] == 1
+        ):
+            unchanged += 1
+            continue
 
-    return FoodSeedResult(
+        if existing is None:
+            food_id = uuid5(
+                NAMESPACE_URL,
+                f"food:{source_name}:{record['source_record_id']}",
+            ).hex
+            _insert_food(connection, food_id, record)
+            inserted += 1
+        else:
+            food_id = existing["id"]
+            _update_food(connection, food_id, record)
+            updated += 1
+        _replace_aliases_and_search(connection, food_id, record)
+
+    existing_source_rows = connection.execute(
+        """
+        SELECT id, source_record_id
+        FROM food_catalog
+        WHERE owner_user_id IS NULL
+          AND source_name = ?
+          AND active = 1
+        """,
+        (source_name,),
+    ).fetchall()
+    for existing_source in existing_source_rows:
+        if existing_source["source_record_id"] in source_ids:
+            continue
+        connection.execute(
+            """
+            UPDATE food_catalog
+            SET active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (existing_source["id"],),
+        )
+        connection.execute(
+            """
+            DELETE FROM catalog_search
+            WHERE catalog_kind = 'food' AND catalog_id = ?
+            """,
+            (existing_source["id"],),
+        )
+        deactivated += 1
+    return CatalogMutationResult(
         inserted_count=inserted,
         updated_count=updated,
         unchanged_count=unchanged,
         deactivated_count=deactivated,
     )
+
+
+def _partition_checksum(
+    source_name: str,
+    dataset_version: str,
+    records: list[dict[str, object]],
+) -> str:
+    canonical = json.dumps(
+        {
+            "source_name": source_name,
+            "dataset_version": dataset_version,
+            "records": sorted(
+                records,
+                key=lambda record: str(record["source_record_id"]),
+            ),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _validated_record(

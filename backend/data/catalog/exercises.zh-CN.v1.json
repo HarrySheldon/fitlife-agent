@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "dataset_version": "2026-07-25",
   "managed_sources": [
     "free-exercise-db",
     "2024 Adult Compendium of Physical Activities"

@@ -31,6 +31,7 @@ def _database(tmp_path) -> SQLiteDatabase:
 def test_seed_is_auditable_idempotent_and_searchable(tmp_path):
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     assert len(payload["exercises"]) == 10
+    assert payload["dataset_version"] == "2026-07-25"
     assert {
         item["exercise_type"] for item in payload["exercises"]
     } == {"strength", "cardio"}
@@ -61,6 +62,7 @@ def test_removed_seed_records_are_deactivated(tmp_path):
     database = _database(tmp_path)
     seed_bundled_exercises(database, SEED_PATH)
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    payload["dataset_version"] = "2026-07-26"
     payload["exercises"] = []
     removed = tmp_path / "removed-exercises.json"
     removed.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
