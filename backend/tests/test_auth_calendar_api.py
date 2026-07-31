@@ -7,6 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
+from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
+from backend.infrastructure.sqlite.runtime import get_database, initialize_database
 from backend.main import create_app
 
 
@@ -202,3 +204,35 @@ def test_authenticated_legacy_agent_entry_is_deprecated(monkeypatch):
     assert response.json()["error"]["code"] == (
         "LEGACY_AGENT_ENTRY_DEPRECATED"
     )
+
+
+def test_cutover_user_csv_upload_imports_and_replays_from_sqlite(monkeypatch):
+    data_dir = make_test_data_dir()
+    client = build_client(data_dir, monkeypatch)
+    headers = register_and_authorize(client)
+    user_id = client.get("/auth/me", headers=headers).json()["data"]["user_id"]
+    initialize_database()
+    assert LegacyCsvMigrator(get_database(), data_dir).migrate_user(user_id).status == "completed"
+    content = (
+        b"date,meal,food,amount,calories,protein,carbs,fat\n"
+        b"2026-07-09,dinner,tofu,200g,288,34.6,5.56,17.44\n"
+    )
+
+    first = client.post(
+        "/upload/meals",
+        headers=headers,
+        files={"file": ("meals.csv", content, "text/csv")},
+    )
+    replay = client.post(
+        "/upload/meals",
+        headers=headers,
+        files={"file": ("meals.csv", content, "text/csv")},
+    )
+    day = client.get("/calendar/day/2026-07-09", headers=headers)
+
+    assert first.status_code == 200
+    assert first.json()["data"]["imported_count"] == 1
+    assert first.json()["data"]["replayed"] is False
+    assert replay.json()["data"]["imported_count"] == 0
+    assert replay.json()["data"]["replayed"] is True
+    assert day.json()["data"]["summary"]["calories"] == 288

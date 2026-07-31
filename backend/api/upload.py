@@ -5,6 +5,8 @@ from backend.api.utils import ok
 from backend.domain.errors import invalid_upload_file_error
 from backend.i18n import message_for_request
 from backend.schemas import AuthenticatedUser
+from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
+from backend.infrastructure.repositories.sqlite_fitness_repository import FitnessImportError
 from backend.tools.data_access import write_data_bytes
 
 
@@ -48,6 +50,27 @@ async def _save_csv_upload(
     if not file.filename or not file.filename.endswith(".csv"):
         raise invalid_upload_file_error()
     content = await file.read()
+    if user_id is not None:
+        repository = get_fitness_repository()
+        if repository.is_cutover(user_id):
+            try:
+                imported = (
+                    repository.sqlite.import_meals_csv(user_id, content)
+                    if filename == "meals.csv"
+                    else repository.sqlite.import_workouts_csv(user_id, content)
+                )
+            except FitnessImportError:
+                raise invalid_upload_file_error() from None
+            return ok(
+                {
+                    "filename": file.filename,
+                    "bytes": len(content),
+                    "imported_count": imported.imported_count,
+                    "replayed": imported.replayed,
+                },
+                success_message,
+                processing_mode="deterministic",
+            )
     write_data_bytes(filename, content, user_id)
     return ok(
         {"filename": file.filename, "bytes": len(content)},

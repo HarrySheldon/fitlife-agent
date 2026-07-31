@@ -72,12 +72,12 @@
 
 ## Task 3: Per-User Cutover And CSV Upload Compatibility
 
-- [ ] Test that incomplete/failed migration reads and writes use `FileFitnessRepository`, while completed migration uses SQLite and never falls back because old CSV changes.
-- [ ] Implement `SQLiteFitnessRepository` projections with exact legacy DataFrame columns so deterministic report/plan/Agent analyzers remain unchanged.
-- [ ] Implement `CutoverFitnessRepository` routing by completed user-scoped migration ledger status; anonymous demo calls remain file-backed.
-- [ ] Replace direct `FileFitnessRepository` construction in report, plan and Agent composition roots; update dashboard/calendar helpers to use the same repository boundary for authenticated users.
-- [ ] Import signed-in meal/workout CSV uploads directly and transactionally with checksum idempotency; archive the submitted bytes, return imported/replayed counts, and refresh Logbook from SQLite.
-- [ ] Verify no upload, startup, read or write path invokes a model and commit `feat: switch completed users to sqlite records`.
+- [x] Test that incomplete/failed migration reads and writes use `FileFitnessRepository`, while completed migration uses SQLite and never falls back because old CSV changes.
+- [x] Implement `SQLiteFitnessRepository` projections with exact legacy DataFrame columns so deterministic report/plan/Agent analyzers remain unchanged.
+- [x] Implement `CutoverFitnessRepository` routing by completed user-scoped migration ledger status; anonymous demo calls remain file-backed.
+- [x] Replace direct `FileFitnessRepository` construction in report, plan and Agent composition roots; update dashboard/calendar helpers to use the same repository boundary for authenticated users.
+- [x] Import signed-in meal/workout CSV uploads directly and transactionally with checksum idempotency; archive the submitted bytes, return imported/replayed counts, and refresh Logbook from SQLite.
+- [x] Verify no upload, startup, read or write path invokes a model and commit `feat: switch completed users to sqlite records`.
 
 ## Task 4: Startup, Readiness And Docker Hardening
 

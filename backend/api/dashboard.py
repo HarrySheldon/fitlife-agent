@@ -7,7 +7,7 @@ from backend.api.preference_context import preferences_for
 from backend.api.utils import ok
 from backend.domain.account_clock import local_today
 from backend.schemas import AuthenticatedUser
-from backend.tools.data_access import read_meals, read_profile, read_workouts
+from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.workout_analyzer import analyze_workouts
 
@@ -18,9 +18,10 @@ router = APIRouter(prefix="/dashboard")
 @router.get("/summary")
 def dashboard_summary(date: str | None = None, user: AuthenticatedUser | None = Depends(optional_current_user)):
     user_id = user.user_id if user else None
-    profile = read_profile(user_id)
-    meals = read_meals(user_id)
-    workouts = read_workouts(user_id)
+    repository = get_fitness_repository()
+    profile = repository.read_profile(user_id)
+    meals = repository.read_meals(user_id)
+    workouts = repository.read_workouts(user_id)
     meal_result = analyze_meals(meals, profile.daily_calorie_target, profile.daily_protein_target)
     workout_result = analyze_workouts(workouts)
     daily = meal_result["daily_totals"]

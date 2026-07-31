@@ -1,14 +1,15 @@
 from backend.schemas import TargetProgress, TodayOverview, UserProfile
 from backend.tools.calendar_store import build_daily_detail
-from backend.tools.data_access import read_meals, read_profile, read_workouts
+from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
 
 
 def build_today_overview(day: str, user_id: str | None = None) -> TodayOverview:
+    repository = get_fitness_repository()
     return build_today_overview_from_records(
         day,
-        read_profile(user_id),
-        read_meals(user_id),
-        read_workouts(user_id),
+        repository.read_profile(user_id),
+        repository.read_meals(user_id),
+        repository.read_workouts(user_id),
     )
 
 

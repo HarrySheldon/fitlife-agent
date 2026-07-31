@@ -14,7 +14,7 @@ from backend.domain.errors import ApplicationError, ai_not_configured_error, mod
 from backend.domain.user_preferences import UserPreferences
 from backend.infrastructure.model_gateway.factory import resolve_user_model_gateway
 from backend.infrastructure.model_gateway.openai_responses import build_model_gateway
-from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
+from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
 from backend.rag.retriever import retrieve_knowledge
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.report_generator import generate_weekly_report
@@ -33,7 +33,7 @@ def run_fitlife_agent(
     initial_tool_calls: list[str] | None = None,
     preferences: UserPreferences | None = None,
 ) -> dict:
-    repository = repository or FileFitnessRepository()
+    repository = repository or get_fitness_repository()
     if gateway is None:
         try:
             gateway = resolve_user_model_gateway(user_id) if user_id else build_model_gateway()
@@ -70,7 +70,7 @@ def run_contextual_coach_action(
     gateway: ModelGateway | None = None,
     preferences: UserPreferences | None = None,
 ) -> dict:
-    repository = repository or FileFitnessRepository()
+    repository = repository or get_fitness_repository()
     prompt = _coach_prompt(surface, action, date, question)
     tool_results, tool_calls = _build_contextual_tool_context(
         action,

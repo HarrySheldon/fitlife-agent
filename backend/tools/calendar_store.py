@@ -6,14 +6,15 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 
 from backend.schemas import AgentEntryRequest, AgentEntryResponse, DailyDetail, DailySummary, MealRecord, WorkoutRecord
-from backend.tools.data_access import append_meal, append_workout, read_meals, read_workouts
+from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
 
 
 def list_daily_summaries(start: str, end: str, user_id: str | None = None) -> list[DailySummary]:
     start_date = _parse_date(start)
     end_date = _parse_date(end)
-    meals = read_meals(user_id)
-    workouts = read_workouts(user_id)
+    repository = get_fitness_repository()
+    meals = repository.read_meals(user_id)
+    workouts = repository.read_workouts(user_id)
     summaries = []
     for current in _date_range(start_date, end_date):
         summaries.append(_summarize_day(current.isoformat(), meals, workouts))
@@ -21,7 +22,10 @@ def list_daily_summaries(start: str, end: str, user_id: str | None = None) -> li
 
 
 def get_daily_detail(day: str, user_id: str | None = None) -> DailyDetail:
-    return build_daily_detail(day, read_meals(user_id), read_workouts(user_id))
+    repository = get_fitness_repository()
+    return build_daily_detail(
+        day, repository.read_meals(user_id), repository.read_workouts(user_id)
+    )
 
 
 def build_daily_detail(day: str, meals: pd.DataFrame, workouts: pd.DataFrame) -> DailyDetail:
@@ -34,16 +38,17 @@ def build_daily_detail(day: str, meals: pd.DataFrame, workouts: pd.DataFrame) ->
 
 
 def create_meal(record: MealRecord, user_id: str | None = None) -> DailyDetail:
-    append_meal(record, user_id)
+    get_fitness_repository().append_meal(record, user_id)
     return get_daily_detail(record.date, user_id)
 
 
 def create_workout(record: WorkoutRecord, user_id: str | None = None) -> DailyDetail:
-    append_workout(record, user_id)
+    get_fitness_repository().append_workout(record, user_id)
     return get_daily_detail(record.date, user_id)
 
 
 def create_agent_entry(request: AgentEntryRequest, user_id: str | None = None) -> AgentEntryResponse:
+    repository = get_fitness_repository()
     actions: list[str] = []
     day = _parse_date(request.date).isoformat()
     text = request.text.strip()
@@ -52,7 +57,7 @@ def create_agent_entry(request: AgentEntryRequest, user_id: str | None = None) -
     duration = _first_number_before_unit(text, ["分钟", "min", "mins", "minute", "minutes"])
 
     if calories is not None or protein is not None:
-        append_meal(
+        repository.append_meal(
             MealRecord(
                 date=day,
                 meal="smart_log",
@@ -68,7 +73,7 @@ def create_agent_entry(request: AgentEntryRequest, user_id: str | None = None) -
         actions.append("meal_record_created")
 
     if duration is not None or _looks_like_workout(text):
-        append_workout(
+        repository.append_workout(
             WorkoutRecord(
                 date=day,
                 type="cardio" if _looks_like_cardio(text) else "strength",
@@ -87,8 +92,9 @@ def create_agent_entry(request: AgentEntryRequest, user_id: str | None = None) -
 
 
 def latest_activity_date(user_id: str | None = None) -> str:
+    repository = get_fitness_repository()
     dates = []
-    for frame in [read_meals(user_id), read_workouts(user_id)]:
+    for frame in [repository.read_meals(user_id), repository.read_workouts(user_id)]:
         if not frame.empty and "date" in frame:
             dates.extend(str(value) for value in frame["date"].dropna().tolist())
     if dates:
