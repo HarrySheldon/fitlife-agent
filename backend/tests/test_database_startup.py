@@ -45,11 +45,15 @@ def test_startup_initializes_database_without_breaking_csv_reads(isolated_runtim
     with TestClient(application) as client:
         assert database_path.exists()
         health = client.get("/health")
+        readiness = client.get("/health/ready")
         dashboard = client.get("/dashboard/summary")
 
     assert database_path.exists()
     assert health.status_code == 200
     assert health.json()["success"] is True
+    assert readiness.status_code == 200
+    assert readiness.json()["data"]["status"] == "ready"
+    assert readiness.json()["data"]["database"] == "ok"
     assert dashboard.status_code == 200
     assert dashboard.json()["success"] is True
     assert dashboard.json()["processing_mode"] == "deterministic"
@@ -65,4 +69,4 @@ def test_startup_initializes_database_without_breaking_csv_reads(isolated_runtim
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
 
-    assert [version for version, in versions] == [1, 2]
+    assert [version for version, in versions] == [1, 2, 3]

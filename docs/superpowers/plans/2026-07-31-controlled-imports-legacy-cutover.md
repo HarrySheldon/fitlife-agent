@@ -81,11 +81,11 @@
 
 ## Task 4: Startup, Readiness And Docker Hardening
 
-- [ ] Test startup ordering: schema migration, catalog imports, legacy cutover, then request serving; catalog/legacy failures are logged and do not destroy the last usable source.
-- [ ] Add structured events containing operation, version, status, counts, duration and checksum prefix only; never log CSV rows, tokens, API keys or model prompts.
-- [ ] Add `/health/ready` database `quick_check`, schema version, failed import count and failed legacy migration count; database failure returns `503`, recoverable migration failures return `200` with `degraded` status.
-- [ ] Add backend/frontend Compose health checks and make frontend depend on backend health; keep configurable host ports and persistent `backend/data` volume.
-- [ ] Add startup/readiness/Compose tests and commit `feat: harden startup and readiness checks`.
+- [x] Test startup ordering: schema migration, catalog imports, legacy cutover, then request serving; catalog/legacy failures are logged and do not destroy the last usable source.
+- [x] Add structured events containing operation, version, status, counts, duration and checksum prefix only; never log CSV rows, tokens, API keys or model prompts.
+- [x] Add `/health/ready` database `quick_check`, schema version, failed import count and failed legacy migration count; database failure returns `503`, recoverable migration failures return `200` with `degraded` status.
+- [x] Add backend/frontend Compose health checks and make frontend depend on backend health; keep configurable host ports and persistent `backend/data` volume.
+- [x] Add startup/readiness/Compose tests and commit `feat: harden startup and readiness checks`.
 
 ## Task 5: Phase Verification And Release Evidence
 
