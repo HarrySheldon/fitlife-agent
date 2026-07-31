@@ -1,4 +1,5 @@
 from pathlib import Path
+import stat
 from uuid import uuid4
 
 import pytest
@@ -47,8 +48,13 @@ def authorization(session: dict) -> dict[str, str]:
 
 
 def test_confirmed_account_deletion_invalidates_identity_and_existing_token(monkeypatch):
-    client, _ = build_client(monkeypatch)
+    client, data_dir = build_client(monkeypatch)
     session = register(client, "delete-api-user")
+    backups = list(
+        (data_dir / "users" / session["user"]["user_id"] / "legacy-backups").glob("*.zip")
+    )
+    assert len(backups) == 1
+    assert not backups[0].stat().st_mode & stat.S_IWRITE
 
     response = client.request(
         "DELETE",
@@ -251,8 +257,10 @@ def test_confirmed_delete_removes_all_owned_files_and_preserves_other_account(mo
     assert response.status_code == 200
     assert not current_root.exists()
     assert {
-        path.name: path.read_text(encoding="utf-8") for path in other_root.iterdir()
+        filename: (other_root / filename).read_text(encoding="utf-8")
+        for filename in account_files
     } == {filename: f"other:{filename}" for filename in account_files}
+    assert len(list((other_root / "legacy-backups").glob("*.zip"))) == 1
     assert client.get("/auth/me", headers=authorization(other)).status_code == 200
     assert client.post(
         "/auth/login",

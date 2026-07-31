@@ -70,3 +70,25 @@ def test_startup_initializes_database_without_breaking_csv_reads(isolated_runtim
         ).fetchall()
 
     assert [version for version, in versions] == [1, 2, 3]
+
+
+def test_registration_after_startup_immediately_cuts_over_empty_user(isolated_runtime):
+    _, database_path = isolated_runtime
+    with TestClient(create_app()) as client:
+        registered = client.post(
+            "/auth/register",
+            json={
+                "username": "post-startup-user",
+                "password": "password123",
+                "display_name": "Post Startup",
+            },
+        )
+
+    assert registered.status_code == 200
+    user_id = registered.json()["data"]["user"]["user_id"]
+    with sqlite3.connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT status FROM data_migrations WHERE migration_key = ? AND user_id = ?",
+            (f"legacy_csv_v1:{user_id}", user_id),
+        ).fetchone()
+    assert row == ("completed",)

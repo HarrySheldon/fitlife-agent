@@ -104,7 +104,19 @@ def run_startup(
     migrator = LegacyCsvMigrator(database, data_dir)
     for user_id in _registered_user_ids(data_dir):
         phase_started = time.monotonic()
-        result = migrator.migrate_user(user_id)
+        try:
+            result = migrator.migrate_user(user_id)
+        except Exception:
+            legacy_failed += 1
+            _event(
+                operation="legacy_csv_cutover",
+                version="legacy_csv_v1",
+                status="failed",
+                counts={},
+                duration_ms=_elapsed(phase_started),
+                checksum_prefix="",
+            )
+            continue
         if result.status == "completed":
             legacy_completed += 1
         elif result.status == "skipped":

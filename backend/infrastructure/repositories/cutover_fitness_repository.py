@@ -39,7 +39,8 @@ class CutoverFitnessRepository:
                     (f"{MIGRATION_VERSION}:{user_id}", user_id),
                 ).fetchone()
         except sqlite3.OperationalError as error:
-            if "no such table" not in str(error).casefold():
+            message = str(error).casefold()
+            if "no such table" not in message and "no such column" not in message:
                 raise
             return False
         return row is not None and row["status"] == "completed"

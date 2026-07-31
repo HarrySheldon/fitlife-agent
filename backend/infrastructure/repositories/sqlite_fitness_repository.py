@@ -25,6 +25,7 @@ from backend.tools.data_access import MEAL_COLUMNS, WORKOUT_COLUMNS
 
 
 _AMOUNT = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(.*?)\s*$")
+_USER_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
 class FitnessImportError(RuntimeError):
@@ -157,6 +158,12 @@ class SQLiteFitnessRepository:
 
         archive = _archive_upload(self.data_dir, user, kind, checksum, content)
         with self.database.transaction() as connection:
+            replay = connection.execute(
+                "SELECT status FROM data_migrations WHERE migration_key = ?",
+                (operation,),
+            ).fetchone()
+            if replay is not None and replay["status"] == "completed":
+                return FitnessImportResult(0, True, checksum)
             for record in records:
                 writer(connection, user, record, entry_method="csv")
             connection.execute(
@@ -339,7 +346,11 @@ def _parse_csv(content: bytes, columns: list[str], model):
 
 
 def _archive_upload(data_dir: Path, user_id: str, kind: str, checksum: str, content: bytes) -> Path:
-    root = data_dir / "users" / user_id / "imports"
+    users_root = (data_dir / "users").resolve(strict=False)
+    user_root = (users_root / user_id).resolve(strict=False)
+    if user_root.parent != users_root:
+        raise FitnessImportError("CSV_USER_INVALID")
+    root = user_root / "imports"
     root.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     path = root / f"{kind}-{timestamp}-{checksum[:12]}.csv"
@@ -369,6 +380,6 @@ def _object(value: str) -> dict[str, object]:
 
 
 def _required_user(user_id: str | None) -> str:
-    if not user_id:
-        raise ValueError("SQLite fitness records require a user")
+    if not isinstance(user_id, str) or _USER_ID.fullmatch(user_id) is None:
+        raise FitnessImportError("CSV_USER_INVALID")
     return user_id

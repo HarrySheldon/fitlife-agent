@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 from backend.config import get_settings
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
@@ -103,6 +104,28 @@ def test_signed_in_csv_import_is_atomic_archived_and_idempotent(tmp_path, monkey
     archives = list((data / "users" / USER / "imports").glob("meals-*.csv"))
     assert len(archives) == 1
     assert archives[0].read_bytes() == content
+
+
+def test_concurrent_identical_uploads_import_once(tmp_path, monkeypatch):
+    data, _, database, _ = _setup(tmp_path, monkeypatch)
+    content = (
+        ",".join(MEAL_COLUMNS)
+        + "\n2026-07-03,dinner,tofu,200g,288,34.6,5.56,17.44\n"
+    ).encode()
+
+    def upload():
+        return SQLiteFitnessRepository(database, data_dir=data).import_meals_csv(
+            USER, content
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = [future.result(timeout=10) for future in (executor.submit(upload), executor.submit(upload))]
+
+    assert sorted((result.imported_count, result.replayed) for result in results) == [
+        (0, True),
+        (1, False),
+    ]
+    assert len(SQLiteFitnessRepository(database).read_meals(USER)) == 1
 
 
 def _meal(food: str) -> MealRecord:

@@ -90,9 +90,9 @@ def test_confirmed_account_deletion_removes_only_authenticated_user_and_identity
     (other_root / "record.json").write_text("untouched", encoding="utf-8")
     remove_tree = shutil.rmtree
 
-    def track_storage_deletion(path: Path) -> None:
+    def track_storage_deletion(path: Path, *, onexc=None) -> None:
         events.append("storage_deleted")
-        remove_tree(path)
+        remove_tree(path, onexc=onexc)
 
     monkeypatch.setattr(delete_module.shutil, "rmtree", track_storage_deletion)
 
@@ -138,9 +138,9 @@ def test_user_root_is_atomically_quarantined_before_recursive_cleanup(monkeypatc
     removed_paths: list[Path] = []
     real_rmtree = shutil.rmtree
 
-    def track_quarantine_cleanup(path: Path) -> None:
+    def track_quarantine_cleanup(path: Path, *, onexc=None) -> None:
         removed_paths.append(path)
-        real_rmtree(path)
+        real_rmtree(path, onexc=onexc)
 
     monkeypatch.setattr(delete_module.shutil, "rmtree", track_quarantine_cleanup)
 
@@ -194,7 +194,7 @@ def test_swapped_quarantine_link_is_never_recursively_followed(monkeypatch):
         assert path in quarantine_paths
         real_rmtree(path)
 
-    def reject_recursive_cleanup(_path: Path) -> None:
+    def reject_recursive_cleanup(_path: Path, **_kwargs) -> None:
         raise AssertionError("untrusted quarantine must not reach rmtree")
 
     monkeypatch.setattr(delete_module.os, "replace", swap_after_rename)
@@ -236,7 +236,7 @@ def test_nested_file_disappearance_keeps_identity_while_quarantine_remains(monke
     (nested / "record.json").write_text("private", encoding="utf-8")
     quarantine_paths: list[Path] = []
 
-    def fail_after_nested_disappearance(path: Path) -> None:
+    def fail_after_nested_disappearance(path: Path, **_kwargs) -> None:
         quarantine_paths.append(path)
         (path / "nested" / "record.json").unlink()
         raise FileNotFoundError("nested entry disappeared")
@@ -306,8 +306,8 @@ def test_authenticated_writer_cannot_recreate_user_data_after_deletion(monkeypat
     writer_errors: list[Exception] = []
     real_rmtree = shutil.rmtree
 
-    def pause_after_storage_cleanup(path: Path) -> None:
-        real_rmtree(path)
+    def pause_after_storage_cleanup(path: Path, *, onexc=None) -> None:
+        real_rmtree(path, onexc=onexc)
         storage_removed.set()
         assert release_deletion.wait(timeout=5)
 
@@ -501,7 +501,7 @@ def test_storage_cleanup_failure_preserves_identity_password_and_token(monkeypat
     user_root.mkdir(parents=True)
     assert repository.rotate_token_version(user.user_id) == 1
 
-    def fail_cleanup(_path: Path) -> None:
+    def fail_cleanup(_path: Path, **_kwargs) -> None:
         raise PermissionError("private filesystem detail")
 
     monkeypatch.setattr(delete_module.shutil, "rmtree", fail_cleanup)

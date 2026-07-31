@@ -173,9 +173,23 @@ def _restore_quarantine(
 def _cleanup_quarantine(quarantine: Path, resolved_users_root: Path) -> None:
     _validate_quarantine(quarantine, resolved_users_root)
     try:
-        shutil.rmtree(quarantine)
+        shutil.rmtree(quarantine, onexc=_retry_readonly_removal)
     except FileNotFoundError:
         if _entry_exists(quarantine):
             raise OSError("Quarantine cleanup did not remove the account root") from None
     if _entry_exists(quarantine):
         raise OSError("Quarantine cleanup did not remove the account root")
+
+
+def _retry_readonly_removal(function, path: str, error: BaseException) -> None:
+    entry = os.lstat(path)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    attributes = getattr(entry, "st_file_attributes", 0)
+    if (
+        stat.S_ISLNK(entry.st_mode)
+        or bool(attributes & reparse_flag)
+        or entry.st_mode & stat.S_IWRITE
+    ):
+        raise error
+    os.chmod(path, entry.st_mode | stat.S_IWRITE, follow_symlinks=False)
+    function(path)
