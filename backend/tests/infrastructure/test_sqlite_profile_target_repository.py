@@ -553,6 +553,35 @@ def test_delete_user_data_removes_owned_rows_and_preserves_other_users(tmp_path)
     assert repository.get_setup("user-b").target == target_b
 
 
+def test_delete_user_data_removes_user_scoped_migration_ledger(tmp_path):
+    database = _database(tmp_path)
+    repository = SQLiteProfileTargetRepository(database)
+    with database.transaction() as connection:
+        connection.executemany(
+            """
+            INSERT INTO data_migrations (
+                migration_key, user_id, checksum, status
+            ) VALUES (?, ?, ?, 'completed')
+            """,
+            (
+                ("legacy_csv_v1:user-a", "user-a", "a" * 64),
+                ("legacy_csv_v1:user-b", "user-b", "b" * 64),
+                ("global", None, "c" * 64),
+            ),
+        )
+
+    repository.delete_user_data("user-a")
+
+    with database.connection() as connection:
+        rows = connection.execute(
+            "SELECT migration_key FROM data_migrations ORDER BY migration_key"
+        ).fetchall()
+    assert [row["migration_key"] for row in rows] == [
+        "global",
+        "legacy_csv_v1:user-b",
+    ]
+
+
 def test_delete_user_data_rolls_back_all_rows_when_cleanup_fails(tmp_path):
     database = _database(tmp_path)
     repository = SQLiteProfileTargetRepository(database)

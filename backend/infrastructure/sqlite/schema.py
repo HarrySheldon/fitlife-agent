@@ -918,4 +918,12 @@ RECORDS_MIGRATIONS = (
             "DROP TABLE records_v2_migration_guard",
         ),
     ),
+    Migration(
+        version=3,
+        name="scope_data_migrations_by_user",
+        statements=(
+            "ALTER TABLE data_migrations ADD COLUMN user_id TEXT",
+            "CREATE INDEX idx_data_migrations_user_status ON data_migrations(user_id, status)",
+        ),
+    ),
 )

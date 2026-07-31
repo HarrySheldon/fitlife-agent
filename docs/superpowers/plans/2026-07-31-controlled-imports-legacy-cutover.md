@@ -61,14 +61,14 @@
 
 ## Task 2: Read-Only Legacy Backup And Atomic Migration
 
-- [ ] Add schema migration 3 with nullable `data_migrations.user_id`, an index, and invariant tests.
-- [ ] Add fixed CSV fixture tests for grouped meal labels, one workout session per old row, unknown strength/cardio values, stable `legacy_source_id`, source/date/count/total reconciliation and no Agent usage.
-- [ ] Implement strict parsers using `csv.DictReader`; validate required headers and dates, preserve raw row identifiers, and reject negative nutrition/duration values before writing.
-- [ ] Create a timestamped ZIP under `users/<user_id>/legacy-backups/` containing source bytes and `manifest.json`; calculate archive SHA-256 and mark the final archive read-only before database mutation.
-- [ ] Import all rows in one SQLite transaction, reconcile row counts, date bounds and nutrition/duration totals, then mark `legacy_csv_v1:<user_id>` completed in that transaction.
-- [ ] On parse/write/reconciliation failure, roll back formal rows, keep CSVs untouched, record a sanitized failed ledger row and return a recoverable result.
-- [ ] Delete user-scoped migration ledger rows during account deletion; the existing user-directory deletion removes that user's archives.
-- [ ] Run focused migration/account-deletion tests and commit `feat: migrate legacy csv with verified backups`.
+- [x] Add schema migration 3 with nullable `data_migrations.user_id`, an index, and invariant tests.
+- [x] Add fixed CSV fixture tests for grouped meal labels, one workout session per old row, unknown strength/cardio values, stable `legacy_source_id`, source/date/count/total reconciliation and no Agent usage.
+- [x] Implement strict parsers using `csv.DictReader`; validate required headers and dates, preserve raw row identifiers, and reject negative nutrition/duration values before writing.
+- [x] Create a timestamped ZIP under `users/<user_id>/legacy-backups/` containing source bytes and `manifest.json`; calculate archive SHA-256 and mark the final archive read-only before database mutation.
+- [x] Import all rows in one SQLite transaction, reconcile row counts, date bounds and nutrition/duration totals, then mark `legacy_csv_v1:<user_id>` completed in that transaction.
+- [x] On parse/write/reconciliation failure, roll back formal rows, keep CSVs untouched, record a sanitized failed ledger row and return a recoverable result.
+- [x] Delete user-scoped migration ledger rows during account deletion; the existing user-directory deletion removes that user's archives.
+- [x] Run focused migration/account-deletion tests and commit `feat: migrate legacy csv with verified backups`.
 
 ## Task 3: Per-User Cutover And CSV Upload Compatibility
 

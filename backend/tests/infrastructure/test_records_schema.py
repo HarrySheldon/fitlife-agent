@@ -993,8 +993,21 @@ def test_records_migration_can_be_run_twice(tmp_path):
     assert [tuple(row) for row in applied] == [
         (1, "create_records_schema"),
         (2, "enforce_records_schema_invariants"),
+        (3, "scope_data_migrations_by_user"),
     ]
     assert catalog_search_count == 1
+
+
+def test_data_migration_ledger_supports_user_scoping(tmp_path):
+    database = SQLiteDatabase(tmp_path / "records.sqlite3")
+    run_migrations(database, RECORDS_MIGRATIONS)
+
+    with database.connection() as connection:
+        columns = connection.execute("PRAGMA table_info(data_migrations)").fetchall()
+        indexes = connection.execute("PRAGMA index_list(data_migrations)").fetchall()
+
+    assert "user_id" in {row["name"] for row in columns}
+    assert "idx_data_migrations_user_status" in {row["name"] for row in indexes}
 
 
 def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
@@ -1044,6 +1057,7 @@ def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
     assert [tuple(row) for row in applied] == [
         (1, "create_records_schema"),
         (2, "enforce_records_schema_invariants"),
+        (3, "scope_data_migrations_by_user"),
     ]
     assert tuple(food) == ("user-a", "Rice")
     assert tuple(search_row) == (42, "food-1")
