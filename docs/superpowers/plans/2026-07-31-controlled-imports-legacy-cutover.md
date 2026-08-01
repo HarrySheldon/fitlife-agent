@@ -96,7 +96,7 @@
 - [x] Browser acceptance: migrated legacy account, catalog/form flow without a model, explicit smart-entry Agent action, signed-in CSV upload replay, desktop and `390x844` no-overflow/console-error checks when local browser access is permitted.
 - [x] Add `docs/data-sources.md`, backup/recovery instructions, exact verification evidence and roadmap status.
 - [x] Run a standards/spec/security review covering license boundaries, checksums, rollback, source routing, ownership, logs and excluded features.
-- [ ] Commit `docs: verify controlled imports and legacy cutover`, push the clean branch and verify local/remote SHA equality.
+- [x] Commit `docs: verify controlled imports and legacy cutover`, push the clean branch and verify local/remote SHA equality.
 
 ### Verification Evidence
 
