@@ -97,7 +97,7 @@ def model_gateway_error(error: Exception) -> ApplicationError:
         code = "MODEL_AUTH_FAILED"
         message = "The model provider rejected the configured credentials."
         status_code = 502
-    elif "notfound" in error_name:
+    elif error_name == "notfounderror":
         code = "MODEL_NOT_FOUND"
         message = "The configured model could not be found."
         status_code = 422

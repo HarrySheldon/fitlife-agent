@@ -249,7 +249,9 @@ def test_service_discards_stale_agent_result_with_conflict():
     ("error_type", "expected_code"),
     [
         (type("AuthenticationError", (Exception,), {}), "MODEL_AUTH_FAILED"),
+        (type("NotFoundError", (Exception,), {}), "MODEL_NOT_FOUND"),
         (type("RateLimitError", (Exception,), {}), "MODEL_RATE_LIMITED"),
+        (ModuleNotFoundError, "MODEL_PROTOCOL_ERROR"),
         (ValueError, "MODEL_PROTOCOL_ERROR"),
     ],
 )

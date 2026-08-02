@@ -3459,6 +3459,10 @@ pre {
   color: #17211d;
 }
 
+.exercise-search .search-input input {
+  padding-left: 40px;
+}
+
 .exercise-catalog-filters {
   display: flex;
   align-items: center;
