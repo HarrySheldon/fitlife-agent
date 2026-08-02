@@ -62,6 +62,29 @@ Plans 3-6 are written after the preceding phase lands so their exact paths and s
 
 Account data export remains explicitly excluded from this program.
 
+## Phase 4 Verification Evidence
+
+**Verified:** 2026-08-02
+
+- Backend full suite: 772 passed; frontend full suite: 157 passed across 28 files.
+- TypeScript and Vite production build transformed 2466 modules successfully; the existing chunk-size warning remains.
+- Main rebuilt on isolated Docker ports 19000/14000. Both services were healthy and readiness reported schema 3 with zero catalog or migration failures.
+- Desktop acceptance confirmed one mixed 45-minute strength/cardio session with a visibly labeled 516 kcal estimate; reload retained exactly one session.
+- Mobile acceptance at `390x844` had no horizontal overflow or console errors, including the corrected exercise search field.
+- Final review covered authorization, FTS safety, immutable snapshots, estimate provenance, optimistic locking, transactional confirmation, idempotency, account deletion, and legacy compatibility.
+
+## Phase 5 Verification Evidence
+
+**Verified:** 2026-08-02
+
+- Python 3.12.13 Docker evidence passed private-catalog isolation, inactive-item exclusion, and smart-entry resolution, 8/8.
+- Browser acceptance parsed one mixed Chinese entry, resolved three local catalog candidates, explicitly analyzed and accepted one unknown-food estimate, and confirmed two meals plus one workout.
+- Today reported 799 kcal, 116 g carbohydrate, 49 g protein, and 17 g fat after confirmation; reload retained the same formal-record counts.
+- No-model acceptance preserved all four deterministic candidates and returned a recoverable configuration error only after the explicit Agent action.
+- The lost-response hook and repository replay tests prove refresh recovery reuses one idempotency key and creates one formal aggregate.
+- Desktop and `390x844` candidate editing had no horizontal overflow or console errors.
+- Final review covered minimum model context, strict structured output, no Agent writes, stale-result defense, transaction rollback, owner isolation, and recoverable errors.
+
 ## Phase 6 Verification Evidence
 
 **Verified:** 2026-07-31

@@ -234,6 +234,27 @@ The local food catalog and meal-draft workflow was verified on 2026-07-25:
 - Idempotency proof: after reload, SQLite contained exactly two meals in positions `1` and `2`, each with exactly three immutable item snapshots; no duplicate was created.
 - Final review: authentication scope, FTS query construction, private-food visibility, optimistic locking, transaction rollback, idempotency fingerprints, historical snapshots, account deletion, and the unchanged export boundary were reviewed with no Critical or Important findings.
 
+## Phase 4 Verification
+
+The workout-session and SQLite Today workflow was verified on 2026-08-02:
+
+- Backend: 772 tests passed; frontend: 157 tests passed across 28 files.
+- TypeScript and Vite production build succeeded with 2466 modules transformed; the existing chunk-size warning remains.
+- Docker rebuilt on isolated ports 19000/14000; both containers were healthy and readiness reported schema 3 with no failed catalog imports or legacy migrations.
+- Desktop acceptance searched local strength and cardio catalogs, confirmed one mixed workout, and showed the 45-minute, 516 kcal estimated session exactly once in Today after reload.
+- Mobile acceptance at `390x844` had no overflow or console errors. The exercise search icon and placeholder retain a measured 10 px gap after the final CSS correction.
+
+## Phase 5 Verification
+
+The deterministic smart-entry and explicit Agent-analysis workflow was verified on 2026-08-02:
+
+- Python 3.12.13 Docker tests passed private-catalog isolation, inactive-item exclusion, and smart-entry resolution, 8/8.
+- A mixed Chinese entry resolved oats, squat, and running locally; an explicit Agent action estimated only the unknown food, and confirmation stayed disabled until the estimate was accepted.
+- After confirmation, Today showed 799 kcal, 116 g carbohydrate, 49 g protein, 17 g fat, two meals, and one workout. Reload preserved the same counts.
+- The lost-response hook test reuses its persisted idempotency key after refresh, while the repository replay test proves one formal aggregate and one idempotency record.
+- With no model configured, deterministic candidates and editable form values remained available and the Agent action returned a recoverable configuration error.
+- Desktop and `390x844` candidate editing had no horizontal overflow or console errors.
+
 ## Verification Report
 
 See [docs/FINAL_VERIFICATION_REPORT.md](docs/FINAL_VERIFICATION_REPORT.md) for the latest verified command outputs, known warnings, and scope boundaries.

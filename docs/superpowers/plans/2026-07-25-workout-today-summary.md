@@ -1,7 +1,8 @@
 # Workout Sessions And Today Summary Implementation Plan
 
-**Status:** Approved for autonomous execution
+**Status:** Complete
 **Date:** 2026-07-25
+**Verified:** 2026-08-02
 **Goal:** Let authenticated users search a local exercise catalog, build and atomically confirm mixed strength/cardio workout sessions, and make Today read its nutrition and training state from SQLite.
 
 ## Architecture And Open-Source Practice
@@ -105,7 +106,7 @@ Phase 4 preserves these boundaries:
   workout-only days, mixed days, owner isolation, and legacy compatibility.
 - [x] Add an owner-scoped daily-log update for `planned_meal_count` and
   persistently raise it when confirmed meals exceed the plan.
-- [ ] Commit the aggregate with the Phase 4 product slice.
+- [x] Commit the aggregate with the Phase 4 product slice (`ef10b17`).
 
 ## Task 6: Workout Task Page And Today Product View
 
@@ -125,31 +126,38 @@ Phase 4 preserves these boundaries:
   idempotency key across refresh, discover the latest owner-scoped server
   draft by date, and save bounded incomplete editor state on the server.
 - [x] Run focused and complete frontend tests and TypeScript compilation.
-  Evidence: 149 tests pass and `tsc -b` exits zero. Vite production bundling
-  is still pending because the managed Windows sandbox denies the esbuild
-  child process with `spawn EPERM`.
-- [ ] Commit `feat: build workout entry and sqlite today view`.
+  Final evidence: 157 tests pass across 28 files, and `npm run build`
+  completes TypeScript plus Vite production bundling with 2466 modules.
+- [x] Commit `feat: build workout entry and sqlite today view` (`ef10b17`).
 
 ## Task 7: Integration And Acceptance
 
-- [ ] Run the complete backend suite. Relevant API tests pass 32/32; the full
-  suite remains blocked by a managed-sandbox ACL denial on pytest's temporary
-  directory, not by an assertion failure.
-- [ ] Run the complete frontend suite and production build. The suite passes
-  149/149 and TypeScript passes; production bundling is pending as noted above.
-- [ ] Rebuild Docker and verify backend/frontend health.
-- [ ] Desktop acceptance: search strength/cardio exercises, add a mixed
-  session, confirm it, and verify Today shows four nutrition values plus
-  training.
-- [ ] Mobile acceptance at `390x844` with no horizontal overflow or console
-  errors.
-- [ ] Reload and verify no duplicate session.
-- [ ] Review authorization, FTS safety, snapshots, estimate provenance,
+- [x] Run the complete backend suite. Final evidence: 772 tests pass under an
+  explicit repository-local `basetemp`; one known Starlette/httpx warning
+  remains.
+- [x] Run the complete frontend suite and production build. Final evidence:
+  157 tests pass across 28 files; TypeScript and Vite build 2466 modules. The
+  existing chunk-size warning above 500 kB remains.
+- [x] Rebuild Docker and verify backend/frontend health. Main was rebuilt on
+  isolated ports 19000/14000; both containers were healthy, readiness reported
+  schema 3 with zero catalog or migration failures, and Nginx returned 200.
+- [x] Desktop acceptance: searched `squat` and `run`, recorded three 60 kg sets
+  of eight plus 20 minutes of cardio in one 45-minute medium session, confirmed
+  it, and verified Today showed one 516 kcal session labeled as containing
+  estimates alongside all four nutrition targets.
+- [x] Mobile acceptance at `390x844` had no horizontal overflow or console
+  errors. Final CSS regression evidence reports a 40 px search-input inset,
+  with the icon ending before placeholder text begins.
+- [x] Reload and verify no duplicate session. `Training session` remained one
+  row before and after reload.
+- [x] Review authorization, FTS safety, snapshots, estimate provenance,
   optimistic locking, idempotency, rollback, account deletion, and legacy
-  compatibility.
-- [ ] Update README, roadmap, and this plan with exact evidence.
-- [ ] Commit `docs: verify workouts and sqlite today summary`.
-- [ ] Push the clean branch and verify local/remote SHA equality.
+  compatibility. Focused repository/API tests and the final review found no
+  open Critical or Important issue.
+- [x] Update README, roadmap, and this plan with exact evidence.
+- [x] Commit `docs: verify workouts and smart entry`.
+- [x] Push the completed Phase 4 slice; `ef10b17` is reachable from
+  `origin/main`.
 
 ## Completion Criteria
 

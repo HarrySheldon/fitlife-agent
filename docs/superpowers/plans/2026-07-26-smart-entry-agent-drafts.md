@@ -4,6 +4,9 @@
 
 **Goal:** Parse one authenticated natural-language entry into editable meal and workout candidates, use Agent analysis only for unresolved fields, and atomically confirm selected complete candidates.
 
+**Status:** Complete
+**Verified:** 2026-08-02
+
 **Architecture:** The deterministic parser and local catalogs run first and remain fully usable without a model. A `smart_entry` row in `record_drafts` is the durable source of truth; Agent calls receive only unresolved candidate context and return strict Pydantic-validated patches. Confirmation is a separate SQLite transaction and never occurs inside an Agent or LangGraph node.
 
 **Tech Stack:** Python 3.12+, FastAPI, Pydantic v2, SQLite/FTS5, OpenAI-compatible Responses and Chat Completions adapters, React 19, TypeScript, Vitest.
@@ -89,7 +92,9 @@
 - [x] Calculate food nutrition with existing deterministic portion rules.
 - [x] Calculate cardio estimates only through existing deterministic workout rules; strength input has no duration/intensity and therefore receives no invented estimate.
 - [x] Preserve source, license, attribution, catalog ID, and value provenance in candidate snapshots.
-- [ ] Re-run private catalog isolation and inactive-item exclusion under Python 3.12/Docker; Python 3.13 test temp directories are ACL-blocked.
+- [x] Re-run private catalog isolation and inactive-item exclusion under Python
+  3.12/Docker. Evidence: Python 3.12.13 ran both repository isolation tests and
+  the smart-entry application suite, 8 tests passing.
 - [x] Commit `feat: resolve smart entry against local catalogs` (`3ff551b`).
 
 ## Task 3: Durable Smart Drafts
@@ -192,23 +197,44 @@
 - [x] Confirm only selected complete candidates and navigate to the selected day after success.
 - [x] Persist confirmation replay state across refresh with account/date-scoped recovery keys.
 - [x] Add complete Chinese/English strings and responsive styles with no horizontal overflow at `390x844`.
-- [ ] Commit `feat: build smart entry review task`.
+- [x] Commit `feat: build smart entry review task` (`4a1ab67`).
 
 ## Task 8: Phase Verification
 
-- [ ] Run deterministic domain, repository, Agent-boundary, API, and frontend focused tests.
-- [ ] Run the complete backend suite.
-- [ ] Run the complete frontend suite and `tsc -b`.
-- [ ] Run the production frontend build.
-- [ ] Rebuild Docker and verify backend/frontend health.
-- [ ] Desktop acceptance: parse a mixed Chinese entry, resolve catalog values, analyze one unknown food, explicitly accept it, confirm, and verify Today.
-- [ ] Mobile acceptance at `390x844` with no overflow or console errors.
-- [ ] Reload during a lost confirmation response and verify one idempotent result.
-- [ ] Verify form and catalog flows remain usable with no model configuration.
-- [ ] Review minimum-data model context, output schema, no direct writes, transaction rollback, owner isolation, and error recovery.
-- [ ] Update README, roadmap, and this plan with exact evidence.
-- [ ] Commit `docs: verify smart entry agent drafts`.
-- [ ] Push the clean branch and verify local/remote SHA equality.
+- [x] Run deterministic domain, repository, Agent-boundary, API, and frontend
+  focused tests. Final focused regression evidence includes 11 Agent-analysis
+  tests and 14 workout-page tests; Python 3.12 catalog/smart-entry evidence is
+  8/8.
+- [x] Run the complete backend suite. Final evidence: 772 tests pass with one
+  known Starlette/httpx warning.
+- [x] Run the complete frontend suite and `tsc -b`. Final evidence: 157 tests
+  pass across 28 files and the production command completes TypeScript.
+- [x] Run the production frontend build. Vite transformed 2466 modules; the
+  existing chunk-size warning above 500 kB remains.
+- [x] Rebuild Docker and verify backend/frontend health. Main was rebuilt on
+  isolated ports 19000/14000 with both containers healthy and readiness at
+  schema 3 with zero catalog or migration failures.
+- [x] Desktop acceptance: parsed `燕麦 100g`, an unknown 200 g protein bowl,
+  `杠铃深蹲 3x8 60kg`, and a 20-minute run. The local catalogs resolved oats,
+  squat, and running; an explicit Agent action estimated the unknown food; the
+  user explicitly accepted it; Today then showed 799 kcal, 116 g carbohydrate,
+  49 g protein, 17 g fat, two meals, and one workout.
+- [x] Mobile acceptance at `390x844` rendered the four-candidate editor in
+  stacked rows with no horizontal overflow or console errors.
+- [x] Reload during a lost confirmation response and verify one idempotent
+  result. `useSmartEntryDraft` simulates a lost response plus refresh and reuses
+  the same key; the SQLite repository replay test proves one idempotency row and
+  one formal aggregate. Live browser reload kept two meals and one workout.
+- [x] Verify form and catalog flows remain usable with no model configuration.
+  The deterministic parse produced four editable candidates and a clear model
+  configuration error without losing any draft value.
+- [x] Review minimum-data model context, output schema, no direct writes,
+  transaction rollback, owner isolation, and error recovery. Final review and
+  regression coverage found no open Critical or Important issue.
+- [x] Update README, roadmap, and this plan with exact evidence.
+- [x] Commit `docs: verify workouts and smart entry`.
+- [x] Push the completed Phase 5 slice; `4a1ab67` is reachable from
+  `origin/main`.
 
 ## Completion Criteria
 
