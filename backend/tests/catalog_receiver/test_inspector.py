@@ -51,3 +51,16 @@ def test_discovers_nested_record_arrays(tmp_path: Path) -> None:
 
     assert "data.exercises" in result.array_paths
     assert result.candidate_record_arrays == ("data.exercises",)
+
+
+def test_discovers_record_arrays_nested_inside_arrays(tmp_path: Path) -> None:
+    path = tmp_path / "nested.json"
+    path.write_text(
+        json.dumps({"groups": [{"items": [{"id": "one", "name": "One"}]}]}),
+        encoding="utf-8",
+    )
+
+    result = inspect_structure(read_source(path), catalog_kind="exercise")
+
+    assert "groups[].items" in result.array_paths
+    assert "groups[].items" in result.candidate_record_arrays

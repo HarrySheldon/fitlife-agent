@@ -53,3 +53,27 @@ def test_import_command_creates_database_and_skips_second_run(tmp_path: Path, ca
     assert '"status": "committed"' in output
     assert '"status": "skipped"' in output
     assert database.exists()
+
+
+def test_import_validation_failure_does_not_create_database(tmp_path: Path) -> None:
+    source = tmp_path / "invalid.csv"
+    text = (ROOT / "fixtures/tfda-foods.csv").read_text(encoding="utf-8")
+    source.write_text(
+        text.replace("總碳水化合物,g,28.2", "總碳水化合物,mg,unknown"),
+        encoding="utf-8",
+    )
+    database = tmp_path / "must-not-exist.sqlite3"
+
+    exit_code = main(
+        [
+            "import",
+            str(source),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--database",
+            str(database),
+        ]
+    )
+
+    assert exit_code == 4
+    assert not database.exists()

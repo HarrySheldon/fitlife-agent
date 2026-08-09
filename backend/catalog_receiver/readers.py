@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import io
 import json
 from pathlib import Path
 from urllib.parse import urlparse
@@ -94,42 +93,49 @@ def _read_csv(
     *,
     delimiter: str | None,
 ) -> CsvSource:
-    text = _read_text(path)
-    sample = text[:65536]
     try:
-        dialect = (
-            _configured_dialect(delimiter)
-            if delimiter is not None
-            else csv.Sniffer().sniff(sample, delimiters=",;\t|")
-        )
-    except csv.Error as error:
+        with path.open("r", encoding="utf-8-sig", newline="") as stream:
+            sample = stream.read(65536)
+            stream.seek(0)
+            try:
+                dialect = (
+                    _configured_dialect(delimiter)
+                    if delimiter is not None
+                    else _sniff_dialect(sample)
+                )
+            except csv.Error as error:
+                raise ReceiverError(
+                    "CSV_DIALECT_AMBIGUOUS",
+                    "CSV dialect could not be determined; configure a delimiter explicitly.",
+                ) from error
+
+            reader = csv.reader(stream, dialect=dialect)
+            try:
+                raw_headers = next(reader)
+            except StopIteration as error:
+                raise ReceiverError("CSV_HEADERS_MISSING", "CSV source has no header row.") from error
+            headers = tuple(header.strip() for header in raw_headers)
+            if not headers or any(not header for header in headers):
+                raise ReceiverError("CSV_HEADERS_INVALID", "CSV headers must be non-empty.")
+            normalized = [header.casefold() for header in headers]
+            if len(set(normalized)) != len(normalized):
+                raise ReceiverError("CSV_HEADERS_DUPLICATE", "CSV headers must be unique.")
+
+            rows: list[dict[str, str]] = []
+            for row_number, values in enumerate(reader, start=2):
+                if not values or all(not value.strip() for value in values):
+                    continue
+                if len(values) != len(headers):
+                    raise ReceiverError(
+                        "CSV_ROW_WIDTH_INVALID",
+                        f"CSV row {row_number} has {len(values)} values; expected {len(headers)}.",
+                    )
+                rows.append(dict(zip(headers, values, strict=True)))
+    except UnicodeDecodeError as error:
         raise ReceiverError(
-            "CSV_DIALECT_AMBIGUOUS",
-            "CSV dialect could not be determined; configure a delimiter explicitly.",
+            "SOURCE_ENCODING_INVALID",
+            "Source must be valid UTF-8 or UTF-8 with BOM.",
         ) from error
-
-    reader = csv.reader(io.StringIO(text, newline=""), dialect=dialect)
-    try:
-        raw_headers = next(reader)
-    except StopIteration as error:
-        raise ReceiverError("CSV_HEADERS_MISSING", "CSV source has no header row.") from error
-    headers = tuple(header.strip() for header in raw_headers)
-    if not headers or any(not header for header in headers):
-        raise ReceiverError("CSV_HEADERS_INVALID", "CSV headers must be non-empty.")
-    normalized = [header.casefold() for header in headers]
-    if len(set(normalized)) != len(normalized):
-        raise ReceiverError("CSV_HEADERS_DUPLICATE", "CSV headers must be unique.")
-
-    rows: list[dict[str, str]] = []
-    for row_number, values in enumerate(reader, start=2):
-        if not values or all(not value.strip() for value in values):
-            continue
-        if len(values) != len(headers):
-            raise ReceiverError(
-                "CSV_ROW_WIDTH_INVALID",
-                f"CSV row {row_number} has {len(values)} values; expected {len(headers)}.",
-            )
-        rows.append(dict(zip(headers, values, strict=True)))
     dialect_info = CsvDialectInfo(
         delimiter=dialect.delimiter,
         quotechar=dialect.quotechar,
@@ -157,6 +163,17 @@ def _configured_dialect(delimiter: str) -> type[csv.Dialect]:
 
     ConfiguredDialect.delimiter = delimiter
     return ConfiguredDialect
+
+
+def _sniff_dialect(sample: str) -> csv.Dialect | type[csv.Dialect]:
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        header = sample.splitlines()[0] if sample.splitlines() else ""
+        candidates = [delimiter for delimiter in ",;\t|" if delimiter in header]
+        if len(candidates) == 1:
+            return _configured_dialect(candidates[0])
+        raise
 
 
 def _read_json(path: Path, metadata: SourceMetadata) -> JsonSource:

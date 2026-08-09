@@ -11,7 +11,7 @@ from backend.catalog_receiver.readers import read_source
 
 def test_reads_utf8_bom_csv_with_quoted_embedded_newline(tmp_path: Path) -> None:
     path = tmp_path / "foods.csv"
-    path.write_text('id,name\r\n1,"rice\nwhite"\r\n', encoding="utf-8-sig")
+    path.write_bytes(b'\xef\xbb\xbfid,name\r\n1,"rice\nwhite"\r\n')
 
     source = read_source(path)
 

@@ -41,6 +41,12 @@ def test_resolves_jmespath_field_and_rejects_bad_selector() -> None:
     assert raised.value.code == "MAPPING_SELECTOR_INVALID"
 
 
+def test_explicit_null_constant_is_distinct_from_a_missing_field_source() -> None:
+    field = FieldSpec.model_validate({"constant": None})
+
+    assert resolve_field({"value": "ignored"}, field) is None
+
+
 def test_profile_forbids_unknown_or_executable_fields(tmp_path: Path) -> None:
     profile = {
         "schema_version": 1,

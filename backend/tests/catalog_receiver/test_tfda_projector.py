@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from backend.catalog_receiver.models import MappingProfile
 from backend.catalog_receiver.mapping import load_mapping_profile
 from backend.catalog_receiver.projectors import project_source
 from backend.catalog_receiver.readers import read_source
@@ -39,10 +38,11 @@ def test_rejects_inconsistent_group_and_missing_nutrient(tmp_path: Path) -> None
         Path(__file__).parents[2] / "data" / "catalog" / "mappings" / "tfda-foods.v1.json"
     )
 
-    strict = MappingProfile.model_validate(
-        profile.model_dump() | {
-            "projection": profile.projection.model_dump()
-            | {"exclude_incomplete_groups": False}
+    strict = profile.model_copy(
+        update={
+            "projection": profile.projection.model_copy(
+                update={"exclude_incomplete_groups": False}
+            )
         }
     )
     result = project_source(read_source(path), strict)

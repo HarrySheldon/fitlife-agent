@@ -122,8 +122,9 @@ class FieldSpec(BaseModel):
 
     @model_validator(mode="after")
     def validate_source(self) -> "FieldSpec":
-        has_constant = self.constant is not None
-        if (self.selector is None) == (not has_constant):
+        has_selector = self.selector is not None
+        has_constant = "constant" in self.model_fields_set
+        if has_selector == has_constant:
             raise ValueError("exactly one of selector or constant is required")
         return self
 

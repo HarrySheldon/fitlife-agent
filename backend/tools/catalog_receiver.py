@@ -57,6 +57,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         receiver = CatalogReceiver()
         if args.command == "import":
+            preflight = receiver.validate(
+                args.source,
+                mapping=args.mapping,
+                enrichment_path=args.enrichment,
+                output_dir=args.output_dir,
+                json_size_limit=args.json_size_limit,
+                csv_delimiter=args.csv_delimiter,
+            )
+            if preflight.report.has_errors:
+                _print_json(preflight.report.model_dump(mode="json"))
+                return 4
             database = SQLiteDatabase(args.database)
             run_migrations(database, RECORDS_MIGRATIONS)
             receiver = CatalogReceiver(SQLiteCatalogSink(database))

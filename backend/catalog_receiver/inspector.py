@@ -153,14 +153,24 @@ def _walk_json(document: Any) -> tuple[dict[str, tuple[set[str], list[Any]]], se
 
 def _array_contains_objects(document: Any, path: str) -> bool:
     if path == "@":
-        value = document
+        values = [document]
     else:
-        value = document
+        values: list[Any] = [document]
         for part in path.split("."):
-            if not isinstance(value, dict):
-                return False
-            value = value.get(part)
-    return isinstance(value, list) and bool(value) and isinstance(value[0], dict)
+            next_values: list[Any] = []
+            flatten = part.endswith("[]")
+            key = part[:-2] if flatten else part
+            for value in values:
+                child = value.get(key) if isinstance(value, dict) else None
+                if flatten and isinstance(child, list):
+                    next_values.extend(child)
+                elif child is not None:
+                    next_values.append(child)
+            values = next_values
+    return any(
+        isinstance(value, list) and bool(value) and isinstance(value[0], dict)
+        for value in values
+    )
 
 
 def _unique(values: Iterable[Any]) -> list[Any]:
