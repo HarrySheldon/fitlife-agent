@@ -10,3 +10,5 @@ openai>=2.0.0
 langgraph>=0.2.0
 langchain>=0.2.0
 cryptography>=43.0.0
+jmespath>=1.1.0
+opencc-python-reimplemented>=0.1.7
