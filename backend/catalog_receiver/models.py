@@ -206,7 +206,7 @@ class StructureInspection(BaseModel):
 
 
 class CanonicalFoodRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     source_name: str
     source_record_id: str
@@ -217,16 +217,16 @@ class CanonicalFoodRecord(BaseModel):
     basis_type: Literal["per_100g"] = "per_100g"
     basis_amount: float = 100
     unit: Literal["g"] = "g"
-    calories: float
-    carbs: float
-    protein: float
-    fat: float
+    calories: float = Field(ge=0)
+    carbs: float = Field(ge=0)
+    protein: float = Field(ge=0)
+    fat: float = Field(ge=0)
     aliases: tuple[str, ...] = ()
     provenance: dict[str, Any]
 
 
 class CanonicalExerciseRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     source_name: str
     source_record_id: str
@@ -237,7 +237,7 @@ class CanonicalExerciseRecord(BaseModel):
     exercise_type: Literal["strength", "cardio"]
     primary_muscle: str
     secondary_muscles: tuple[str, ...] = ()
-    met: float | None = None
+    met: float | None = Field(default=None, gt=0)
     aliases: tuple[str, ...] = ()
     provenance: dict[str, Any]
 
@@ -256,3 +256,42 @@ class ProjectionResult(BaseModel):
     rejected_count: int = 0
     enrichment_count: int = 0
     enrichment_coverage: float = Field(default=0, ge=0, le=1)
+
+
+class ReceiverReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: SourceMetadata
+    catalog_kind: CatalogKind
+    profile_name: str
+    profile_version: str
+    source_name: str
+    dataset_version: str
+    scanned_count: int
+    accepted_count: int
+    excluded_count: int
+    rejected_count: int
+    enrichment_count: int = 0
+    enrichment_coverage: float = 0
+    issue_counts: dict[str, int] = Field(default_factory=dict)
+    total_issue_count: int = 0
+    error_count: int = 0
+    warning_count: int = 0
+    info_count: int = 0
+    issues_truncated: bool = False
+    issues: tuple[ReceiverIssue, ...] = ()
+    canonical_schema: dict[str, Any] | None = None
+    canonical_example: dict[str, Any] | None = None
+    transaction: dict[str, Any] | None = None
+    duration_ms: int = 0
+
+    @property
+    def has_errors(self) -> bool:
+        return self.error_count > 0
+
+
+class ReceiverResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report: ReceiverReport
+    records: tuple[CanonicalRecord, ...]
