@@ -76,14 +76,27 @@ def write_run_artifacts(
     _atomic_text(directory / "catalog-import-report.txt", render_text_report(report))
     if not report.has_errors:
         name = "normalized-foods.json" if report.catalog_kind == "food" else "normalized-exercises.json"
-        _atomic_json(
-            directory / name,
-            {
-                "catalog_kind": report.catalog_kind,
+        normalized_records = [record.model_dump(mode="json") for record in records]
+        if report.catalog_kind == "food":
+            first = normalized_records[0] if normalized_records else {}
+            payload = {
+                "schema_version": 1,
                 "source_name": report.source_name,
                 "dataset_version": report.dataset_version,
-                "records": [record.model_dump(mode="json") for record in records],
-            },
+                "license": first.get("license", ""),
+                "attribution": first.get("attribution", ""),
+                "foods": normalized_records,
+            }
+        else:
+            payload = {
+                "schema_version": 1,
+                "dataset_version": report.dataset_version,
+                "managed_sources": [report.source_name],
+                "exercises": normalized_records,
+            }
+        _atomic_json(
+            directory / name,
+            payload,
         )
 
 

@@ -66,10 +66,25 @@ def _project_foods(source: CsvSource, profile: MappingProfile) -> ProjectionResu
         groups[identity].append(row)
 
     records: list[CanonicalFoodRecord] = []
-    rejected = 0
+    rejected = excluded = 0
     for identity, rows in groups.items():
         group_issues = _food_group_issues(identity, rows, profile)
         if group_issues:
+            incomplete_codes = {"REQUIRED_NUTRIENT_MISSING", "VALUE_NUMBER_INVALID"}
+            if projection.exclude_incomplete_groups and all(
+                issue.code in incomplete_codes for issue in group_issues
+            ):
+                excluded += 1
+                issues.append(
+                    _issue(
+                        "FOOD_GROUP_EXCLUDED_INCOMPLETE_NUTRITION",
+                        identity,
+                        "nutrients",
+                        observed=sorted({issue.code for issue in group_issues}),
+                        severity="info",
+                    )
+                )
+                continue
             issues.extend(group_issues)
             rejected += 1
             continue
@@ -121,6 +136,7 @@ def _project_foods(source: CsvSource, profile: MappingProfile) -> ProjectionResu
         records=tuple(records),
         issues=tuple(issues),
         scanned_count=len(groups),
+        excluded_count=excluded,
         rejected_count=rejected,
     )
 

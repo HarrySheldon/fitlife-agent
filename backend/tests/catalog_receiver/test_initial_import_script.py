@@ -28,7 +28,7 @@ def test_initial_script_imports_both_sources_and_is_idempotent(tmp_path: Path, c
 def test_initial_script_validates_both_before_creating_database(tmp_path: Path) -> None:
     bad_food = tmp_path / "bad-food.csv"
     text = (ROOT / "fixtures/tfda-foods.csv").read_text(encoding="utf-8")
-    bad_food.write_text(text.replace("粗脂肪,g,0.3", "膳食纖維,g,0.3"), encoding="utf-8")
+    bad_food.write_text(text.replace("總碳水化合物,g,28.2", "總碳水化合物,mg,unknown"), encoding="utf-8")
     database = tmp_path / "must-not-exist.sqlite3"
 
     exit_code = main(

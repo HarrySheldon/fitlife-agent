@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from backend.config import get_settings
+from backend.catalog_receiver.sinks import retire_public_sources
 from backend.infrastructure.catalog.seed_exercises import (
     DEFAULT_SEED_PATH as EXERCISE_SEED_PATH,
     seed_bundled_exercises,
@@ -72,8 +73,18 @@ def run_startup(
     ):
         phase_started = time.monotonic()
         version, checksum = _source_identity(path)
+        retired_count = 0
         try:
             result = importer(database, path)
+            if operation == "food_catalog_import":
+                retirement = retire_public_sources(
+                    database,
+                    catalog_kind="food",
+                    active_source="Taiwan FDA Food Nutrient Database",
+                    retirement_version="1.0.0",
+                    source_names=("USDA FoodData Central",),
+                )
+                retired_count = int(retirement["deactivated_count"])
         except Exception:
             catalog_failed += 1
             _event(
@@ -94,7 +105,7 @@ def run_startup(
                     "inserted": result.inserted_count,
                     "updated": result.updated_count,
                     "unchanged": result.unchanged_count,
-                    "deactivated": result.deactivated_count,
+                    "deactivated": result.deactivated_count + retired_count,
                 },
                 duration_ms=_elapsed(phase_started),
                 checksum_prefix=checksum[:12],

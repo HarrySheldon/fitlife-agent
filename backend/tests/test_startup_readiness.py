@@ -32,6 +32,12 @@ def test_startup_orders_schema_catalogs_then_per_user_cutover(tmp_path, monkeypa
         startup, "seed_bundled_exercises",
         lambda *_: events.append("exercises") or result,
     )
+    monkeypatch.setattr(
+        startup,
+        "retire_public_sources",
+        lambda *_args, **_kwargs: events.append("retirement")
+        or {"status": "completed", "deactivated_count": 0},
+    )
     monkeypatch.setattr(startup, "_registered_user_ids", lambda _path: ("user-a",))
 
     class Migrator:
@@ -49,7 +55,7 @@ def test_startup_orders_schema_catalogs_then_per_user_cutover(tmp_path, monkeypa
     with caplog.at_level("INFO", logger="fitlife.startup"):
         summary = startup.run_startup(SQLiteDatabase(tmp_path / "unused.db"), tmp_path)
 
-    assert events == ["schema", "foods", "exercises", "legacy:user-a"]
+    assert events == ["schema", "foods", "retirement", "exercises", "legacy:user-a"]
     assert summary.status == "ready"
     payloads = [json.loads(record.message) for record in caplog.records]
     assert all(

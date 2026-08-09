@@ -83,6 +83,53 @@ Bundled food facts are seeded locally from audited USDA FoodData Central records
 
 Daily targets are calculated deterministically from the saved body profile, activity level, and overall goal. Profile or goal changes create a recalculation preview only. A target version is written only after the user explicitly confirms the preview; the Agent does not write overall goals or confirmed targets.
 
+## Catalog Data Receiver
+
+The deterministic catalog receiver accepts local `.csv` and `.json` files. It does not download data, accept URLs, expose an upload API, invoke an Agent, or execute code from mapping profiles.
+
+Approved public sources:
+
+- Taiwan FDA Food Nutrient Database: <https://data.fda.gov.tw/opendata/exportDataList.do?method=ExportData&InfoId=20&logType=2>
+- free-exercise-db combined JSON: <https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json>
+
+The Taiwan FDA link currently returns a ZIP archive. Extract `20_2.csv` before using the receiver; ZIP input is intentionally rejected.
+
+Inspect an unfamiliar file without writing reports or SQLite rows:
+
+```powershell
+python -m backend.tools.catalog_receiver inspect D:\data\20_2.csv --catalog-kind food
+```
+
+Validate and write JSON/text reports plus a normalized audit snapshot:
+
+```powershell
+python -m backend.tools.catalog_receiver validate D:\data\20_2.csv `
+  --mapping backend\data\catalog\mappings\tfda-foods.v1.json `
+  --output-dir .tmp\catalog-validation\foods
+```
+
+Import one validated source into SQLite:
+
+```powershell
+python -m backend.tools.catalog_receiver import D:\data\20_2.csv `
+  --mapping backend\data\catalog\mappings\tfda-foods.v1.json `
+  --database backend\data\fitlife.sqlite3 `
+  --output-dir .tmp\catalog-import\foods
+```
+
+Validate both approved files before the first database write, then import each source independently:
+
+```powershell
+python scripts\import_initial_catalogs.py `
+  --foods D:\data\20_2.csv `
+  --exercises D:\data\exercises.json `
+  --exercise-aliases backend\data\catalog\enrichments\free-exercise-db.zh-CN.v1.json
+```
+
+Each run can produce `catalog-import-report.json`, `catalog-import-report.txt`, and a normalized food or exercise JSON snapshot. Reports persist only the input basename, fingerprint, counts, mapping version, issues, and transaction result, never the absolute source path.
+
+CLI exits are `0` for success, `2` for file/physical format errors, `3` for mapping errors, `4` for data validation errors, and `5` for database errors. The current bundled Taiwan snapshot contains 2,128 complete foods; 53 upstream foods with blank protein or fat were explicitly excluded and reported instead of being guessed as zero. The bundled exercise snapshot contains 750 compatible records; all 123 stretching records were explicitly excluded.
+
 ## Local Setup
 
 ```bash

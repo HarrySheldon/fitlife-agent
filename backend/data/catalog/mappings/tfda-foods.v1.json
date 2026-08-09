@@ -11,6 +11,7 @@
   "projection": {
     "strategy": "grouped_pivot",
     "grouping_key": "整合編號",
+    "exclude_incomplete_groups": true,
     "fields": {
       "source_record_id": {"selector": "整合編號", "transforms": [{"operation": "strip"}]},
       "name": {"selector": "樣品名稱", "transforms": [{"operation": "strip"}, {"operation": "opencc_t2s"}]},

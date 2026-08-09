@@ -57,35 +57,49 @@ class SQLiteCatalogSink:
         }
 
     def _retire_sources(self, profile: MappingProfile) -> dict[str, object]:
-        retired_sources = tuple(dict.fromkeys(profile.retired_sources))
-        if not retired_sources:
-            return {"status": "not_requested", "deactivated_count": 0}
-        if profile.source_name in retired_sources:
-            raise ValueError("CATALOG_RETIREMENT_ACTIVE_SOURCE_INVALID")
-        checksum = hashlib.sha256(
-            json.dumps(
-                {
-                    "catalog_kind": profile.catalog_kind,
-                    "sources": retired_sources,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        run = CatalogImportLedger(self.database).run(
-            f"catalog-retirement:{profile.catalog_kind}:{profile.source_name}",
-            profile.profile_version,
-            checksum,
-            lambda connection: _retire_public_rows(
-                connection,
-                catalog_kind=profile.catalog_kind,
-                source_names=retired_sources,
-            ),
+        return retire_public_sources(
+            self.database,
+            catalog_kind=profile.catalog_kind,
+            active_source=profile.source_name,
+            retirement_version=profile.profile_version,
+            source_names=profile.retired_sources,
         )
-        return {
-            "status": run.status,
-            "deactivated_count": run.mutation.deactivated_count,
-        }
+
+
+def retire_public_sources(
+    database: SQLiteDatabase,
+    *,
+    catalog_kind: str,
+    active_source: str,
+    retirement_version: str,
+    source_names: tuple[str, ...],
+) -> dict[str, object]:
+    retired_sources = tuple(dict.fromkeys(source_names))
+    if not retired_sources:
+        return {"status": "not_requested", "deactivated_count": 0}
+    if active_source in retired_sources:
+        raise ValueError("CATALOG_RETIREMENT_ACTIVE_SOURCE_INVALID")
+    checksum = hashlib.sha256(
+        json.dumps(
+            {"catalog_kind": catalog_kind, "sources": retired_sources},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    run = CatalogImportLedger(database).run(
+        f"catalog-retirement:{catalog_kind}:{active_source}",
+        retirement_version,
+        checksum,
+        lambda connection: _retire_public_rows(
+            connection,
+            catalog_kind=catalog_kind,
+            source_names=retired_sources,
+        ),
+    )
+    return {
+        "status": run.status,
+        "deactivated_count": run.mutation.deactivated_count,
+    }
 
 
 def _food_payload(

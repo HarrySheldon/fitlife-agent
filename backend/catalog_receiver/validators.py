@@ -23,6 +23,8 @@ ISSUE_MESSAGES: dict[str, tuple[str, str | None]] = {
     "EXERCISE_CATEGORY_EXCLUDED": ("The exercise category is excluded by policy.", None),
     "ENRICHMENT_ENGLISH_FALLBACK": ("No reviewed Chinese enrichment exists; the English name is used.", None),
     "ENRICHMENT_ORPHAN": ("An enrichment identity does not exist upstream.", "Remove the orphan or correct its upstream ID."),
+    "FOOD_GROUP_EXCLUDED_INCOMPLETE_NUTRITION": ("The food was excluded because one or more required nutrients are blank.", None),
+    "NO_RECORDS_ACCEPTED": ("No complete canonical records were accepted.", "Correct the mapping or source data before importing."),
 }
 
 

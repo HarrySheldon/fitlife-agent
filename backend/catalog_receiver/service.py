@@ -11,6 +11,7 @@ from backend.catalog_receiver.models import (
     CatalogKind,
     MappingProfile,
     ReceiverError,
+    ReceiverIssue,
     ReceiverResult,
     StructureInspection,
 )
@@ -113,6 +114,16 @@ class CatalogReceiver:
         )
         projection = project_source(source, profile, enrichment_path=enrichment_path)
         validation_issues = validate_records(projection.records)
+        if not projection.records:
+            validation_issues = (
+                *validation_issues,
+                ReceiverIssue(
+                    severity="error",
+                    code="NO_RECORDS_ACCEPTED",
+                    source_path=source.metadata.basename,
+                    expected="at least one complete canonical record",
+                ),
+            )
         preliminary = build_report(
             source=source.metadata,
             profile=profile,

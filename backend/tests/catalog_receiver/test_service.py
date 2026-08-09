@@ -39,7 +39,7 @@ def test_import_calls_sink_only_after_successful_validation(tmp_path: Path) -> N
 def test_import_blocks_sink_when_projection_has_errors(tmp_path: Path) -> None:
     bad = tmp_path / "bad.csv"
     text = (ROOT / "fixtures/tfda-foods.csv").read_text(encoding="utf-8")
-    bad.write_text(text.replace("粗脂肪,g,0.3", "膳食纖維,g,0.3"), encoding="utf-8")
+    bad.write_text(text.replace("總碳水化合物,g,28.2", "總碳水化合物,mg,unknown"), encoding="utf-8")
     sink = Mock()
 
     result = CatalogReceiver(sink).import_catalog(bad, mapping=PROFILE)

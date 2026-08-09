@@ -31,12 +31,12 @@ def test_physical_mapping_and_data_errors_have_stable_exit_codes(tmp_path: Path,
 
     bad_food = tmp_path / "foods.csv"
     text = (ROOT / "fixtures/tfda-foods.csv").read_text(encoding="utf-8")
-    bad_food.write_text(text.replace("粗脂肪,g,0.3", "膳食纖維,g,0.3"), encoding="utf-8")
+    bad_food.write_text(text.replace("總碳水化合物,g,28.2", "總碳水化合物,mg,unknown"), encoding="utf-8")
     assert main(["validate", str(bad_food), "--mapping", str(FOOD_PROFILE)]) == 4
     captured = capsys.readouterr()
     assert "SOURCE_EXTENSION_UNSUPPORTED" in captured.err
     assert "MAPPING_PROFILE_INVALID" in captured.err
-    assert "REQUIRED_NUTRIENT_MISSING" in captured.out
+    assert "NUTRIENT_UNIT_UNSUPPORTED" in captured.out
 
 
 def test_import_command_creates_database_and_skips_second_run(tmp_path: Path, capsys) -> None:

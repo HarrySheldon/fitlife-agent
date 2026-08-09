@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from backend.catalog_receiver.models import MappingProfile
 from backend.catalog_receiver.mapping import load_mapping_profile
 from backend.catalog_receiver.projectors import project_source
 from backend.catalog_receiver.readers import read_source
@@ -38,13 +39,39 @@ def test_rejects_inconsistent_group_and_missing_nutrient(tmp_path: Path) -> None
         Path(__file__).parents[2] / "data" / "catalog" / "mappings" / "tfda-foods.v1.json"
     )
 
-    result = project_source(read_source(path), profile)
+    strict = MappingProfile.model_validate(
+        profile.model_dump() | {
+            "projection": profile.projection.model_dump()
+            | {"exclude_incomplete_groups": False}
+        }
+    )
+    result = project_source(read_source(path), strict)
 
     assert result.records == ()
     assert {issue.code for issue in result.issues} == {
         "GROUP_DESCRIPTOR_INCONSISTENT",
         "REQUIRED_NUTRIENT_MISSING",
     }
+
+
+def test_profile_explicitly_excludes_incomplete_nutrition(tmp_path: Path) -> None:
+    fixture = (ROOT / "fixtures" / "tfda-foods.csv").read_text(encoding="utf-8")
+    path = tmp_path / "incomplete.csv"
+    path.write_text(
+        fixture.replace("一般成分,粗脂肪,g,0.3", "一般成分,粗脂肪,g,"),
+        encoding="utf-8",
+    )
+    profile = load_mapping_profile(
+        Path(__file__).parents[2] / "data" / "catalog" / "mappings" / "tfda-foods.v1.json"
+    )
+
+    result = project_source(read_source(path), profile)
+
+    assert result.records == ()
+    assert result.excluded_count == 1
+    assert result.rejected_count == 0
+    assert result.issues[0].severity == "info"
+    assert result.issues[0].code == "FOOD_GROUP_EXCLUDED_INCOMPLETE_NUTRITION"
 
 
 def test_rejects_bad_number_and_unit(tmp_path: Path) -> None:

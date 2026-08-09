@@ -43,13 +43,13 @@ def test_catalog_search_custom_food_favorite_and_owner_isolation(client):
 
     seeded = client.get(
         "/api/v1/catalog/foods/search",
-        params={"q": "dami"},
+        params={"q": "白飯"},
         headers=first,
     )
     assert seeded.status_code == 200
     rice = seeded.json()["data"][0]
-    assert rice["source_name"] == "USDA FoodData Central"
-    assert rice["source_record_id"] == "169756"
+    assert rice["source_name"] == "Taiwan FDA Food Nutrient Database"
+    assert rice["source_record_id"] == "A0550601"
 
     custom = client.post(
         "/api/v1/catalog/foods/custom",
@@ -83,7 +83,7 @@ def test_catalog_search_custom_food_favorite_and_owner_isolation(client):
     assert favorite.status_code == 200
     assert client.get(
         "/api/v1/catalog/foods/search",
-        params={"q": "dami"},
+        params={"q": "白飯"},
         headers=first,
     ).json()["data"][0]["is_favorite"] is True
     assert client.delete(

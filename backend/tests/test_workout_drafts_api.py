@@ -84,7 +84,7 @@ def _payload(
             {
                 "catalog_exercise_id": running_id,
                 "duration_min": 20,
-                "device_calories": None,
+                "device_calories": 240.1,
             }
         ],
     }
@@ -97,16 +97,24 @@ def test_catalog_custom_ownership_and_workout_draft_contract(client):
     owner = _register(client, "workout-owner")
     other = _register(client, "workout-other")
     _profile(client, owner)
-    squat = client.get(
+    squat_results = client.get(
         "/api/v1/catalog/exercises/search",
-        params={"q": "squat"},
+        params={"q": "Barbell Full Squat"},
         headers=owner,
-    ).json()["data"][0]
-    running = client.get(
+    ).json()["data"]
+    squat = next(
+        item for item in squat_results
+        if item["source_record_id"] == "Barbell_Full_Squat"
+    )
+    running_results = client.get(
         "/api/v1/catalog/exercises/search",
-        params={"q": "running"},
+        params={"q": "Running Treadmill"},
         headers=owner,
-    ).json()["data"][0]
+    ).json()["data"]
+    running = next(
+        item for item in running_results
+        if item["source_record_id"] == "Running_Treadmill"
+    )
     custom = client.post(
         "/api/v1/catalog/exercises/custom",
         headers=owner,
@@ -212,16 +220,24 @@ def test_workout_owner_headers_and_idempotency_contract(client):
     owner = _register(client, "workout-contract-owner")
     other = _register(client, "workout-contract-other")
     _profile(client, owner)
-    squat = client.get(
+    squat_results = client.get(
         "/api/v1/catalog/exercises/search",
-        params={"q": "squat"},
+        params={"q": "Barbell Full Squat"},
         headers=owner,
-    ).json()["data"][0]
-    running = client.get(
+    ).json()["data"]
+    squat = next(
+        item for item in squat_results
+        if item["source_record_id"] == "Barbell_Full_Squat"
+    )
+    running_results = client.get(
         "/api/v1/catalog/exercises/search",
-        params={"q": "running"},
+        params={"q": "Running Treadmill"},
         headers=owner,
-    ).json()["data"][0]
+    ).json()["data"]
+    running = next(
+        item for item in running_results
+        if item["source_record_id"] == "Running_Treadmill"
+    )
     created = client.post(
         "/api/v1/workout-drafts",
         headers=owner,

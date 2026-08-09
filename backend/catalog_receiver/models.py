@@ -154,6 +154,7 @@ class ProjectionSpec(BaseModel):
     pivot: PivotSpec | None = None
     category_map: dict[str, str] = Field(default_factory=dict)
     excluded_categories: tuple[str, ...] = ()
+    exclude_incomplete_groups: bool = False
 
     @model_validator(mode="after")
     def validate_strategy(self) -> "ProjectionSpec":
