@@ -65,7 +65,7 @@ def test_authenticated_smart_entry_contract_conflict_and_confirm(client):
     endpoint = "/api/v1/smart-entry-drafts"
     payload = {
         "log_date": "2026-07-26",
-        "raw_text": "早餐：dami 100g\n力量：squat 3x8 60kg",
+        "raw_text": "早餐：白飯 100g\n力量：杠铃深蹲 3x8 60kg",
     }
 
     assert client.post(endpoint, json=payload).status_code == 401
@@ -119,7 +119,7 @@ def test_authenticated_smart_entry_contract_conflict_and_confirm(client):
         headers=owner,
     )
     assert today.status_code == 200
-    assert today.json()["data"]["consumed"]["calories"] == 365
+    assert today.json()["data"]["consumed"]["calories"] == 182
     assert len(today.json()["data"]["workouts"]) == 1
 
 

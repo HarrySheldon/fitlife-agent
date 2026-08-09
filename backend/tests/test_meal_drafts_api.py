@@ -72,7 +72,7 @@ def test_authenticated_draft_update_conflict_and_idempotent_confirm(client):
     other = _register(client, "meal-other")
     foods = client.get(
         "/api/v1/catalog/foods/search",
-        params={"q": "dami"},
+        params={"q": "白飯"},
         headers=owner,
     ).json()["data"]
     rice_id = foods[0]["id"]
@@ -85,7 +85,7 @@ def test_authenticated_draft_update_conflict_and_idempotent_confirm(client):
     assert created.status_code == 200
     draft = created.json()["data"]
     assert draft["version"] == 1
-    assert draft["payload"]["items"][0]["calories"] == 365
+    assert draft["payload"]["items"][0]["calories"] == 182
 
     foreign = client.get(
         f"/api/v1/meal-drafts/{draft['id']}",
