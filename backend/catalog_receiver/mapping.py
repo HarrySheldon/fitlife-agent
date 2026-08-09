@@ -41,6 +41,8 @@ def load_mapping_profile(path: str | Path) -> MappingProfile:
 
 
 def select_value(record: Any, selector: str) -> Any:
+    if isinstance(record, dict) and selector in record:
+        return record[selector]
     try:
         return jmespath.search(selector, record)
     except (jmespath.exceptions.JMESPathError, TypeError) as error:

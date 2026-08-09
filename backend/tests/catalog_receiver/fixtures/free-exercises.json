@@ -1,0 +1,41 @@
+[
+  {
+    "id": "Barbell_Full_Squat",
+    "name": "Barbell Full Squat",
+    "force": "push",
+    "level": "intermediate",
+    "mechanic": "compound",
+    "equipment": "barbell",
+    "primaryMuscles": ["quadriceps"],
+    "secondaryMuscles": ["calves", "glutes"],
+    "instructions": ["Stand with the bar.", "Squat."],
+    "category": "strength",
+    "images": ["one.jpg"]
+  },
+  {
+    "id": "Stretch",
+    "name": "Stretch",
+    "force": "static",
+    "level": "beginner",
+    "mechanic": null,
+    "equipment": null,
+    "primaryMuscles": ["hamstrings"],
+    "secondaryMuscles": [],
+    "instructions": ["Stretch."],
+    "category": "stretching",
+    "images": []
+  },
+  {
+    "id": "Run",
+    "name": "Run",
+    "force": null,
+    "level": "beginner",
+    "mechanic": null,
+    "equipment": null,
+    "primaryMuscles": ["quadriceps"],
+    "secondaryMuscles": ["calves"],
+    "instructions": ["Run."],
+    "category": "cardio",
+    "images": []
+  }
+]

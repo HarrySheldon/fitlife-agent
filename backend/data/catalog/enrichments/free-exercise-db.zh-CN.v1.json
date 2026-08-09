@@ -1,0 +1,32 @@
+{
+  "Barbell_Full_Squat": {
+    "name_zh": "杠铃深蹲",
+    "aliases": ["深蹲", "杠铃全蹲"],
+    "pinyin": ["gangling shendun", "shendun"]
+  },
+  "Barbell_Bench_Press_-_Medium_Grip": {
+    "name_zh": "杠铃卧推",
+    "aliases": ["卧推", "平板卧推"],
+    "pinyin": ["gangling wotui", "wotui"]
+  },
+  "Pullups": {
+    "name_zh": "引体向上",
+    "aliases": ["引体"],
+    "pinyin": ["yinti xiangshang"]
+  },
+  "Pushups": {
+    "name_zh": "俯卧撑",
+    "aliases": ["伏地挺身"],
+    "pinyin": ["fuwocheng"]
+  },
+  "Bent_Over_Barbell_Row": {
+    "name_zh": "杠铃俯身划船",
+    "aliases": ["俯身划船", "杠铃划船"],
+    "pinyin": ["gangling fushen huachuan"]
+  },
+  "Dumbbell_Shoulder_Press": {
+    "name_zh": "哑铃肩推",
+    "aliases": ["肩推"],
+    "pinyin": ["yaling jiantui"]
+  }
+}

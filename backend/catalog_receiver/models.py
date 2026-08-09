@@ -203,3 +203,56 @@ class StructureInspection(BaseModel):
     ambiguous_fields: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     missing_fields: tuple[str, ...] = ()
     draft_profile: dict[str, Any]
+
+
+class CanonicalFoodRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_name: str
+    source_record_id: str
+    dataset_version: str
+    license: str
+    attribution: str
+    name: str
+    basis_type: Literal["per_100g"] = "per_100g"
+    basis_amount: float = 100
+    unit: Literal["g"] = "g"
+    calories: float
+    carbs: float
+    protein: float
+    fat: float
+    aliases: tuple[str, ...] = ()
+    provenance: dict[str, Any]
+
+
+class CanonicalExerciseRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_name: str
+    source_record_id: str
+    dataset_version: str
+    license: str
+    attribution: str
+    name: str
+    exercise_type: Literal["strength", "cardio"]
+    primary_muscle: str
+    secondary_muscles: tuple[str, ...] = ()
+    met: float | None = None
+    aliases: tuple[str, ...] = ()
+    provenance: dict[str, Any]
+
+
+CanonicalRecord = CanonicalFoodRecord | CanonicalExerciseRecord
+
+
+class ProjectionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    catalog_kind: CatalogKind
+    records: tuple[CanonicalRecord, ...]
+    issues: tuple[ReceiverIssue, ...] = ()
+    scanned_count: int
+    excluded_count: int = 0
+    rejected_count: int = 0
+    enrichment_count: int = 0
+    enrichment_coverage: float = Field(default=0, ge=0, le=1)

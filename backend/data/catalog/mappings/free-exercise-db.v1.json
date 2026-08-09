@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "profile_name": "free-exercise-db",
+  "profile_version": "1.0.0",
+  "catalog_kind": "exercise",
+  "input_format": "json",
+  "source_name": "free-exercise-db",
+  "dataset_version": "2026-08-09",
+  "license": "Unlicense",
+  "attribution": "free-exercise-db contributors",
+  "projection": {
+    "strategy": "row",
+    "record_selector": "@",
+    "fields": {
+      "source_record_id": {"selector": "id", "transforms": [{"operation": "strip"}]},
+      "name": {"selector": "name", "transforms": [{"operation": "strip"}]},
+      "exercise_type": {"selector": "category", "transforms": [{"operation": "lower"}]},
+      "primary_muscle": {"selector": "primaryMuscles", "transforms": [{"operation": "first"}]},
+      "secondary_muscles": {"selector": "secondaryMuscles", "transforms": [{"operation": "list"}]},
+      "equipment": {"selector": "equipment"},
+      "level": {"selector": "level"},
+      "mechanic": {"selector": "mechanic"},
+      "force": {"selector": "force"},
+      "instructions": {"selector": "instructions", "transforms": [{"operation": "list"}]},
+      "images": {"selector": "images", "transforms": [{"operation": "list"}]}
+    },
+    "category_map": {
+      "strength": "strength",
+      "plyometrics": "strength",
+      "powerlifting": "strength",
+      "olympic weightlifting": "strength",
+      "strongman": "strength",
+      "cardio": "cardio"
+    },
+    "excluded_categories": ["stretching"]
+  },
+  "enrichment": {
+    "identity_field": "id",
+    "minimum_coverage": 0
+  },
+  "retired_sources": []
+}

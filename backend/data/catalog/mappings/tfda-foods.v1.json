@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "profile_name": "tfda-foods",
+  "profile_version": "1.0.0",
+  "catalog_kind": "food",
+  "input_format": "csv",
+  "source_name": "Taiwan FDA Food Nutrient Database",
+  "dataset_version": "2025-12-22",
+  "license": "Taiwan Government Open Data License 1.0",
+  "attribution": "Taiwan Food and Drug Administration",
+  "projection": {
+    "strategy": "grouped_pivot",
+    "grouping_key": "整合編號",
+    "fields": {
+      "source_record_id": {"selector": "整合編號", "transforms": [{"operation": "strip"}]},
+      "name": {"selector": "樣品名稱", "transforms": [{"operation": "strip"}, {"operation": "opencc_t2s"}]},
+      "traditional_name": {"selector": "樣品名稱", "transforms": [{"operation": "strip"}]},
+      "common_name": {"selector": "俗名", "transforms": [{"operation": "strip"}]},
+      "english_name": {"selector": "樣品英文名稱", "transforms": [{"operation": "strip"}]},
+      "food_category": {"selector": "食品分類", "transforms": [{"operation": "strip"}]},
+      "description": {"selector": "內容物描述", "transforms": [{"operation": "strip"}]}
+    },
+    "pivot": {
+      "key_selector": "分析項",
+      "value_selector": "每100克含量",
+      "unit_selector": "含量單位",
+      "targets": {
+        "calories": ["修正熱量", "熱量"],
+        "carbs": ["總碳水化合物"],
+        "protein": ["粗蛋白"],
+        "fat": ["粗脂肪"]
+      }
+    }
+  },
+  "retired_sources": ["fitlife-bundled-foods"]
+}
