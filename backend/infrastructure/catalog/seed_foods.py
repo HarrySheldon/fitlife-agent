@@ -39,6 +39,13 @@ def seed_bundled_foods(
     path: Path = DEFAULT_SEED_PATH,
 ) -> FoodSeedResult:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return seed_food_payload(database, payload)
+
+
+def seed_food_payload(
+    database: SQLiteDatabase,
+    payload: dict[str, object],
+) -> FoodSeedResult:
     if payload.get("schema_version") != 1:
         raise ValueError("FOOD_SEED_SCHEMA_VERSION_UNSUPPORTED")
     source_name = _required_text(payload, "source_name")

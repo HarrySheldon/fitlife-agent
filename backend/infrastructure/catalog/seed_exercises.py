@@ -38,6 +38,13 @@ def seed_bundled_exercises(
     path: Path = DEFAULT_SEED_PATH,
 ) -> ExerciseSeedResult:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return seed_exercise_payload(database, payload)
+
+
+def seed_exercise_payload(
+    database: SQLiteDatabase,
+    payload: dict[str, object],
+) -> ExerciseSeedResult:
     if payload.get("schema_version") != 1:
         raise ValueError("EXERCISE_SEED_SCHEMA_VERSION_UNSUPPORTED")
     dataset_version = _text(payload, "dataset_version")
