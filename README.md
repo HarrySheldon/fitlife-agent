@@ -130,7 +130,46 @@ Each run can produce `catalog-import-report.json`, `catalog-import-report.txt`, 
 
 CLI exits are `0` for success, `2` for file/physical format errors, `3` for mapping errors, `4` for data validation errors, and `5` for database errors. The current bundled Taiwan snapshot contains 2,128 complete foods; 53 upstream foods with blank protein or fat were explicitly excluded and reported instead of being guessed as zero. The bundled exercise snapshot contains 750 compatible records; all 123 stretching records were explicitly excluded.
 
+## One-Command Startup
+
+From the repository root, run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
+```
+
+The launcher performs the complete local startup flow:
+
+- verifies that `.env` is ignored and not tracked by Git;
+- creates `.env` from `.env.example` when it does not exist;
+- generates one persistent Fernet deployment key without printing it;
+- preserves an existing valid key and rejects an invalid key instead of replacing it;
+- starts Docker Desktop when the engine is unavailable at its standard Windows location;
+- builds and starts both Compose services;
+- waits for backend readiness and a successful frontend response;
+- prints the frontend, backend, and health-check URLs.
+
+The default addresses are:
+
+- Frontend: `http://127.0.0.1:3000`
+- Backend: `http://127.0.0.1:8000`
+- Readiness: `http://127.0.0.1:8000/health/ready`
+
+The command is safe to run again. It reuses the existing encryption key and lets Docker Compose reconcile the running containers. It never creates or prints a user model API key; authenticated users enter their own provider credentials under **Settings > Model connection**.
+
+Useful operational commands:
+
+```powershell
+docker compose ps
+docker compose logs --tail 100
+docker compose down
+```
+
+This launcher is intended for local Windows development. The key is excluded from Git and Docker build contexts, but a user with local Docker administrator access can inspect container environment variables. Use Docker Secrets or an external secret manager for a production server.
+
 ## Local Setup
+
+Use this manual flow only when running services outside Docker:
 
 ```bash
 python scripts/generate_sample_data.py
@@ -151,6 +190,8 @@ Backend: `http://127.0.0.1:8000`
 Frontend: `http://127.0.0.1:5173`
 
 ## Docker
+
+The one-command launcher above is the recommended Windows path. To run Compose directly without environment bootstrap or readiness output:
 
 ```bash
 docker compose up --build
@@ -173,7 +214,7 @@ Create a verified release backup with:
 
 Deterministic features are available without a model. Each authenticated user configures one model connection from **Settings > Model connection**. API keys are encrypted at rest and are never returned by the API.
 
-Generate a deployment Fernet key once:
+The one-command launcher creates and persists the deployment Fernet key automatically. When starting the services manually instead, generate a key once:
 
 ```powershell
 .venv\Scripts\python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
