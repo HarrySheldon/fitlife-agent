@@ -4,6 +4,8 @@
 
 **Goal:** Build a deterministic local CSV/JSON receiver that inspects, maps, validates, reports, and atomically imports Taiwan FDA food data and free-exercise-db data through the existing SQLite catalog infrastructure.
 
+**Execution status:** Implemented and verified on 2026-08-10. The final backend suite passed 813 tests; the rebuilt Compose environment reported ready with 2,128 active public foods and 750 active public exercises.
+
 **Architecture:** A physical reader produces bounded source documents, an inspector describes them, a validated mapping profile drives safe projectors, catalog validators produce canonical records and coded issues, and a sink delegates persistence to the existing seed/import-ledger code. CLI and initial-import scripts are thin adapters around one service; no Agent, network input, HTTP upload, or profile-executed code is allowed.
 
 **Tech Stack:** Python 3.12, Pydantic v2, stdlib csv/json/hashlib/argparse, JMESPath, OpenCC, SQLite, pytest.
@@ -275,7 +277,7 @@ Download only to an ignored temporary directory using the two approved public UR
 
 - [ ] **Step 2: Run real-data validation before modifying bundled snapshots**
 
-Run the receiver `validate` command against both files and assert Taiwan accepts 2,181 foods; exercise input reports 873 total, 123 stretching exclusions, and 750 accepted compatible records unless the report clearly identifies upstream drift.
+Run the receiver `validate` command against both files. The audited Taiwan source reports 2,181 groups, accepts 2,128 complete foods, and explicitly excludes 53 groups with blank protein or fat values. The exercise input reports 873 total, 123 stretching exclusions, and 750 accepted compatible records unless a later report clearly identifies upstream drift.
 
 - [ ] **Step 3: Materialize reviewed normalized snapshots**
 

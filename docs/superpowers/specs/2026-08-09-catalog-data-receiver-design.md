@@ -1,6 +1,6 @@
 # Catalog Data Receiver Design
 
-**Status:** Approved
+**Status:** Implemented and verified
 **Date:** 2026-08-09
 **Scope:** Local CSV/JSON inspection, mapping, validation, normalization, reporting, and controlled import for public food and exercise catalogs.
 
@@ -39,7 +39,7 @@ The current bundled data is demonstration-sized: eight foods, six strength exerc
 - JSON download: <https://data.fda.gov.tw/opendata/exportDataList.do?method=ExportData&InfoId=20&logType=5>
 - License: Taiwan Government Open Data License, version 1.0.
 
-The audited CSV contained 226,824 long-form nutrient rows for 2,181 unique foods. Every food had energy, total carbohydrate, crude protein, and crude fat values. Names are Traditional Chinese and may include common and English names.
+The audited CSV contained 226,824 long-form nutrient rows for 2,181 unique food groups. Of those groups, 2,128 had all four required values and were accepted. The remaining 53 had blank protein or fat values and were explicitly excluded rather than guessed as zero. Names are Traditional Chinese and may include common and English names.
 
 ### free-exercise-db
 
@@ -331,7 +331,7 @@ Modules remain independently testable. Readers know physical files, mapping/proj
 
 ### Real-Data Acceptance
 
-- the audited Taiwan file yields 2,181 foods;
+- the audited Taiwan file yields 2,181 scanned food groups, 2,128 accepted foods, and 53 explicitly excluded incomplete groups;
 - every accepted food has calories, carbohydrates, protein, fat, license, attribution, and provenance;
 - the free-exercise report shows the audited category distribution or explicitly reports upstream drift;
 - all 123 audited stretching records are excluded rather than misclassified;
