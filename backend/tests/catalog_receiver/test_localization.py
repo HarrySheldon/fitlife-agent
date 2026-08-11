@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import stat
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
@@ -248,6 +249,57 @@ def test_rejects_oversized_asset_from_bounded_read(
     assert "size limit" in raised.value.message
     assert raised.value.issue is not None
     assert raised.value.issue.source_path == str(path.resolve())
+
+
+def test_rejects_non_regular_open_handle_before_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    class NonRegularStream:
+        def __enter__(self) -> "NonRegularStream":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def fileno(self) -> int:
+            return 123
+
+        def read(self, _size: int) -> bytes:
+            raise AssertionError("non-regular input must be rejected before read")
+
+    monkeypatch.setattr(Path, "open", lambda *_args, **_kwargs: NonRegularStream())
+    monkeypatch.setattr(
+        localization_module,
+        "os",
+        SimpleNamespace(fstat=lambda _fd: SimpleNamespace(st_mode=stat.S_IFIFO)),
+        raising=False,
+    )
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path=FOOD_LOCALIZATION)
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert "regular file" in raised.value.message
+
+
+@pytest.mark.parametrize("device_name", ["NUL", "CON"])
+def test_rejects_windows_reserved_device_without_opening(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    device_name: str,
+) -> None:
+    source = tmp_path / device_name
+
+    def unexpected_open(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("reserved device path must be rejected before open")
+
+    monkeypatch.setattr(Path, "open", unexpected_open)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path=source)
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert "reserved device" in raised.value.message
+    assert raised.value.issue is not None
+    assert raised.value.issue.source_path == str(source.absolute())
 
 
 def test_reports_missing_and_orphan_source_ids() -> None:

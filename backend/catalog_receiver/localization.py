@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import unicodedata
 from bisect import bisect_right
 from pathlib import Path
@@ -35,6 +37,19 @@ FOOD_SOURCE_NAME = "Taiwan FDA Food Nutrient Database"
 EXERCISE_SOURCE_NAME = "free-exercise-db"
 LOCALIZATION_JSON_SIZE_LIMIT = 10_000_000
 ModelT = TypeVar("ModelT", bound=BaseModel)
+WINDOWS_RESERVED_DEVICE_NAMES = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        "CLOCK$",
+        "CONIN$",
+        "CONOUT$",
+        *(f"COM{number}" for number in range(1, 10)),
+        *(f"LPT{number}" for number in range(1, 10)),
+    }
+)
 
 # Unicode 15.1 Script=Latin ranges from https://www.unicode.org/Public/15.1.0/ucd/Scripts.txt.
 LATIN_SCRIPT_RANGES = (
@@ -495,9 +510,20 @@ def _load_asset_document(path: str | Path, *, label: str) -> tuple[Path, Any]:
             display_name=display_name,
         )
 
-    source_path = Path(path).expanduser().resolve(strict=False)
+    local_path = Path(path).expanduser()
+    if _is_windows_reserved_device(local_path):
+        sanitized_path = local_path.absolute()
+        raise _invalid_asset_error(
+            label,
+            sanitized_path,
+            "Windows reserved device paths are not supported",
+        )
+
+    source_path = local_path.resolve(strict=False)
     try:
         with source_path.open("rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise _invalid_asset_error(label, source_path, "path must identify a regular file")
             raw_document = stream.read(LOCALIZATION_JSON_SIZE_LIMIT + 1)
     except FileNotFoundError as error:
         raise _invalid_asset_error(label, source_path, "file not found") from error
@@ -520,6 +546,12 @@ def _load_asset_document(path: str | Path, *, label: str) -> tuple[Path, Any]:
     except ValueError as error:
         raise _invalid_asset_error(label, source_path, str(error)) from error
     return source_path, _freeze_json_arrays(document)
+
+
+def _is_windows_reserved_device(path: Path) -> bool:
+    basename = path.name.rstrip(" .")
+    device_name = basename.split(".", maxsplit=1)[0].split(":", maxsplit=1)[0].upper()
+    return device_name in WINDOWS_RESERVED_DEVICE_NAMES
 
 
 def _sanitized_url(parsed: SplitResult) -> str:
