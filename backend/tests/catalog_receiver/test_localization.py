@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 
 import pytest
 
+from backend.catalog_receiver import localization as localization_module
 from backend.catalog_receiver.localization import (
+    ExerciseLocalizationAsset,
+    FoodLocalizationAsset,
     load_localization_bundle,
     validate_localization_coverage,
 )
@@ -34,6 +38,12 @@ def test_loads_valid_food_asset_and_preserves_authored_aliases() -> None:
 
     localized = bundle.food("A001")
 
+    assert bundle.schema_version == 1
+    assert bundle.version == "1.0.0"
+    assert bundle.locale == "zh-CN"
+    assert bundle.source_name == "Taiwan FDA Food Nutrient Database"
+    assert bundle.localization_path == FOOD_LOCALIZATION.resolve()
+    assert bundle.taxonomy_path is None
     assert localized.name_zh_cn == "米饭"
     assert localized.aliases == ("白飯", "Cooked rice")
     with pytest.raises(TypeError):
@@ -49,13 +59,63 @@ def test_loads_valid_exercise_and_taxonomy_assets() -> None:
 
     localized = bundle.exercise("Barbell_Full_Squat", instruction_count=2)
 
+    assert bundle.schema_version == 1
+    assert bundle.version == "2.0.0"
+    assert bundle.locale == "zh-CN"
+    assert bundle.source_name == "free-exercise-db"
+    assert bundle.localization_path == EXERCISE_LOCALIZATION.resolve()
+    assert bundle.taxonomy_path == EXERCISE_TAXONOMY.resolve()
     assert localized.name_zh_cn == "杠铃深蹲"
     assert localized.instructions_zh_cn == (
         "将杠铃置于上背部。",
         "屈髋屈膝下蹲。",
     )
     assert bundle.taxonomy is not None
+    assert bundle.taxonomy.schema_version == 1
+    assert bundle.taxonomy.version == "1.0.0"
+    assert bundle.taxonomy.locale == "zh-CN"
+    assert bundle.taxonomy.source_name == "free-exercise-db"
     assert bundle.taxonomy.equipment["e-z curl bar"] == "EZ 杠"
+
+
+def test_immutable_models_serialize_to_json_without_warnings() -> None:
+    food_bundle = load_localization_bundle(
+        catalog_kind="food",
+        localization_path=FOOD_LOCALIZATION,
+    )
+    exercise_bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=EXERCISE_LOCALIZATION,
+        taxonomy_path=EXERCISE_TAXONOMY,
+    )
+    assert exercise_bundle.taxonomy is not None
+    models = (
+        FoodLocalizationAsset(
+            schema_version=1,
+            version="1.0.0",
+            source_name="Taiwan FDA Food Nutrient Database",
+            locale="zh-CN",
+            entries=food_bundle.food_entries,
+        ),
+        ExerciseLocalizationAsset(
+            schema_version=1,
+            version="2.0.0",
+            source_name="free-exercise-db",
+            locale="zh-CN",
+            entries=exercise_bundle.exercise_entries,
+        ),
+        exercise_bundle.taxonomy,
+        food_bundle,
+        exercise_bundle,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        for model in models:
+            dumped = model.model_dump(mode="json")
+            assert json.loads(model.model_dump_json()) == dumped
+
+    assert caught == []
 
 
 def test_rejects_duplicate_json_keys(tmp_path: Path) -> None:
@@ -92,6 +152,80 @@ def test_rejects_wrong_source_name(tmp_path: Path) -> None:
     assert raised.value.code == "LOCALIZATION_INVALID"
 
 
+def test_missing_taxonomy_identifies_taxonomy_path(tmp_path: Path) -> None:
+    taxonomy_path = tmp_path / "missing-taxonomy.json"
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(
+            catalog_kind="exercise",
+            localization_path=EXERCISE_LOCALIZATION,
+            taxonomy_path=taxonomy_path,
+        )
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert taxonomy_path.name in raised.value.message
+    assert "not found" in raised.value.message.casefold()
+    assert raised.value.issue is not None
+    assert raised.value.issue.source_path == str(taxonomy_path.resolve())
+
+
+def test_malformed_taxonomy_identifies_taxonomy_path(tmp_path: Path) -> None:
+    taxonomy_path = tmp_path / "malformed-taxonomy.json"
+    taxonomy_path.write_text('{"schema_version":', encoding="utf-8")
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(
+            catalog_kind="exercise",
+            localization_path=EXERCISE_LOCALIZATION,
+            taxonomy_path=taxonomy_path,
+        )
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert taxonomy_path.name in raised.value.message
+    assert "malformed JSON" in raised.value.message
+    assert raised.value.issue is not None
+    assert raised.value.issue.source_path == str(taxonomy_path.resolve())
+
+
+def test_rejects_url_without_exposing_credentials() -> None:
+    source = "https://reader:secret@example.com/localization.json?token=hidden"
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path=source)
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert "local files" in raised.value.message
+    assert "secret" not in raised.value.message
+    assert "hidden" not in raised.value.message
+    assert raised.value.issue is not None
+    assert raised.value.issue.source_path == "https://example.com/localization.json"
+
+
+def test_rejects_unc_path_before_filesystem_access() -> None:
+    source = r"\\server\share\localization.json"
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path=source)
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert "UNC paths are not supported" in raised.value.message
+    assert raised.value.issue is not None
+    assert raised.value.issue.source_path == source
+
+
+def test_rejects_oversized_asset_before_read(tmp_path: Path) -> None:
+    path = tmp_path / "oversized-localization.json"
+    path.write_bytes(b" " * (localization_module.LOCALIZATION_JSON_SIZE_LIMIT + 1))
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path=path)
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert "size limit" in raised.value.message
+    assert raised.value.issue is not None
+    assert raised.value.issue.source_path == str(path.resolve())
+
+
 def test_reports_missing_and_orphan_source_ids() -> None:
     bundle = load_localization_bundle(
         catalog_kind="food",
@@ -104,6 +238,7 @@ def test_reports_missing_and_orphan_source_ids() -> None:
         ("LOCALIZATION_MISSING", "A003"),
         ("LOCALIZATION_ORPHAN", "A002"),
     ]
+    assert {issue.source_path for issue in issues} == {str(FOOD_LOCALIZATION.resolve())}
 
 
 def test_rejects_instruction_count_mismatch() -> None:
@@ -119,6 +254,7 @@ def test_rejects_instruction_count_mismatch() -> None:
     assert raised.value.code == "LOCALIZATION_INSTRUCTION_COUNT_MISMATCH"
     assert raised.value.issue is not None
     assert raised.value.issue.record == "Barbell_Full_Squat"
+    assert raised.value.issue.source_path == str(EXERCISE_LOCALIZATION.resolve())
 
 
 def test_rejects_duplicate_canonical_names(tmp_path: Path) -> None:
@@ -169,3 +305,39 @@ def test_rejects_unapproved_latin_text(tmp_path: Path) -> None:
         )
 
     assert raised.value.code == "LOCALIZATION_LATIN_UNAPPROVED"
+
+
+@pytest.mark.parametrize("name_zh_cn", ["é 深蹲", "TRX\u0338 深蹲", "TRX2 深蹲"])
+def test_rejects_unicode_latin_tokens_not_exactly_approved(
+    tmp_path: Path,
+    name_zh_cn: str,
+) -> None:
+    payload = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
+    payload["entries"]["Barbell_Full_Squat"]["name_zh_cn"] = name_zh_cn
+    path = _localized_copy(tmp_path, EXERCISE_LOCALIZATION, payload)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(
+            catalog_kind="exercise",
+            localization_path=path,
+            taxonomy_path=EXERCISE_TAXONOMY,
+        )
+
+    assert raised.value.code == "LOCALIZATION_LATIN_UNAPPROVED"
+
+
+def test_allows_nfkc_equivalent_unicode_latin_token(tmp_path: Path) -> None:
+    localization = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
+    localization["entries"]["Barbell_Full_Squat"]["name_zh_cn"] = "Cafe\u0301 深蹲"
+    localization_path = _localized_copy(tmp_path, EXERCISE_LOCALIZATION, localization)
+    taxonomy = json.loads(EXERCISE_TAXONOMY.read_text(encoding="utf-8"))
+    taxonomy["approved_latin"].append("CAFÉ")
+    taxonomy_path = _localized_copy(tmp_path, EXERCISE_TAXONOMY, taxonomy)
+
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=localization_path,
+        taxonomy_path=taxonomy_path,
+    )
+
+    assert bundle.exercise("Barbell_Full_Squat", instruction_count=2).name_zh_cn == "Cafe\u0301 深蹲"

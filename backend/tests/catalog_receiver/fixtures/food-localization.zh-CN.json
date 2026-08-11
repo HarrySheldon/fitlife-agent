@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "version": "1.0.0",
   "source_name": "Taiwan FDA Food Nutrient Database",
   "locale": "zh-CN",
   "entries": {

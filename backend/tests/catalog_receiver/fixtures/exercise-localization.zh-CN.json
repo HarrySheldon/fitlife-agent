@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "version": "2.0.0",
   "source_name": "free-exercise-db",
   "locale": "zh-CN",
   "entries": {
