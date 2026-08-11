@@ -181,12 +181,17 @@ class FoodLocalizationAsset(_StrictFrozenModel):
     version: str
     source_name: str
     locale: Literal["zh-CN"]
+    glossary: Mapping[str, str] = Field(default_factory=dict)
     entries: Mapping[str, FoodLocalizationEntry]
 
     @field_validator("version")
     @classmethod
     def validate_version(cls, value: str) -> str:
         return _authored_text(value, field="version")
+
+    @field_serializer("glossary")
+    def serialize_glossary(self, values: Mapping[str, str]) -> dict[str, str]:
+        return dict(values)
 
     @field_serializer("entries")
     def serialize_entries(
@@ -197,6 +202,11 @@ class FoodLocalizationAsset(_StrictFrozenModel):
 
     @model_validator(mode="after")
     def freeze_entries(self) -> "FoodLocalizationAsset":
+        glossary = _validated_mapping(self.glossary, "glossary", validate_values=True)
+        for source_term, localized_term in glossary.items():
+            if _normalize(source_term) == _normalize(localized_term):
+                raise ValueError("glossary terms must change after normalization")
+        object.__setattr__(self, "glossary", glossary)
         object.__setattr__(self, "entries", _validated_mapping(self.entries, "entries"))
         return self
 
@@ -279,11 +289,12 @@ class LocalizationBundle(_StrictFrozenModel):
     locale: Literal["zh-CN"]
     localization_path: Path
     taxonomy_path: Path | None = None
+    food_glossary: Mapping[str, str] = Field(default_factory=dict)
     food_entries: Mapping[str, FoodLocalizationEntry] = Field(default_factory=dict)
     exercise_entries: Mapping[str, ExerciseLocalizationEntry] = Field(default_factory=dict)
     taxonomy: ExerciseTaxonomyAsset | None = None
 
-    @field_serializer("food_entries", "exercise_entries")
+    @field_serializer("food_glossary", "food_entries", "exercise_entries")
     def serialize_entries(self, values: Mapping[str, Any]) -> dict[str, Any]:
         return dict(values)
 
@@ -292,8 +303,14 @@ class LocalizationBundle(_StrictFrozenModel):
         if self.catalog_kind == "food":
             if self.exercise_entries or self.taxonomy is not None or self.taxonomy_path is not None:
                 raise ValueError("food bundles cannot contain exercise localization")
-        elif self.food_entries or self.taxonomy is None or self.taxonomy_path is None:
+        elif (
+            self.food_glossary
+            or self.food_entries
+            or self.taxonomy is None
+            or self.taxonomy_path is None
+        ):
             raise ValueError("exercise bundles require exercise localization and taxonomy metadata")
+        object.__setattr__(self, "food_glossary", MappingProxyType(dict(self.food_glossary)))
         object.__setattr__(self, "food_entries", MappingProxyType(dict(self.food_entries)))
         object.__setattr__(self, "exercise_entries", MappingProxyType(dict(self.exercise_entries)))
         return self
@@ -377,6 +394,7 @@ def load_localization_bundle(
             source_name=asset.source_name,
             locale=asset.locale,
             localization_path=localization_file,
+            food_glossary=asset.glossary,
             food_entries=asset.entries,
         )
     if catalog_kind == "exercise":

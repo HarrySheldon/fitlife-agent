@@ -1,8 +1,16 @@
 {
   "schema_version": 1,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source_name": "Taiwan FDA Food Nutrient Database",
   "locale": "zh-CN",
+  "glossary": {
+    "白饭": "米饭",
+    "鲔鱼": "金枪鱼",
+    "马铃薯": "土豆",
+    "青花菜": "西兰花",
+    "奇异果": "猕猴桃",
+    "凤梨": "菠萝"
+  },
   "entries": {
     "A0550601": {"name_zh_cn": "米饭", "aliases": ["白饭"]},
     "B0700101": {"name_zh_cn": "红土豆(粉红珍珠土豆)", "aliases": ["红马铃薯(粉红珍珠马铃薯)"]},

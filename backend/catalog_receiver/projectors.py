@@ -5,15 +5,14 @@ import re
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import jmespath
 from pydantic import ValidationError
 
 from backend.catalog_receiver.localization import LocalizationBundle
 from backend.catalog_receiver.mapping import (
-    convert_t2s,
-    convert_tw2sp_base,
+    convert_tw2sp,
     resolve_field,
     select_value,
 )
@@ -105,34 +104,39 @@ def _project_foods(
         values = {name: resolve_field(first, spec) for name, spec in projection.fields.items()}
         nutrients = _pivot_nutrients(rows, profile)
         upstream_name = _text(values.get("traditional_name"))
+        baseline_name = _text(values.get("name"))
         if localization_bundle is None:
-            baseline_name = convert_t2s(upstream_name)
             tw2sp_name = ""
-            used_glossary = False
             localized = None
+            canonical_name = baseline_name
         else:
-            baseline_name = _text(values.get("name"))
-            tw2sp_name = convert_tw2sp_base(upstream_name)
-            used_glossary = baseline_name != tw2sp_name
-            localized = localization_bundle.food_entries.get(identity)
-        if (
-            localized is not None
-            and localized.name_zh_cn != baseline_name
-            and localized.review_note is None
-        ):
-            issues.append(
-                ReceiverIssue(
-                    severity="error",
-                    code="LOCALIZATION_OVERRIDE_REVIEW_NOTE_MISSING",
-                    record=identity,
-                    source_path=str(localization_bundle.localization_path),
-                    field="review_note",
-                    expected="a non-empty review note for a record-specific override",
+            tw2sp_name = convert_tw2sp(upstream_name)
+            localized = localization_bundle.food(identity)
+            if localized.review_note is not None:
+                canonical_name = localized.name_zh_cn
+                localization_method = "record_override"
+            else:
+                glossary_name = _apply_food_glossary(
+                    baseline_name,
+                    localization_bundle.food_glossary,
                 )
-            )
-            rejected += 1
-            continue
-        canonical_name = localized.name_zh_cn if localized is not None else baseline_name
+                if localized.name_zh_cn != glossary_name:
+                    issues.append(
+                        ReceiverIssue(
+                            severity="error",
+                            code="LOCALIZATION_OVERRIDE_REVIEW_NOTE_MISSING",
+                            record=identity,
+                            source_path=str(localization_bundle.localization_path),
+                            field="review_note",
+                            expected="a non-empty review note for a record-specific override",
+                        )
+                    )
+                    rejected += 1
+                    continue
+                canonical_name = glossary_name
+                localization_method = (
+                    "glossary" if glossary_name != baseline_name else "opencc_tw2sp"
+                )
         alias_values: tuple[Any, ...] = (
             upstream_name,
             values.get("common_name"),
@@ -155,20 +159,14 @@ def _project_foods(
             "food_category": values.get("food_category"),
             "description": values.get("description"),
             "nutrient_basis": "每100克含量",
-            "name_conversion": (
-                "opencc_tw2sp" if localization_bundle is not None else "opencc_t2s"
-            ),
+            "name_conversion": _mapped_name_conversion(profile),
         }
         if localization_bundle is not None:
-            if localized is not None and localized.name_zh_cn != baseline_name:
-                method = "record_override"
-            else:
-                method = "glossary" if used_glossary else "opencc_tw2sp"
             provenance["localization"] = {
                 "locale": localization_bundle.locale,
                 "asset_version": localization_bundle.version,
                 "upstream_name": upstream_name,
-                "method": method,
+                "method": localization_method,
             }
         try:
             records.append(
@@ -517,4 +515,36 @@ def _aliases_without_canonical(
         alias
         for alias in _unique_text(values)
         if unicodedata.normalize("NFKC", alias).casefold() != canonical_key
+    )
+
+
+def _apply_food_glossary(value: str, glossary: Mapping[str, str]) -> str:
+    terms = sorted(glossary, key=lambda term: (-len(term), term))
+    result: list[str] = []
+    position = 0
+    while position < len(value):
+        matched = next(
+            (term for term in terms if value.startswith(term, position)),
+            None,
+        )
+        if matched is None:
+            result.append(value[position])
+            position += 1
+            continue
+        result.append(glossary[matched])
+        position += len(matched)
+    return "".join(result)
+
+
+def _mapped_name_conversion(profile: MappingProfile) -> str | None:
+    name_field = profile.projection.fields.get("name")
+    if name_field is None:
+        return None
+    return next(
+        (
+            transform.operation
+            for transform in reversed(name_field.transforms)
+            if transform.operation in {"opencc_t2s", "opencc_tw2sp"}
+        ),
+        None,
     )

@@ -46,12 +46,15 @@ def test_loads_valid_food_asset_and_preserves_authored_aliases() -> None:
     assert bundle.source_name == "Taiwan FDA Food Nutrient Database"
     assert bundle.localization_path == FOOD_LOCALIZATION.resolve()
     assert bundle.taxonomy_path is None
+    assert dict(bundle.food_glossary) == {"白饭": "米饭", "马铃薯": "土豆"}
     assert localized.name_zh_cn == "米饭"
     assert localized.aliases == ("白飯", "Cooked rice")
     with pytest.raises(TypeError):
         bundle.food_entries["A003"] = localized  # type: ignore[index]
     with pytest.raises(TypeError):
         dict.__setitem__(bundle.food_entries, "A003", localized)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        bundle.food_glossary["白饭"] = "粥"  # type: ignore[index]
 
 
 def test_loads_valid_exercise_and_taxonomy_assets() -> None:
