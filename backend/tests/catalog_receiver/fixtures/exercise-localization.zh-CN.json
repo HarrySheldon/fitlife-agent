@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "source_name": "free-exercise-db",
+  "locale": "zh-CN",
+  "entries": {
+    "Barbell_Full_Squat": {
+      "name_zh_cn": "杠铃深蹲",
+      "aliases": ["Barbell Full Squat", "深蹲"],
+      "instructions_zh_cn": [
+        "将杠铃置于上背部。",
+        "屈髋屈膝下蹲。"
+      ]
+    },
+    "Pushups": {
+      "name_zh_cn": "俯卧撑",
+      "aliases": ["Pushups"],
+      "instructions_zh_cn": ["双手撑地，屈肘降低身体。"]
+    }
+  }
+}

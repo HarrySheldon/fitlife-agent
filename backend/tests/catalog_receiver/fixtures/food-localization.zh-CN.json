@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source_name": "Taiwan FDA Food Nutrient Database",
+  "locale": "zh-CN",
+  "entries": {
+    "A001": {
+      "name_zh_cn": "米饭",
+      "aliases": ["白飯", "Cooked rice"]
+    },
+    "A002": {
+      "name_zh_cn": "土豆",
+      "aliases": ["馬鈴薯"]
+    }
+  }
+}
