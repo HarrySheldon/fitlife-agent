@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "version": "1.0.0",
+  "source_name": "Taiwan FDA Food Nutrient Database",
+  "locale": "zh-CN",
+  "entries": {
+    "A0550601": {"name_zh_cn": "米饭", "aliases": ["白饭"]},
+    "B0700101": {"name_zh_cn": "红土豆(粉红珍珠土豆)", "aliases": ["红马铃薯(粉红珍珠马铃薯)"]},
+    "B0700201": {"name_zh_cn": "土豆", "aliases": ["马铃薯"]},
+    "B0700202": {"name_zh_cn": "土豆(2022年采样)", "aliases": ["马铃薯(2022年取样)"]},
+    "B0700301": {"name_zh_cn": "小土豆(珍珠土豆)", "aliases": ["小马铃薯(珍珠马铃薯)"]},
+    "B0720101": {"name_zh_cn": "土豆粉", "aliases": ["马铃薯粉"]},
+    "D0500101": {"name_zh_cn": "金黄猕猴桃", "aliases": ["金黄奇异果"]},
+    "D0500201": {"name_zh_cn": "猕猴桃", "aliases": ["奇异果"]},
+    "D1100101": {"name_zh_cn": "开英种1号菠萝", "aliases": ["开英种1号凤梨"]},
+    "D11002": {"name_zh_cn": "菠萝平均值(杂交种)", "aliases": ["凤梨平均值(杂交种)"]},
+    "D1100201": {"name_zh_cn": "甘蔗菠萝", "aliases": ["甘蔗凤梨"]},
+    "D1100202": {"name_zh_cn": "甜蜜蜜菠萝", "aliases": ["甜蜜蜜凤梨"]},
+    "D1100203": {"name_zh_cn": "金钻菠萝", "aliases": ["金钻凤梨"]},
+    "D1100204": {"name_zh_cn": "牛奶菠萝", "aliases": ["牛奶凤梨"]},
+    "D1200201": {
+      "name_zh_cn": "凤梨释迦",
+      "aliases": [],
+      "review_note": "凤梨释迦是番荔枝杂交种，改为菠萝释迦会误示其为菠萝制品。"
+    },
+    "E5800401": {"name_zh_cn": "西兰花(1999年采样)", "aliases": ["青花菜(1999年取样)"]},
+    "E5800402": {"name_zh_cn": "西兰花(2021年采样)", "aliases": ["青花菜(2021年取样)"]},
+    "E5800501": {"name_zh_cn": "冷冻西兰花", "aliases": ["冷冻青花菜"]},
+    "E5800601": {"name_zh_cn": "西兰花笋", "aliases": ["青花菜笋"]},
+    "E7700101": {"name_zh_cn": "西兰花芽", "aliases": ["青花菜芽"]},
+    "J0414601": {"name_zh_cn": "金枪鱼生鱼片", "aliases": ["鲔鱼生鱼片"]},
+    "J0707201": {"name_zh_cn": "金枪鱼肚", "aliases": ["鲔鱼肚"]},
+    "O0100901": {"name_zh_cn": "菠萝汁(非原汁)", "aliases": ["凤梨汁(非原汁)"]},
+    "Q0500501": {"name_zh_cn": "菠萝酥", "aliases": ["凤梨酥"]},
+    "Q8100501": {"name_zh_cn": "菠萝果干", "aliases": ["凤梨果干"]},
+    "R2200701": {"name_zh_cn": "冷冻金枪鱼水饺", "aliases": ["冷冻鲔鱼水饺"]},
+    "R4100401": {"name_zh_cn": "冷冻土豆条", "aliases": ["冷冻马铃薯条"]},
+    "R6900101": {"name_zh_cn": "香笋金枪鱼罐头", "aliases": ["香笋鲔鱼罐头"]}
+  }
+}

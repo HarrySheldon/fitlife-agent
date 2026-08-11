@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
@@ -9,7 +10,13 @@ from typing import Any, Iterable
 import jmespath
 from pydantic import ValidationError
 
-from backend.catalog_receiver.mapping import resolve_field, select_value
+from backend.catalog_receiver.localization import LocalizationBundle
+from backend.catalog_receiver.mapping import (
+    convert_t2s,
+    convert_tw2sp_base,
+    resolve_field,
+    select_value,
+)
 from backend.catalog_receiver.models import (
     CanonicalExerciseRecord,
     CanonicalFoodRecord,
@@ -28,6 +35,7 @@ def project_source(
     profile: MappingProfile,
     *,
     enrichment_path: str | Path | None = None,
+    localization_bundle: LocalizationBundle | None = None,
 ) -> ProjectionResult:
     if source.metadata.kind != profile.input_format:
         raise ReceiverError(
@@ -42,7 +50,7 @@ def project_source(
                 "The built-in food projector requires grouped-pivot CSV input.",
                 exit_code=3,
             )
-        return _project_foods(source, profile)
+        return _project_foods(source, profile, localization_bundle=localization_bundle)
     if not isinstance(source, JsonSource) or profile.projection.strategy != "row":
         raise ReceiverError(
             "MAPPING_PROJECTION_UNSUPPORTED",
@@ -52,7 +60,12 @@ def project_source(
     return _project_exercises(source, profile, enrichment_path=enrichment_path)
 
 
-def _project_foods(source: CsvSource, profile: MappingProfile) -> ProjectionResult:
+def _project_foods(
+    source: CsvSource,
+    profile: MappingProfile,
+    *,
+    localization_bundle: LocalizationBundle | None,
+) -> ProjectionResult:
     projection = profile.projection
     assert projection.grouping_key is not None
     assert projection.pivot is not None
@@ -91,13 +104,72 @@ def _project_foods(source: CsvSource, profile: MappingProfile) -> ProjectionResu
         first = rows[0]
         values = {name: resolve_field(first, spec) for name, spec in projection.fields.items()}
         nutrients = _pivot_nutrients(rows, profile)
-        aliases = _unique_text(
-            (
-                values.get("traditional_name"),
+        upstream_name = _text(values.get("traditional_name"))
+        if localization_bundle is None:
+            baseline_name = convert_t2s(upstream_name)
+            tw2sp_name = ""
+            used_glossary = False
+            localized = None
+        else:
+            baseline_name = _text(values.get("name"))
+            tw2sp_name = convert_tw2sp_base(upstream_name)
+            used_glossary = baseline_name != tw2sp_name
+            localized = localization_bundle.food_entries.get(identity)
+        if (
+            localized is not None
+            and localized.name_zh_cn != baseline_name
+            and localized.review_note is None
+        ):
+            issues.append(
+                ReceiverIssue(
+                    severity="error",
+                    code="LOCALIZATION_OVERRIDE_REVIEW_NOTE_MISSING",
+                    record=identity,
+                    source_path=str(localization_bundle.localization_path),
+                    field="review_note",
+                    expected="a non-empty review note for a record-specific override",
+                )
+            )
+            rejected += 1
+            continue
+        canonical_name = localized.name_zh_cn if localized is not None else baseline_name
+        alias_values: tuple[Any, ...] = (
+            upstream_name,
+            values.get("common_name"),
+            values.get("english_name"),
+        )
+        if localization_bundle is not None:
+            alias_values = (
+                upstream_name,
+                tw2sp_name,
                 values.get("common_name"),
                 values.get("english_name"),
+                *(localized.aliases if localized is not None else ()),
             )
+        aliases = _aliases_without_canonical(
+            alias_values,
+            canonical_name,
         )
+        provenance: dict[str, Any] = {
+            "profile": f"{profile.profile_name}@{profile.profile_version}",
+            "food_category": values.get("food_category"),
+            "description": values.get("description"),
+            "nutrient_basis": "每100克含量",
+            "name_conversion": (
+                "opencc_tw2sp" if localization_bundle is not None else "opencc_t2s"
+            ),
+        }
+        if localization_bundle is not None:
+            if localized is not None and localized.name_zh_cn != baseline_name:
+                method = "record_override"
+            else:
+                method = "glossary" if used_glossary else "opencc_tw2sp"
+            provenance["localization"] = {
+                "locale": localization_bundle.locale,
+                "asset_version": localization_bundle.version,
+                "upstream_name": upstream_name,
+                "method": method,
+            }
         try:
             records.append(
                 CanonicalFoodRecord(
@@ -106,19 +178,13 @@ def _project_foods(source: CsvSource, profile: MappingProfile) -> ProjectionResu
                     dataset_version=profile.dataset_version,
                     license=profile.license,
                     attribution=profile.attribution,
-                    name=_text(values.get("name")) or "",
+                    name=canonical_name,
                     calories=nutrients["calories"],
                     carbs=nutrients["carbs"],
                     protein=nutrients["protein"],
                     fat=nutrients["fat"],
                     aliases=aliases,
-                    provenance={
-                        "profile": f"{profile.profile_name}@{profile.profile_version}",
-                        "food_category": values.get("food_category"),
-                        "description": values.get("description"),
-                        "nutrient_basis": "每100克含量",
-                        "name_conversion": "opencc_t2s",
-                    },
+                    provenance=provenance,
                 )
             )
         except ValidationError as error:
@@ -440,3 +506,15 @@ def _unique_text(values: Iterable[Any]) -> tuple[str, ...]:
             result.append(text)
             seen.add(key)
     return tuple(result)
+
+
+def _aliases_without_canonical(
+    values: Iterable[Any],
+    canonical_name: str,
+) -> tuple[str, ...]:
+    canonical_key = unicodedata.normalize("NFKC", canonical_name).casefold()
+    return tuple(
+        alias
+        for alias in _unique_text(values)
+        if unicodedata.normalize("NFKC", alias).casefold() != canonical_key
+    )

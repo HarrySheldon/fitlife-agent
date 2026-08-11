@@ -29,6 +29,13 @@ def test_applies_allow_listed_transforms() -> None:
     assert apply_transform("CARDIO", TransformSpec(operation="lower")) == "cardio"
 
 
+def test_applies_taiwan_to_mainland_phrase_conversion() -> None:
+    assert apply_transform(
+        "白飯",
+        TransformSpec(operation="opencc_tw2sp"),
+    ) == "米饭"
+
+
 def test_resolves_jmespath_field_and_rejects_bad_selector() -> None:
     field = FieldSpec(
         selector="nutrients.protein",

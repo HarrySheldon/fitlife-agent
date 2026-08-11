@@ -18,6 +18,15 @@ from backend.catalog_receiver.models import (
 
 
 _T2S = OpenCC("t2s")
+_TW2SP = OpenCC("tw2sp")
+_MAINLAND_FOOD_GLOSSARY = (
+    ("白饭", "米饭"),
+    ("鲔鱼", "金枪鱼"),
+    ("马铃薯", "土豆"),
+    ("青花菜", "西兰花"),
+    ("奇异果", "猕猴桃"),
+    ("凤梨", "菠萝"),
+)
 
 
 def load_mapping_profile(path: str | Path) -> MappingProfile:
@@ -82,7 +91,9 @@ def apply_transform(value: Any, transform: TransformSpec) -> Any:
         normalized = {str(item).casefold(): result for item, result in transform.values.items()}
         return normalized.get(key)
     if operation == "opencc_t2s":
-        return _T2S.convert(value) if isinstance(value, str) else value
+        return convert_t2s(value) if isinstance(value, str) else value
+    if operation == "opencc_tw2sp":
+        return convert_tw2sp(value)[0] if isinstance(value, str) else value
     if operation == "lower":
         return value.casefold() if isinstance(value, str) else value
     raise ReceiverError(
@@ -90,6 +101,22 @@ def apply_transform(value: Any, transform: TransformSpec) -> Any:
         f"Unsupported transform: {operation}",
         exit_code=3,
     )
+
+
+def convert_tw2sp(value: str) -> tuple[str, bool]:
+    converted = convert_tw2sp_base(value)
+    localized = converted
+    for taiwan_term, mainland_term in _MAINLAND_FOOD_GLOSSARY:
+        localized = localized.replace(taiwan_term, mainland_term)
+    return localized, localized != converted
+
+
+def convert_tw2sp_base(value: str) -> str:
+    return _TW2SP.convert(value)
+
+
+def convert_t2s(value: str) -> str:
+    return _T2S.convert(value)
 
 
 def _number(value: Any) -> float | None:
