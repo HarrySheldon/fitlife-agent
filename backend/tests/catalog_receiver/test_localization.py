@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 from backend.catalog_receiver import localization as localization_module
 from backend.catalog_receiver.localization import (
@@ -46,15 +47,20 @@ def test_loads_valid_food_asset_and_preserves_authored_aliases() -> None:
     assert bundle.source_name == "Taiwan FDA Food Nutrient Database"
     assert bundle.localization_path == FOOD_LOCALIZATION.resolve()
     assert bundle.taxonomy_path is None
-    assert dict(bundle.food_glossary) == {"白饭": "米饭", "马铃薯": "土豆"}
+    assert [rule.model_dump() for rule in bundle.food_glossary] == [
+        {"source": "白饭", "target": "米饭", "match_mode": "exact"},
+        {"source": "马铃薯", "target": "土豆", "match_mode": "exact"},
+    ]
     assert localized.name_zh_cn == "米饭"
     assert localized.aliases == ("白飯", "Cooked rice")
     with pytest.raises(TypeError):
         bundle.food_entries["A003"] = localized  # type: ignore[index]
     with pytest.raises(TypeError):
         dict.__setitem__(bundle.food_entries, "A003", localized)  # type: ignore[arg-type]
-    with pytest.raises(TypeError):
-        bundle.food_glossary["白饭"] = "粥"  # type: ignore[index]
+    with pytest.raises(ValidationError):
+        bundle.food_glossary[0].target = "粥"
+    with pytest.raises(AttributeError):
+        bundle.food_glossary.append(bundle.food_glossary[0])  # type: ignore[attr-defined]
 
 
 def test_loads_valid_exercise_and_taxonomy_assets() -> None:
@@ -102,6 +108,7 @@ def test_immutable_models_serialize_to_json_without_warnings() -> None:
             version="1.0.0",
             source_name="Taiwan FDA Food Nutrient Database",
             locale="zh-CN",
+            glossary=food_bundle.food_glossary,
             entries=food_bundle.food_entries,
         ),
         ExerciseLocalizationAsset(
@@ -115,6 +122,10 @@ def test_immutable_models_serialize_to_json_without_warnings() -> None:
         food_bundle,
         exercise_bundle,
     )
+    assert models[0].model_dump(mode="json")["glossary"] == [
+        {"source": "白饭", "target": "米饭", "match_mode": "exact"},
+        {"source": "马铃薯", "target": "土豆", "match_mode": "exact"},
+    ]
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

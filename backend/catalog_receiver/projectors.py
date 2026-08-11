@@ -5,12 +5,12 @@ import re
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable
 
 import jmespath
 from pydantic import ValidationError
 
-from backend.catalog_receiver.localization import LocalizationBundle
+from backend.catalog_receiver.localization import FoodGlossaryRule, LocalizationBundle
 from backend.catalog_receiver.mapping import (
     convert_tw2sp,
     resolve_field,
@@ -518,22 +518,33 @@ def _aliases_without_canonical(
     )
 
 
-def _apply_food_glossary(value: str, glossary: Mapping[str, str]) -> str:
-    terms = sorted(glossary, key=lambda term: (-len(term), term))
-    result: list[str] = []
-    position = 0
-    while position < len(value):
-        matched = next(
-            (term for term in terms if value.startswith(term, position)),
-            None,
-        )
-        if matched is None:
-            result.append(value[position])
-            position += 1
-            continue
-        result.append(glossary[matched])
-        position += len(matched)
-    return "".join(result)
+def _apply_food_glossary(value: str, rules: tuple[FoodGlossaryRule, ...]) -> str:
+    matches = [
+        (index, rule)
+        for index, rule in enumerate(rules)
+        if _food_glossary_rule_matches(value, rule)
+    ]
+    if not matches:
+        return value
+    _index, rule = min(matches, key=lambda match: (-len(match[1].source), match[0]))
+    if rule.match_mode == "exact":
+        return rule.target
+    if rule.match_mode == "prefix":
+        return rule.target + value[len(rule.source) :]
+    if rule.match_mode == "suffix":
+        return value[: -len(rule.source)] + rule.target
+    position = value.index(rule.source)
+    return value[:position] + rule.target + value[position + len(rule.source) :]
+
+
+def _food_glossary_rule_matches(value: str, rule: FoodGlossaryRule) -> bool:
+    if rule.match_mode == "exact":
+        return value == rule.source
+    if rule.match_mode == "prefix":
+        return value.startswith(rule.source)
+    if rule.match_mode == "suffix":
+        return value.endswith(rule.source)
+    return rule.source in value
 
 
 def _mapped_name_conversion(profile: MappingProfile) -> str | None:

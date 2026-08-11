@@ -125,6 +125,23 @@ class _StrictFrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
+class FoodGlossaryRule(_StrictFrozenModel):
+    source: str
+    target: str
+    match_mode: Literal["exact", "prefix", "suffix", "contains"]
+
+    @field_validator("source", "target")
+    @classmethod
+    def validate_term(cls, value: str) -> str:
+        return _authored_text(value, field="food glossary term")
+
+    @model_validator(mode="after")
+    def validate_change(self) -> "FoodGlossaryRule":
+        if _normalize(self.source) == _normalize(self.target):
+            raise ValueError("food glossary rules must change after normalization")
+        return self
+
+
 class FoodLocalizationEntry(_StrictFrozenModel):
     name_zh_cn: str
     aliases: tuple[str, ...] = ()
@@ -181,17 +198,13 @@ class FoodLocalizationAsset(_StrictFrozenModel):
     version: str
     source_name: str
     locale: Literal["zh-CN"]
-    glossary: Mapping[str, str] = Field(default_factory=dict)
+    glossary: tuple[FoodGlossaryRule, ...] = ()
     entries: Mapping[str, FoodLocalizationEntry]
 
     @field_validator("version")
     @classmethod
     def validate_version(cls, value: str) -> str:
         return _authored_text(value, field="version")
-
-    @field_serializer("glossary")
-    def serialize_glossary(self, values: Mapping[str, str]) -> dict[str, str]:
-        return dict(values)
 
     @field_serializer("entries")
     def serialize_entries(
@@ -202,11 +215,12 @@ class FoodLocalizationAsset(_StrictFrozenModel):
 
     @model_validator(mode="after")
     def freeze_entries(self) -> "FoodLocalizationAsset":
-        glossary = _validated_mapping(self.glossary, "glossary", validate_values=True)
-        for source_term, localized_term in glossary.items():
-            if _normalize(source_term) == _normalize(localized_term):
-                raise ValueError("glossary terms must change after normalization")
-        object.__setattr__(self, "glossary", glossary)
+        seen_rules: set[tuple[str, str]] = set()
+        for rule in self.glossary:
+            key = (_normalize(rule.source), rule.match_mode)
+            if key in seen_rules:
+                raise ValueError("food glossary source and match_mode pairs must be unique")
+            seen_rules.add(key)
         object.__setattr__(self, "entries", _validated_mapping(self.entries, "entries"))
         return self
 
@@ -289,12 +303,12 @@ class LocalizationBundle(_StrictFrozenModel):
     locale: Literal["zh-CN"]
     localization_path: Path
     taxonomy_path: Path | None = None
-    food_glossary: Mapping[str, str] = Field(default_factory=dict)
+    food_glossary: tuple[FoodGlossaryRule, ...] = ()
     food_entries: Mapping[str, FoodLocalizationEntry] = Field(default_factory=dict)
     exercise_entries: Mapping[str, ExerciseLocalizationEntry] = Field(default_factory=dict)
     taxonomy: ExerciseTaxonomyAsset | None = None
 
-    @field_serializer("food_glossary", "food_entries", "exercise_entries")
+    @field_serializer("food_entries", "exercise_entries")
     def serialize_entries(self, values: Mapping[str, Any]) -> dict[str, Any]:
         return dict(values)
 
@@ -310,7 +324,6 @@ class LocalizationBundle(_StrictFrozenModel):
             or self.taxonomy_path is None
         ):
             raise ValueError("exercise bundles require exercise localization and taxonomy metadata")
-        object.__setattr__(self, "food_glossary", MappingProxyType(dict(self.food_glossary)))
         object.__setattr__(self, "food_entries", MappingProxyType(dict(self.food_entries)))
         object.__setattr__(self, "exercise_entries", MappingProxyType(dict(self.exercise_entries)))
         return self
@@ -825,6 +838,7 @@ __all__ = [
     "ExerciseLocalizationAsset",
     "ExerciseLocalizationEntry",
     "ExerciseTaxonomyAsset",
+    "FoodGlossaryRule",
     "FoodLocalizationAsset",
     "FoodLocalizationEntry",
     "LocalizationBundle",

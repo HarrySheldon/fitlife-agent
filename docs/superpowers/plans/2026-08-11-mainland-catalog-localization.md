@@ -132,7 +132,7 @@ git commit -m "feat: define catalog localization contracts"
 
 - [ ] **Step 1: Write failing food conversion and precedence tests**
 
-Assert `apply_transform("白飯", TransformSpec(operation="opencc_tw2sp")) == "米饭"`. Add projector cases proving the precedence `record override > glossary > tw2sp`, and verify `白飯`, `白饭`, `米飯`, and `Cooked rice` remain aliases while `米饭` is canonical.
+Assert `apply_transform("白飯", TransformSpec(operation="opencc_tw2sp")) == "白饭"`, matching the installed generic OpenCC converter. Separately assert that the food projector plus the versioned localization asset applies `白饭 -> 米饭`. Add projector cases proving the precedence `record override > glossary > tw2sp`, and verify `白飯`, `白饭`, `米飯`, and `Cooked rice` remain aliases while `米饭` is canonical. This documents the approved separation between generic OpenCC conversion and project-owned food terminology; it is not a relaxation of the canonical-name requirement.
 
 - [ ] **Step 2: Run the food tests and confirm the missing transform fails**
 
