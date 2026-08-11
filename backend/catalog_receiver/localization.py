@@ -6,10 +6,19 @@ import json
 import unicodedata
 from bisect import bisect_right
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal, Mapping, TypeVar
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from backend.catalog_receiver.models import CatalogKind, ReceiverError, ReceiverIssue
 
@@ -101,29 +110,6 @@ class _StrictFrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
-class _FrozenDict(dict[str, Any]):
-    def _immutable(self, *_args: Any, **_kwargs: Any) -> None:
-        raise TypeError("localization mappings are immutable")
-
-    __delitem__ = _immutable
-    __ior__ = _immutable
-    __setitem__ = _immutable
-    clear = _immutable
-    pop = _immutable
-    popitem = _immutable
-    setdefault = _immutable
-    update = _immutable
-
-    def __copy__(self) -> "_FrozenDict":
-        return self
-
-    def __deepcopy__(self, _memo: dict[int, Any]) -> "_FrozenDict":
-        return self
-
-    def copy(self) -> "_FrozenDict":
-        return self
-
-
 class FoodLocalizationEntry(_StrictFrozenModel):
     name_zh_cn: str
     aliases: tuple[str, ...] = ()
@@ -187,6 +173,13 @@ class FoodLocalizationAsset(_StrictFrozenModel):
     def validate_version(cls, value: str) -> str:
         return _authored_text(value, field="version")
 
+    @field_serializer("entries")
+    def serialize_entries(
+        self,
+        values: Mapping[str, FoodLocalizationEntry],
+    ) -> dict[str, FoodLocalizationEntry]:
+        return dict(values)
+
     @model_validator(mode="after")
     def freeze_entries(self) -> "FoodLocalizationAsset":
         object.__setattr__(self, "entries", _validated_mapping(self.entries, "entries"))
@@ -204,6 +197,13 @@ class ExerciseLocalizationAsset(_StrictFrozenModel):
     @classmethod
     def validate_version(cls, value: str) -> str:
         return _authored_text(value, field="version")
+
+    @field_serializer("entries")
+    def serialize_entries(
+        self,
+        values: Mapping[str, ExerciseLocalizationEntry],
+    ) -> dict[str, ExerciseLocalizationEntry]:
+        return dict(values)
 
     @model_validator(mode="after")
     def freeze_entries(self) -> "ExerciseLocalizationAsset":
@@ -243,6 +243,10 @@ class ExerciseTaxonomyAsset(_StrictFrozenModel):
             normalized.add(folded)
         return values
 
+    @field_serializer("muscles", "equipment", "levels", "mechanics", "forces", "categories")
+    def serialize_taxonomy_mapping(self, values: Mapping[str, str]) -> dict[str, str]:
+        return dict(values)
+
     @model_validator(mode="after")
     def freeze_taxonomy(self) -> "ExerciseTaxonomyAsset":
         for field in ("muscles", "equipment", "levels", "mechanics", "forces", "categories"):
@@ -260,9 +264,13 @@ class LocalizationBundle(_StrictFrozenModel):
     locale: Literal["zh-CN"]
     localization_path: Path
     taxonomy_path: Path | None = None
-    food_entries: Mapping[str, FoodLocalizationEntry] = Field(default_factory=_FrozenDict)
-    exercise_entries: Mapping[str, ExerciseLocalizationEntry] = Field(default_factory=_FrozenDict)
+    food_entries: Mapping[str, FoodLocalizationEntry] = Field(default_factory=dict)
+    exercise_entries: Mapping[str, ExerciseLocalizationEntry] = Field(default_factory=dict)
     taxonomy: ExerciseTaxonomyAsset | None = None
+
+    @field_serializer("food_entries", "exercise_entries")
+    def serialize_entries(self, values: Mapping[str, Any]) -> dict[str, Any]:
+        return dict(values)
 
     @model_validator(mode="after")
     def validate_shape(self) -> "LocalizationBundle":
@@ -271,8 +279,8 @@ class LocalizationBundle(_StrictFrozenModel):
                 raise ValueError("food bundles cannot contain exercise localization")
         elif self.food_entries or self.taxonomy is None or self.taxonomy_path is None:
             raise ValueError("exercise bundles require exercise localization and taxonomy metadata")
-        object.__setattr__(self, "food_entries", _FrozenDict(self.food_entries))
-        object.__setattr__(self, "exercise_entries", _FrozenDict(self.exercise_entries))
+        object.__setattr__(self, "food_entries", MappingProxyType(dict(self.food_entries)))
+        object.__setattr__(self, "exercise_entries", MappingProxyType(dict(self.exercise_entries)))
         return self
 
     def food(self, source_id: str) -> FoodLocalizationEntry:
@@ -455,7 +463,26 @@ def validate_localization_coverage(
 
 def _load_asset_document(path: str | Path, *, label: str) -> tuple[Path, Any]:
     raw_path = str(path)
-    parsed = urlsplit(raw_path)
+    if raw_path.startswith(("\\\\", "//")):
+        raise _invalid_asset_error(
+            label,
+            None,
+            "only local files are accepted; UNC paths are not supported",
+            source_path=raw_path,
+            display_name=Path(raw_path).name or "<UNC>",
+        )
+    try:
+        parsed = urlsplit(raw_path)
+    except ValueError as error:
+        scheme, separator, _remainder = raw_path.partition("://")
+        sanitized = f"{scheme.casefold()}://<invalid>" if separator else "<invalid-local-path>"
+        raise _invalid_asset_error(
+            label,
+            None,
+            "malformed URL",
+            source_path=sanitized,
+            display_name="<remote>" if separator else "<invalid>",
+        ) from error
     is_windows_drive = len(parsed.scheme) == 1 and len(raw_path) > 1 and raw_path[1] == ":"
     if parsed.scheme and not is_windows_drive:
         sanitized = _sanitized_url(parsed)
@@ -467,33 +494,24 @@ def _load_asset_document(path: str | Path, *, label: str) -> tuple[Path, Any]:
             source_path=sanitized,
             display_name=display_name,
         )
-    if raw_path.startswith(("\\\\", "//")):
-        raise _invalid_asset_error(
-            label,
-            None,
-            "only local files are accepted; UNC paths are not supported",
-            source_path=raw_path,
-            display_name=Path(raw_path).name or "<UNC>",
-        )
 
     source_path = Path(path).expanduser().resolve(strict=False)
     try:
-        stat = source_path.stat()
+        with source_path.open("rb") as stream:
+            raw_document = stream.read(LOCALIZATION_JSON_SIZE_LIMIT + 1)
     except FileNotFoundError as error:
         raise _invalid_asset_error(label, source_path, "file not found") from error
+    except IsADirectoryError as error:
+        raise _invalid_asset_error(label, source_path, "path must identify a regular file") from error
     except OSError as error:
-        raise _invalid_asset_error(label, source_path, "file metadata could not be read") from error
-    if not source_path.is_file():
-        raise _invalid_asset_error(label, source_path, "path must identify a regular file")
-    if stat.st_size > LOCALIZATION_JSON_SIZE_LIMIT:
+        raise _invalid_asset_error(label, source_path, "file could not be read") from error
+    if len(raw_document) > LOCALIZATION_JSON_SIZE_LIMIT:
         reason = f"file exceeds the {LOCALIZATION_JSON_SIZE_LIMIT}-byte size limit"
         raise _invalid_asset_error(label, source_path, reason)
     try:
-        text = source_path.read_text(encoding="utf-8-sig")
+        text = raw_document.decode("utf-8-sig")
     except UnicodeDecodeError as error:
         raise _invalid_asset_error(label, source_path, "file must be valid UTF-8") from error
-    except OSError as error:
-        raise _invalid_asset_error(label, source_path, "file could not be read") from error
     try:
         document = json.loads(text, object_pairs_hook=_pairs_without_duplicates)
     except json.JSONDecodeError as error:
@@ -564,7 +582,7 @@ def _validated_mapping(
         _authored_text(key, field=f"{field} key")
         if validate_values:
             _authored_text(value, field=f"{field} value")
-    return _FrozenDict(values)
+    return MappingProxyType(dict(values))
 
 
 def _require_source_name(
@@ -587,7 +605,7 @@ def _latin_tokens(value: str) -> tuple[str, ...]:
     tokens: list[str] = []
     current: list[str] = []
     pending_numbers: list[str] = []
-    for character in value:
+    for character in unicodedata.normalize("NFKC", value):
         category = unicodedata.category(character)
         if _is_latin_character(character):
             if not current:
@@ -610,12 +628,7 @@ def _latin_tokens(value: str) -> tuple[str, ...]:
 
 
 def _is_latin_character(character: str) -> bool:
-    codepoint = ord(character)
-    range_index = bisect_right(LATIN_SCRIPT_STARTS, codepoint) - 1
-    if range_index >= 0 and codepoint <= LATIN_SCRIPT_RANGES[range_index][1]:
-        return True
-    normalized = _normalize(character)
-    return bool(normalized) and all(_is_latin_codepoint(ord(item)) for item in normalized)
+    return _is_latin_codepoint(ord(character))
 
 
 def _is_latin_codepoint(codepoint: int) -> bool:

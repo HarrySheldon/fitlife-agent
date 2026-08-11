@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -48,6 +49,8 @@ def test_loads_valid_food_asset_and_preserves_authored_aliases() -> None:
     assert localized.aliases == ("白飯", "Cooked rice")
     with pytest.raises(TypeError):
         bundle.food_entries["A003"] = localized  # type: ignore[index]
+    with pytest.raises(TypeError):
+        dict.__setitem__(bundle.food_entries, "A003", localized)  # type: ignore[arg-type]
 
 
 def test_loads_valid_exercise_and_taxonomy_assets() -> None:
@@ -201,6 +204,15 @@ def test_rejects_url_without_exposing_credentials() -> None:
     assert raised.value.issue.source_path == "https://example.com/localization.json"
 
 
+def test_rejects_malformed_url_with_sanitized_error() -> None:
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path="https://[")
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert raised.value.issue is not None
+    assert raised.value.issue.source_path == "https://<invalid>"
+
+
 def test_rejects_unc_path_before_filesystem_access() -> None:
     source = r"\\server\share\localization.json"
 
@@ -213,9 +225,21 @@ def test_rejects_unc_path_before_filesystem_access() -> None:
     assert raised.value.issue.source_path == source
 
 
-def test_rejects_oversized_asset_before_read(tmp_path: Path) -> None:
+def test_rejects_oversized_asset_from_bounded_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     path = tmp_path / "oversized-localization.json"
     path.write_bytes(b" " * (localization_module.LOCALIZATION_JSON_SIZE_LIMIT + 1))
+    real_stat = path.stat()
+    original_stat = Path.stat
+
+    def underreported_stat(candidate: Path, *args: object, **kwargs: object) -> object:
+        if candidate == path:
+            return SimpleNamespace(st_mode=real_stat.st_mode, st_size=0)
+        return original_stat(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", underreported_stat)
 
     with pytest.raises(ReceiverError) as raised:
         load_localization_bundle(catalog_kind="food", localization_path=path)
@@ -341,3 +365,22 @@ def test_allows_nfkc_equivalent_unicode_latin_token(tmp_path: Path) -> None:
     )
 
     assert bundle.exercise("Barbell_Full_Squat", instruction_count=2).name_zh_cn == "Cafe\u0301 深蹲"
+
+
+@pytest.mark.parametrize("name_zh_cn", ["⒜ 深蹲", "𝐀 深蹲"])
+def test_rejects_nfkc_compatibility_latin_forms(
+    tmp_path: Path,
+    name_zh_cn: str,
+) -> None:
+    payload = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
+    payload["entries"]["Barbell_Full_Squat"]["name_zh_cn"] = name_zh_cn
+    path = _localized_copy(tmp_path, EXERCISE_LOCALIZATION, payload)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(
+            catalog_kind="exercise",
+            localization_path=path,
+            taxonomy_path=EXERCISE_TAXONOMY,
+        )
+
+    assert raised.value.code == "LOCALIZATION_LATIN_UNAPPROVED"
