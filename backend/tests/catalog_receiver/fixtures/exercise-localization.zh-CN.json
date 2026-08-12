@@ -7,6 +7,7 @@
     "Barbell_Full_Squat": {
       "name_zh_cn": "杠铃深蹲",
       "aliases": ["Barbell Full Squat", "深蹲"],
+      "pinyin": ["gangling shendun"],
       "instructions_zh_cn": [
         "将杠铃置于上背部。",
         "屈髋屈膝下蹲。"

@@ -1,7 +1,9 @@
+import json
 from pathlib import Path
 
 import pytest
 
+from backend.catalog_receiver.localization import load_localization_bundle
 from backend.catalog_receiver.mapping import load_mapping_profile
 from backend.catalog_receiver.models import ReceiverError
 from backend.catalog_receiver.projectors import project_source
@@ -10,6 +12,141 @@ from backend.catalog_receiver.readers import read_source
 
 ROOT = Path(__file__).parent
 PROFILE = Path(__file__).parents[2] / "data" / "catalog" / "mappings" / "free-exercise-db.v1.json"
+LOCALIZATION = ROOT / "fixtures" / "exercise-localization.zh-CN.json"
+TAXONOMY = Path(__file__).parents[2] / "data" / "catalog" / "localizations" / "exercise-taxonomy.zh-CN.v1.json"
+
+
+def test_applies_complete_exercise_and_taxonomy_localization(tmp_path: Path) -> None:
+    source = tmp_path / "squat.json"
+    fixture = json.loads((ROOT / "fixtures" / "free-exercises.json").read_text(encoding="utf-8"))
+    source.write_text(json.dumps([fixture[0]]), encoding="utf-8")
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=LOCALIZATION,
+        taxonomy_path=TAXONOMY,
+    )
+
+    result = project_source(
+        read_source(source),
+        load_mapping_profile(PROFILE),
+        localization_bundle=bundle,
+    )
+
+    assert result.issues == ()
+    assert result.enrichment_count == 1
+    assert result.enrichment_coverage == 1
+    squat = result.records[0]
+    assert squat.name == "杠铃深蹲"
+    assert squat.aliases == ("Barbell Full Squat", "深蹲", "gangling shendun")
+    assert squat.primary_muscle == "股四头肌"
+    assert squat.secondary_muscles == ("小腿肌群", "臀肌")
+    assert squat.provenance["upstream"] == {
+        "name": "Barbell Full Squat",
+        "primary_muscle": "quadriceps",
+        "secondary_muscles": ["calves", "glutes"],
+        "equipment": "barbell",
+        "level": "intermediate",
+        "mechanic": "compound",
+        "force": "push",
+        "instructions": ["Stand with the bar.", "Squat."],
+    }
+    assert squat.provenance["localization"] == {
+        "locale": "zh-CN",
+        "asset_version": "2.0.0",
+        "taxonomy_version": "1.0.0",
+        "equipment": "杠铃",
+        "level": "中级",
+        "mechanic": "复合动作",
+        "force": "推",
+        "category": "力量训练",
+        "instructions": ["将杠铃置于上背部。", "屈髋屈膝下蹲。"],
+    }
+
+
+def test_configured_exercise_localization_rejects_unlisted_compatible_exercise() -> None:
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=LOCALIZATION,
+        taxonomy_path=TAXONOMY,
+    )
+
+    result = project_source(
+        read_source(ROOT / "fixtures" / "free-exercises.json"),
+        load_mapping_profile(PROFILE),
+        localization_bundle=bundle,
+    )
+
+    assert [record.source_record_id for record in result.records] == ["Barbell_Full_Squat"]
+    assert result.rejected_count == 1
+    assert result.enrichment_count == 1
+    assert result.enrichment_coverage == 0.5
+    issue = next(issue for issue in result.issues if issue.code == "LOCALIZATION_MISSING")
+    assert issue.severity == "error"
+    assert issue.record == "Run"
+    assert issue.field == "source_record_id"
+    assert all(record.name != "Run" for record in result.records)
+
+
+def test_localized_exercise_aliases_use_nfkc_casefold_dedupe(tmp_path: Path) -> None:
+    payload = json.loads(LOCALIZATION.read_text(encoding="utf-8"))
+    payload["entries"]["Barbell_Full_Squat"]["aliases"] = [
+        "Ｂａｒｂｅｌｌ Ｆｕｌｌ Ｓｑｕａｔ",
+        "深蹲",
+    ]
+    localized_path = tmp_path / "exercise-localization.json"
+    localized_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    source = tmp_path / "squat.json"
+    exercises = json.loads(
+        (ROOT / "fixtures" / "free-exercises.json").read_text(encoding="utf-8")
+    )
+    source.write_text(json.dumps([exercises[0]]), encoding="utf-8")
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=localized_path,
+        taxonomy_path=TAXONOMY,
+    )
+
+    result = project_source(
+        read_source(source),
+        load_mapping_profile(PROFILE),
+        localization_bundle=bundle,
+    )
+
+    assert result.records[0].aliases == (
+        "Barbell Full Squat",
+        "深蹲",
+        "gangling shendun",
+    )
+    assert "杠铃深蹲" not in result.records[0].aliases
+
+
+@pytest.mark.parametrize(
+    ("bundle_update", "field"),
+    [
+        ({"catalog_kind": "food"}, "catalog_kind"),
+        ({"source_name": "another-exercise-source"}, "source_name"),
+    ],
+)
+def test_rejects_exercise_localization_bundle_that_does_not_match_profile(
+    bundle_update: dict[str, str],
+    field: str,
+) -> None:
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=LOCALIZATION,
+        taxonomy_path=TAXONOMY,
+    ).model_copy(update=bundle_update)
+
+    with pytest.raises(ReceiverError) as raised:
+        project_source(
+            read_source(ROOT / "fixtures" / "free-exercises.json"),
+            load_mapping_profile(PROFILE),
+            localization_bundle=bundle,
+        )
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert raised.value.issue is not None
+    assert raised.value.issue.field == field
 
 
 def test_maps_categories_excludes_stretching_and_merges_enrichment() -> None:

@@ -171,6 +171,7 @@ class FoodLocalizationEntry(_StrictFrozenModel):
 class ExerciseLocalizationEntry(_StrictFrozenModel):
     name_zh_cn: str
     aliases: tuple[str, ...] = ()
+    pinyin: tuple[str, ...] = ()
     instructions_zh_cn: tuple[str, ...]
     review_note: str | None = None
 
@@ -179,7 +180,7 @@ class ExerciseLocalizationEntry(_StrictFrozenModel):
     def validate_name(cls, value: str) -> str:
         return _authored_text(value, field="name_zh_cn")
 
-    @field_validator("aliases", "instructions_zh_cn")
+    @field_validator("aliases", "pinyin", "instructions_zh_cn")
     @classmethod
     def validate_text_sequence(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         for value in values:

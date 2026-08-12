@@ -5,13 +5,14 @@ import re
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import jmespath
 from pydantic import ValidationError
 
 from backend.catalog_receiver.localization import (
     LOCALIZATION_INVALID,
+    LOCALIZATION_MISSING,
     FoodGlossaryRule,
     LocalizationBundle,
 )
@@ -62,7 +63,12 @@ def project_source(
             "The built-in exercise projector requires row JSON input.",
             exit_code=3,
         )
-    return _project_exercises(source, profile, enrichment_path=enrichment_path)
+    return _project_exercises(
+        source,
+        profile,
+        enrichment_path=enrichment_path,
+        localization_bundle=localization_bundle,
+    )
 
 
 def _validate_localization_bundle(
@@ -335,6 +341,7 @@ def _project_exercises(
     profile: MappingProfile,
     *,
     enrichment_path: str | Path | None,
+    localization_bundle: LocalizationBundle | None,
 ) -> ProjectionResult:
     selector = profile.projection.record_selector or "@"
     raw_records = jmespath.search(selector, source.document)
@@ -354,7 +361,7 @@ def _project_exercises(
         issues.append(_issue("ENRICHMENT_ORPHAN", orphan, "source_record_id", severity="warning"))
 
     records: list[CanonicalExerciseRecord] = []
-    excluded = rejected = enriched = 0
+    excluded = rejected = enriched = compatible = 0
     for index, raw in enumerate(raw_records, start=1):
         values = {
             name: resolve_field(raw, spec)
@@ -388,16 +395,39 @@ def _project_exercises(
                 )
             )
             continue
-        enrichment = enrichments.get(source_id)
-        if enrichment:
+        compatible += 1
+        if localization_bundle is not None:
+            localized = _exercise_localization(
+                localization_bundle,
+                source_id=source_id,
+                values=values,
+                category=category,
+            )
+            if isinstance(localized, ReceiverIssue):
+                rejected += 1
+                issues.append(localized)
+                continue
+            enriched += 1
+            name = localized["name"]
+            aliases = localized["aliases"]
+            primary_muscle = localized["primary_muscle"]
+            secondary_muscles = localized["secondary_muscles"]
+            provenance = localized["provenance"]
+        elif (enrichment := enrichments.get(source_id)):
             enriched += 1
             name = enrichment["name_zh"]
             aliases = _unique_text(
                 (upstream_name, *enrichment["aliases"], *enrichment["pinyin"])
             )
+            primary_muscle = primary[0]
+            secondary_muscles = _unique_text(values.get("secondary_muscles") or [])
+            provenance = _legacy_exercise_provenance(profile, upstream_name, category, values)
         else:
             name = upstream_name
             aliases = ()
+            primary_muscle = primary[0]
+            secondary_muscles = _unique_text(values.get("secondary_muscles") or [])
+            provenance = _legacy_exercise_provenance(profile, upstream_name, category, values)
             issues.append(
                 _issue(
                     "ENRICHMENT_ENGLISH_FALLBACK",
@@ -415,24 +445,13 @@ def _project_exercises(
                 attribution=profile.attribution,
                 name=name,
                 exercise_type=exercise_type,
-                primary_muscle=primary[0],
-                secondary_muscles=_unique_text(values.get("secondary_muscles") or []),
+                primary_muscle=primary_muscle,
+                secondary_muscles=secondary_muscles,
                 aliases=aliases,
-                provenance={
-                    "profile": f"{profile.profile_name}@{profile.profile_version}",
-                    "upstream_name": upstream_name,
-                    "original_category": category,
-                    "equipment": values.get("equipment"),
-                    "level": values.get("level"),
-                    "mechanic": values.get("mechanic"),
-                    "force": values.get("force"),
-                    "instructions": values.get("instructions"),
-                    "image_count": len(values.get("images") or []),
-                },
+                provenance=provenance,
             )
         )
-    compatible_count = len(records)
-    coverage = enriched / compatible_count if compatible_count else 0
+    coverage = enriched / compatible if compatible else 0
     return ProjectionResult(
         catalog_kind="exercise",
         records=tuple(records),
@@ -597,3 +616,126 @@ def _mapped_name_conversion(profile: MappingProfile) -> str | None:
         ),
         None,
     )
+
+
+def _exercise_localization(
+    bundle: LocalizationBundle,
+    *,
+    source_id: str,
+    values: dict[str, Any],
+    category: str,
+) -> dict[str, Any] | ReceiverIssue:
+    instructions = tuple(values.get("instructions") or ())
+    try:
+        entry = bundle.exercise(source_id, instruction_count=len(instructions))
+    except ReceiverError as error:
+        if error.issue is not None:
+            return error.issue
+        return _localization_missing_issue(bundle, source_id, "source_record_id")
+
+    taxonomy = bundle.taxonomy
+    assert taxonomy is not None
+    primary = _text(values.get("primary_muscle"))
+    secondary = _unique_text(values.get("secondary_muscles") or ())
+    translated_primary = taxonomy.muscles.get(primary)
+    translated_secondary = tuple(taxonomy.muscles.get(value, "") for value in secondary)
+    taxonomy_values = {
+        "equipment": _translated_taxonomy_value(taxonomy.equipment, values.get("equipment")),
+        "level": _translated_taxonomy_value(taxonomy.levels, values.get("level")),
+        "mechanic": _translated_taxonomy_value(taxonomy.mechanics, values.get("mechanic")),
+        "force": _translated_taxonomy_value(taxonomy.forces, values.get("force")),
+        "category": taxonomy.categories.get(category),
+    }
+    missing_field = None
+    if translated_primary is None or not all(translated_secondary):
+        missing_field = "muscles"
+    else:
+        upstream_taxonomy_values = {
+            "equipment": values.get("equipment"),
+            "level": values.get("level"),
+            "mechanic": values.get("mechanic"),
+            "force": values.get("force"),
+            "category": category,
+        }
+        missing_field = next(
+            (
+                field
+                for field, upstream_value in upstream_taxonomy_values.items()
+                if upstream_value is not None and taxonomy_values[field] is None
+            ),
+            None,
+        )
+    if missing_field is not None:
+        return _localization_missing_issue(bundle, source_id, f"taxonomy.{missing_field}")
+
+    aliases = _aliases_without_canonical(
+        (values.get("name"), *entry.aliases, *entry.pinyin),
+        entry.name_zh_cn,
+    )
+    localized_instructions = list(entry.instructions_zh_cn)
+    return {
+        "name": entry.name_zh_cn,
+        "aliases": aliases,
+        "primary_muscle": translated_primary,
+        "secondary_muscles": translated_secondary,
+        "provenance": {
+            "upstream": {
+                "name": values.get("name"),
+                "primary_muscle": primary,
+                "secondary_muscles": list(secondary),
+                "equipment": values.get("equipment"),
+                "level": values.get("level"),
+                "mechanic": values.get("mechanic"),
+                "force": values.get("force"),
+                "instructions": list(instructions),
+            },
+            "localization": {
+                "locale": bundle.locale,
+                "asset_version": bundle.version,
+                "taxonomy_version": taxonomy.version,
+                **taxonomy_values,
+                "instructions": localized_instructions,
+            },
+        },
+    }
+
+
+def _translated_taxonomy_value(mapping: Mapping[str, str], value: Any) -> str | None:
+    if value is None:
+        return None
+    return mapping.get(value) if isinstance(value, str) else None
+
+
+def _localization_missing_issue(
+    bundle: LocalizationBundle,
+    source_id: str,
+    field: str,
+) -> ReceiverIssue:
+    source_path = bundle.taxonomy_path if field.startswith("taxonomy.") else bundle.localization_path
+    return ReceiverIssue(
+        severity="error",
+        code=LOCALIZATION_MISSING,
+        record=source_id,
+        source_path=str(source_path),
+        field=field,
+        expected="complete exercise record and taxonomy localization",
+    )
+
+
+def _legacy_exercise_provenance(
+    profile: MappingProfile,
+    upstream_name: str,
+    category: str,
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "profile": f"{profile.profile_name}@{profile.profile_version}",
+        "upstream_name": upstream_name,
+        "original_category": category,
+        "equipment": values.get("equipment"),
+        "level": values.get("level"),
+        "mechanic": values.get("mechanic"),
+        "force": values.get("force"),
+        "instructions": values.get("instructions"),
+        "image_count": len(values.get("images") or []),
+    }

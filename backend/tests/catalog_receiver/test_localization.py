@@ -23,6 +23,13 @@ FIXTURES = Path(__file__).parent / "fixtures"
 FOOD_LOCALIZATION = FIXTURES / "food-localization.zh-CN.json"
 EXERCISE_LOCALIZATION = FIXTURES / "exercise-localization.zh-CN.json"
 EXERCISE_TAXONOMY = FIXTURES / "exercise-taxonomy.zh-CN.json"
+CATALOG_EXERCISE_TAXONOMY = (
+    Path(__file__).parents[2]
+    / "data"
+    / "catalog"
+    / "localizations"
+    / "exercise-taxonomy.zh-CN.v1.json"
+)
 
 
 def _localized_copy(tmp_path: Path, source: Path, update: dict[str, object]) -> Path:
@@ -111,6 +118,34 @@ def test_loads_valid_exercise_and_taxonomy_assets() -> None:
     assert bundle.taxonomy.locale == "zh-CN"
     assert bundle.taxonomy.source_name == "free-exercise-db"
     assert bundle.taxonomy.equipment["e-z curl bar"] == "EZ 杠"
+
+
+def test_catalog_exercise_taxonomy_covers_all_upstream_values() -> None:
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=EXERCISE_LOCALIZATION,
+        taxonomy_path=CATALOG_EXERCISE_TAXONOMY,
+    )
+
+    taxonomy = bundle.taxonomy
+    assert taxonomy is not None
+    assert taxonomy.approved_latin == ("EZ", "T", "TRX")
+    assert set(taxonomy.muscles) == {
+        "abdominals", "abductors", "adductors", "biceps", "calves", "chest",
+        "forearms", "glutes", "hamstrings", "lats", "lower back", "middle back",
+        "neck", "quadriceps", "shoulders", "traps", "triceps",
+    }
+    assert set(taxonomy.equipment) == {
+        "bands", "barbell", "body only", "cable", "dumbbell", "e-z curl bar",
+        "exercise ball", "kettlebells", "machine", "medicine ball", "other",
+    }
+    assert set(taxonomy.levels) == {"beginner", "expert", "intermediate"}
+    assert set(taxonomy.mechanics) == {"compound", "isolation"}
+    assert set(taxonomy.forces) == {"pull", "push", "static"}
+    assert set(taxonomy.categories) == {
+        "cardio", "olympic weightlifting", "plyometrics", "powerlifting",
+        "strength", "strongman",
+    }
 
 
 def test_immutable_models_serialize_to_json_without_warnings() -> None:
