@@ -470,6 +470,11 @@ def _project_exercises(
                 expected=str(required_coverage),
             )
         )
+    reported_coverage = _reported_exercise_coverage(
+        required_coverage=required_coverage,
+        legacy_enrichment_coverage=coverage,
+        localization_coverage=localization_coverage,
+    )
     return ProjectionResult(
         catalog_kind="exercise",
         records=tuple(records),
@@ -478,8 +483,20 @@ def _project_exercises(
         excluded_count=excluded,
         rejected_count=rejected,
         enrichment_count=enriched,
-        enrichment_coverage=coverage,
+        enrichment_coverage=reported_coverage,
     )
+
+
+def _reported_exercise_coverage(
+    *,
+    required_coverage: float,
+    legacy_enrichment_coverage: float,
+    localization_coverage: float,
+) -> float:
+    # This field predates localization bundles; strict profiles reuse it for localization coverage.
+    if required_coverage > 0:
+        return localization_coverage
+    return legacy_enrichment_coverage
 
 
 def _load_enrichment(path: str | Path) -> dict[str, dict[str, Any]]:

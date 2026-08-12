@@ -193,8 +193,10 @@ class ExerciseLocalizationEntry(_StrictFrozenModel):
     def validate_pinyin(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         for value in values:
             _authored_text(value, field="pinyin")
-            if re.fullmatch(r"[a-z0-9 -]+", value.casefold()) is None:
-                raise ValueError("pinyin must match [a-z0-9 -]+")
+            if re.fullmatch(r"[A-Za-z]+[1-5]?(?:[ -][A-Za-z]+[1-5]?)*", value) is None:
+                raise ValueError(
+                    "pinyin must contain ASCII letter syllables with optional tone digits 1-5"
+                )
         return values
 
     @field_validator("review_note")

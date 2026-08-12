@@ -61,10 +61,18 @@ def test_import_blocks_sink_when_v2_exercise_coverage_is_insufficient() -> None:
     result = CatalogReceiver(sink).import_catalog(
         ROOT / "fixtures/free-exercises.json",
         mapping=EXERCISE_PROFILE,
+        enrichment_path=ROOT / "fixtures/free-exercises.zh-CN.json",
     )
 
     sink.import_records.assert_not_called()
+    assert result.report.enrichment_count == 1
     assert result.report.issue_counts["LOCALIZATION_COVERAGE_INSUFFICIENT"] == 1
+    coverage_issue = next(
+        issue
+        for issue in result.report.issues
+        if issue.code == "LOCALIZATION_COVERAGE_INSUFFICIENT"
+    )
+    assert result.report.enrichment_coverage == coverage_issue.observed
     assert result.report.transaction == {"status": "blocked", "reason": "validation_errors"}
 
 

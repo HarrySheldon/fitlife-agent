@@ -132,6 +132,7 @@ def test_v2_profile_without_bundle_reports_blocking_localization_coverage() -> N
     assert issue.severity == "error"
     assert issue.observed == 0
     assert issue.expected == "1.0"
+    assert result.enrichment_coverage == issue.observed
     assert any(record.name == "Run" for record in result.records)
 
 
@@ -149,6 +150,7 @@ def test_minimum_zero_profile_preserves_legacy_english_fallback() -> None:
     result = project_source(
         read_source(ROOT / "fixtures" / "free-exercises.json"),
         legacy_profile,
+        enrichment_path=ROOT / "fixtures" / "free-exercises.zh-CN.json",
     )
 
     assert not any(
@@ -157,6 +159,7 @@ def test_minimum_zero_profile_preserves_legacy_english_fallback() -> None:
     )
     assert any(record.name == "Run" for record in result.records)
     assert any(issue.code == "ENRICHMENT_ENGLISH_FALLBACK" for issue in result.issues)
+    assert result.enrichment_coverage == 0.5
 
 
 def test_localized_exercise_aliases_use_nfkc_casefold_dedupe(tmp_path: Path) -> None:
@@ -292,7 +295,13 @@ def test_maps_categories_excludes_stretching_and_merges_enrichment() -> None:
     assert result.excluded_count == 1
     assert len(result.records) == 2
     assert result.enrichment_count == 1
-    assert result.enrichment_coverage == 0.5
+    assert result.enrichment_coverage == 0
+    coverage_issue = next(
+        issue
+        for issue in result.issues
+        if issue.code == "LOCALIZATION_COVERAGE_INSUFFICIENT"
+    )
+    assert result.enrichment_coverage == coverage_issue.observed
     squat, run = result.records
     assert squat.name == "杠铃深蹲"
     assert squat.aliases == ("Barbell Full Squat", "深蹲", "gangling shendun")

@@ -470,7 +470,30 @@ def test_rejects_alias_equal_to_canonical_name_after_normalization(tmp_path: Pat
     assert raised.value.code == "LOCALIZATION_ALIAS_REDUNDANT"
 
 
-@pytest.mark.parametrize("pinyin", ["深蹲", "gangling_shendun", "gānglíng shēndūn"])
+@pytest.mark.parametrize(
+    "pinyin",
+    [
+        "深蹲",
+        "gangling_shendun",
+        "gānglíng shēndūn",
+        "ſhen dun",
+        "Kang ling",
+        "-",
+        "123",
+        "1shen",
+        "shen0",
+        "shen6",
+        "shen12",
+        "shen2dun",
+        " shen",
+        "shen ",
+        "-shen",
+        "shen-",
+        "shen  dun",
+        "shen--dun",
+        "shen -dun",
+    ],
+)
 def test_rejects_malformed_exercise_pinyin(tmp_path: Path, pinyin: str) -> None:
     payload = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
     payload["entries"]["Barbell_Full_Squat"]["pinyin"] = [pinyin]
@@ -484,6 +507,27 @@ def test_rejects_malformed_exercise_pinyin(tmp_path: Path, pinyin: str) -> None:
         )
 
     assert raised.value.code == "LOCALIZATION_INVALID"
+
+
+@pytest.mark.parametrize(
+    "pinyin",
+    ["gangling shendun", "Gang2-Ling2 Shen1-Dun1", "TRX shendun"],
+)
+def test_preserves_valid_authored_exercise_pinyin(
+    tmp_path: Path,
+    pinyin: str,
+) -> None:
+    payload = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
+    payload["entries"]["Barbell_Full_Squat"]["pinyin"] = [pinyin]
+    path = _localized_copy(tmp_path, EXERCISE_LOCALIZATION, payload)
+
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=path,
+        taxonomy_path=EXERCISE_TAXONOMY,
+    )
+
+    assert bundle.exercise_entries["Barbell_Full_Squat"].pinyin == (pinyin,)
 
 
 @pytest.mark.parametrize(
