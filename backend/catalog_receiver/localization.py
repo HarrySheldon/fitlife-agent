@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import unicodedata
 from bisect import bisect_right
@@ -180,11 +181,20 @@ class ExerciseLocalizationEntry(_StrictFrozenModel):
     def validate_name(cls, value: str) -> str:
         return _authored_text(value, field="name_zh_cn")
 
-    @field_validator("aliases", "pinyin", "instructions_zh_cn")
+    @field_validator("aliases", "instructions_zh_cn")
     @classmethod
     def validate_text_sequence(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         for value in values:
             _authored_text(value, field="localized text")
+        return values
+
+    @field_validator("pinyin")
+    @classmethod
+    def validate_pinyin(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        for value in values:
+            _authored_text(value, field="pinyin")
+            if re.fullmatch(r"[a-z0-9 -]+", value.casefold()) is None:
+                raise ValueError("pinyin must match [a-z0-9 -]+")
         return values
 
     @field_validator("review_note")
@@ -719,20 +729,39 @@ def _validate_localized_entries(
             )
         canonical_names[normalized_name] = source_id
 
-        normalized_aliases: set[str] = set()
-        for alias in entry.aliases:
-            normalized_alias = _normalize(alias)
-            if normalized_alias == normalized_name or normalized_alias in normalized_aliases:
-                raise _localization_error(
-                    LOCALIZATION_ALIAS_REDUNDANT,
-                    f"Localization alias is redundant for source ID {source_id}.",
-                    record=source_id,
-                    source_path=str(source_path),
-                    field="aliases",
-                    observed=alias,
-                    expected="aliases unique from the canonical name after NFKC/casefold normalization",
-                )
-            normalized_aliases.add(normalized_alias)
+        normalized_search_terms = {normalized_name}
+        search_fields = [("aliases", entry.aliases)]
+        if isinstance(entry, ExerciseLocalizationEntry):
+            search_fields.append(("pinyin", entry.pinyin))
+        for field, terms in search_fields:
+            for term in terms:
+                normalized_term = _normalize(term)
+                if normalized_term in normalized_search_terms:
+                    is_exercise = isinstance(entry, ExerciseLocalizationEntry)
+                    raise _localization_error(
+                        LOCALIZATION_ALIAS_REDUNDANT,
+                        (
+                            f"Localization search term is redundant for source ID {source_id}."
+                            if is_exercise
+                            else f"Localization alias is redundant for source ID {source_id}."
+                        ),
+                        record=source_id,
+                        source_path=str(source_path),
+                        field=field,
+                        observed=term,
+                        expected=(
+                            (
+                                "canonical name, aliases, and pinyin unique after "
+                                "NFKC/casefold normalization"
+                            )
+                            if is_exercise
+                            else (
+                                "aliases unique from the canonical name after "
+                                "NFKC/casefold normalization"
+                            )
+                        ),
+                    )
+                normalized_search_terms.add(normalized_term)
 
         _validate_latin(
             entry.name_zh_cn,

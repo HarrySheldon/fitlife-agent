@@ -30,6 +30,7 @@ CATALOG_EXERCISE_TAXONOMY = (
     / "localizations"
     / "exercise-taxonomy.zh-CN.v1.json"
 )
+EXERCISE_SNAPSHOT = Path(__file__).parents[2] / "data" / "catalog" / "exercises.zh-CN.v1.json"
 
 
 def _localized_copy(tmp_path: Path, source: Path, update: dict[str, object]) -> Path:
@@ -120,7 +121,7 @@ def test_loads_valid_exercise_and_taxonomy_assets() -> None:
     assert bundle.taxonomy.equipment["e-z curl bar"] == "EZ 杠"
 
 
-def test_catalog_exercise_taxonomy_covers_all_upstream_values() -> None:
+def test_catalog_exercise_taxonomy_covers_all_snapshot_upstream_values() -> None:
     bundle = load_localization_bundle(
         catalog_kind="exercise",
         localization_path=EXERCISE_LOCALIZATION,
@@ -129,23 +130,36 @@ def test_catalog_exercise_taxonomy_covers_all_upstream_values() -> None:
 
     taxonomy = bundle.taxonomy
     assert taxonomy is not None
+    snapshot = json.loads(EXERCISE_SNAPSHOT.read_text(encoding="utf-8"))
+    exercises = snapshot["exercises"]
+    assert len(exercises) == 750
+    muscles = {
+        muscle
+        for exercise in exercises
+        for muscle in (
+            exercise["primary_muscle"],
+            *exercise["secondary_muscles"],
+        )
+    }
+    provenance_taxonomy = {
+        field: {
+            exercise["provenance"][source_field]
+            for exercise in exercises
+            if exercise["provenance"].get(source_field) is not None
+        }
+        for field, source_field in (
+            ("equipment", "equipment"),
+            ("levels", "level"),
+            ("mechanics", "mechanic"),
+            ("forces", "force"),
+            ("categories", "original_category"),
+        )
+    }
+
     assert taxonomy.approved_latin == ("EZ", "T", "TRX")
-    assert set(taxonomy.muscles) == {
-        "abdominals", "abductors", "adductors", "biceps", "calves", "chest",
-        "forearms", "glutes", "hamstrings", "lats", "lower back", "middle back",
-        "neck", "quadriceps", "shoulders", "traps", "triceps",
-    }
-    assert set(taxonomy.equipment) == {
-        "bands", "barbell", "body only", "cable", "dumbbell", "e-z curl bar",
-        "exercise ball", "kettlebells", "machine", "medicine ball", "other",
-    }
-    assert set(taxonomy.levels) == {"beginner", "expert", "intermediate"}
-    assert set(taxonomy.mechanics) == {"compound", "isolation"}
-    assert set(taxonomy.forces) == {"pull", "push", "static"}
-    assert set(taxonomy.categories) == {
-        "cardio", "olympic weightlifting", "plyometrics", "powerlifting",
-        "strength", "strongman",
-    }
+    assert muscles == set(taxonomy.muscles)
+    for field, upstream_values in provenance_taxonomy.items():
+        assert upstream_values == set(getattr(taxonomy, field))
 
 
 def test_immutable_models_serialize_to_json_without_warnings() -> None:
@@ -454,6 +468,73 @@ def test_rejects_alias_equal_to_canonical_name_after_normalization(tmp_path: Pat
         )
 
     assert raised.value.code == "LOCALIZATION_ALIAS_REDUNDANT"
+
+
+@pytest.mark.parametrize("pinyin", ["深蹲", "gangling_shendun", "gānglíng shēndūn"])
+def test_rejects_malformed_exercise_pinyin(tmp_path: Path, pinyin: str) -> None:
+    payload = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
+    payload["entries"]["Barbell_Full_Squat"]["pinyin"] = [pinyin]
+    path = _localized_copy(tmp_path, EXERCISE_LOCALIZATION, payload)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(
+            catalog_kind="exercise",
+            localization_path=path,
+            taxonomy_path=EXERCISE_TAXONOMY,
+        )
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("field", "duplicate"),
+    [
+        ("aliases", "杠铃深蹲"),
+        ("pinyin", "barbell full squat"),
+    ],
+)
+def test_rejects_exercise_alias_and_pinyin_cross_field_duplicates(
+    tmp_path: Path,
+    field: str,
+    duplicate: str,
+) -> None:
+    payload = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
+    entry = payload["entries"]["Barbell_Full_Squat"]
+    if field == "pinyin":
+        entry["aliases"] = ["Ｂａｒｂｅｌｌ Ｆｕｌｌ Ｓｑｕａｔ"]
+    entry[field] = [duplicate]
+    path = _localized_copy(tmp_path, EXERCISE_LOCALIZATION, payload)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(
+            catalog_kind="exercise",
+            localization_path=path,
+            taxonomy_path=EXERCISE_TAXONOMY,
+        )
+
+    assert raised.value.code == "LOCALIZATION_ALIAS_REDUNDANT"
+    assert raised.value.issue is not None
+    assert raised.value.issue.field == field
+
+
+def test_rejects_exercise_canonical_name_and_pinyin_duplicate(tmp_path: Path) -> None:
+    payload = json.loads(EXERCISE_LOCALIZATION.read_text(encoding="utf-8"))
+    entry = payload["entries"]["Barbell_Full_Squat"]
+    entry["name_zh_cn"] = "TRX"
+    entry["aliases"] = []
+    entry["pinyin"] = ["trx"]
+    path = _localized_copy(tmp_path, EXERCISE_LOCALIZATION, payload)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(
+            catalog_kind="exercise",
+            localization_path=path,
+            taxonomy_path=EXERCISE_TAXONOMY,
+        )
+
+    assert raised.value.code == "LOCALIZATION_ALIAS_REDUNDANT"
+    assert raised.value.issue is not None
+    assert raised.value.issue.field == "pinyin"
 
 
 def test_rejects_unapproved_latin_text(tmp_path: Path) -> None:

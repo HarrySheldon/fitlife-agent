@@ -61,6 +61,30 @@ def test_applies_complete_exercise_and_taxonomy_localization(tmp_path: Path) -> 
         "category": "力量训练",
         "instructions": ["将杠铃置于上背部。", "屈髋屈膝下蹲。"],
     }
+    assert {
+        key: squat.provenance[key]
+        for key in (
+            "profile",
+            "upstream_name",
+            "original_category",
+            "equipment",
+            "level",
+            "mechanic",
+            "force",
+            "instructions",
+            "image_count",
+        )
+    } == {
+        "profile": "free-exercise-db@2.0.0",
+        "upstream_name": "Barbell Full Squat",
+        "original_category": "strength",
+        "equipment": "barbell",
+        "level": "intermediate",
+        "mechanic": "compound",
+        "force": "push",
+        "instructions": ["Stand with the bar.", "Squat."],
+        "image_count": 1,
+    }
 
 
 def test_configured_exercise_localization_rejects_unlisted_compatible_exercise() -> None:
@@ -85,6 +109,54 @@ def test_configured_exercise_localization_rejects_unlisted_compatible_exercise()
     assert issue.record == "Run"
     assert issue.field == "source_record_id"
     assert all(record.name != "Run" for record in result.records)
+    coverage_issue = next(
+        issue
+        for issue in result.issues
+        if issue.code == "LOCALIZATION_COVERAGE_INSUFFICIENT"
+    )
+    assert coverage_issue.observed == 0.5
+    assert coverage_issue.expected == "1.0"
+
+
+def test_v2_profile_without_bundle_reports_blocking_localization_coverage() -> None:
+    result = project_source(
+        read_source(ROOT / "fixtures" / "free-exercises.json"),
+        load_mapping_profile(PROFILE),
+    )
+
+    issue = next(
+        issue
+        for issue in result.issues
+        if issue.code == "LOCALIZATION_COVERAGE_INSUFFICIENT"
+    )
+    assert issue.severity == "error"
+    assert issue.observed == 0
+    assert issue.expected == "1.0"
+    assert any(record.name == "Run" for record in result.records)
+
+
+def test_minimum_zero_profile_preserves_legacy_english_fallback() -> None:
+    profile = load_mapping_profile(PROFILE)
+    assert profile.enrichment is not None
+    legacy_profile = profile.model_copy(
+        update={
+            "enrichment": profile.enrichment.model_copy(
+                update={"minimum_coverage": 0}
+            )
+        }
+    )
+
+    result = project_source(
+        read_source(ROOT / "fixtures" / "free-exercises.json"),
+        legacy_profile,
+    )
+
+    assert not any(
+        issue.code == "LOCALIZATION_COVERAGE_INSUFFICIENT"
+        for issue in result.issues
+    )
+    assert any(record.name == "Run" for record in result.records)
+    assert any(issue.code == "ENRICHMENT_ENGLISH_FALLBACK" for issue in result.issues)
 
 
 def test_localized_exercise_aliases_use_nfkc_casefold_dedupe(tmp_path: Path) -> None:
@@ -118,6 +190,66 @@ def test_localized_exercise_aliases_use_nfkc_casefold_dedupe(tmp_path: Path) -> 
         "gangling shendun",
     )
     assert "杠铃深蹲" not in result.records[0].aliases
+
+
+def test_reports_all_unknown_taxonomy_values_with_precise_fields(tmp_path: Path) -> None:
+    exercise = {
+        "id": "Barbell_Full_Squat",
+        "name": "Barbell Full Squat",
+        "force": "unknown-force",
+        "level": "unknown-level",
+        "mechanic": "unknown-mechanic",
+        "equipment": "unknown-equipment",
+        "primaryMuscles": ["unknown-primary"],
+        "secondaryMuscles": [
+            "unknown-secondary-b",
+            "unknown-secondary-b",
+            "unknown-secondary-a",
+        ],
+        "instructions": ["Stand with the bar.", "Squat."],
+        "category": "unknown-category",
+        "images": [],
+    }
+    profile = load_mapping_profile(PROFILE)
+    category_map = dict(profile.projection.category_map)
+    category_map["unknown-category"] = "strength"
+    profile = profile.model_copy(
+        update={
+            "projection": profile.projection.model_copy(
+                update={"category_map": category_map}
+            )
+        }
+    )
+    source = tmp_path / "unknown-taxonomy.json"
+    source.write_text(json.dumps([exercise]), encoding="utf-8")
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=LOCALIZATION,
+        taxonomy_path=TAXONOMY,
+    )
+
+    result = project_source(
+        read_source(source),
+        profile,
+        localization_bundle=bundle,
+    )
+
+    assert result.records == ()
+    missing = [
+        issue
+        for issue in result.issues
+        if issue.code == "LOCALIZATION_MISSING"
+    ]
+    assert [(issue.field, issue.observed) for issue in missing] == [
+        ("taxonomy.muscles.primary", "unknown-primary"),
+        ("taxonomy.muscles.secondary[0]", "unknown-secondary-b"),
+        ("taxonomy.muscles.secondary[2]", "unknown-secondary-a"),
+        ("taxonomy.equipment", "unknown-equipment"),
+        ("taxonomy.level", "unknown-level"),
+        ("taxonomy.mechanic", "unknown-mechanic"),
+        ("taxonomy.force", "unknown-force"),
+        ("taxonomy.category", "unknown-category"),
+    ]
 
 
 @pytest.mark.parametrize(

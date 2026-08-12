@@ -36,6 +36,10 @@ ISSUE_MESSAGES: dict[str, tuple[str, str | None]] = {
         "Localized exercise instructions do not match the upstream instruction count.",
         "Provide one localized instruction for each upstream instruction, in the same order.",
     ),
+    "LOCALIZATION_COVERAGE_INSUFFICIENT": (
+        "Exercise localization coverage is below the mapping profile requirement.",
+        "Provide a complete localization bundle or use a legacy profile with zero required coverage.",
+    ),
     "NO_RECORDS_ACCEPTED": ("No complete canonical records were accepted.", "Correct the mapping or source data before importing."),
 }
 

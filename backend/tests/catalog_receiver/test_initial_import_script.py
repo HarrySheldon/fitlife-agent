@@ -1,12 +1,36 @@
+import json
 from pathlib import Path
 
 from scripts.import_initial_catalogs import main
 
 
 ROOT = Path(__file__).parent
+MAPPINGS = Path(__file__).parents[2] / "data" / "catalog" / "mappings"
 
 
-def test_initial_script_imports_both_sources_and_is_idempotent(tmp_path: Path, capsys) -> None:
+def _legacy_mapping_root(tmp_path: Path) -> Path:
+    mapping_root = tmp_path / "mappings"
+    mapping_root.mkdir()
+    for name in ("tfda-foods.v1.json", "free-exercise-db.v1.json"):
+        payload = json.loads((MAPPINGS / name).read_text(encoding="utf-8"))
+        if name == "free-exercise-db.v1.json":
+            payload["enrichment"]["minimum_coverage"] = 0
+        (mapping_root / name).write_text(
+            json.dumps(payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    return mapping_root
+
+
+def test_initial_script_imports_both_sources_and_is_idempotent(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "scripts.import_initial_catalogs.MAPPING_ROOT",
+        _legacy_mapping_root(tmp_path),
+    )
     args = [
         "--foods", str(ROOT / "fixtures/tfda-foods.csv"),
         "--exercises", str(ROOT / "fixtures/free-exercises.json"),

@@ -55,7 +55,20 @@ def test_import_blocks_sink_when_projection_has_errors(tmp_path: Path) -> None:
     assert result.report.transaction == {"status": "blocked", "reason": "validation_errors"}
 
 
-def test_import_blocks_sink_when_exercise_localization_is_missing(monkeypatch) -> None:
+def test_import_blocks_sink_when_v2_exercise_coverage_is_insufficient() -> None:
+    sink = Mock()
+
+    result = CatalogReceiver(sink).import_catalog(
+        ROOT / "fixtures/free-exercises.json",
+        mapping=EXERCISE_PROFILE,
+    )
+
+    sink.import_records.assert_not_called()
+    assert result.report.issue_counts["LOCALIZATION_COVERAGE_INSUFFICIENT"] == 1
+    assert result.report.transaction == {"status": "blocked", "reason": "validation_errors"}
+
+
+def test_import_blocks_sink_when_injected_projection_has_errors(monkeypatch) -> None:
     sink = Mock()
     profile = load_mapping_profile(EXERCISE_PROFILE)
     bundle = load_localization_bundle(
