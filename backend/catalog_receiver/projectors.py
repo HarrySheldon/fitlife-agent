@@ -10,7 +10,11 @@ from typing import Any, Iterable
 import jmespath
 from pydantic import ValidationError
 
-from backend.catalog_receiver.localization import FoodGlossaryRule, LocalizationBundle
+from backend.catalog_receiver.localization import (
+    LOCALIZATION_INVALID,
+    FoodGlossaryRule,
+    LocalizationBundle,
+)
 from backend.catalog_receiver.mapping import (
     convert_tw2sp,
     resolve_field,
@@ -36,6 +40,8 @@ def project_source(
     enrichment_path: str | Path | None = None,
     localization_bundle: LocalizationBundle | None = None,
 ) -> ProjectionResult:
+    if localization_bundle is not None:
+        _validate_localization_bundle(profile, localization_bundle)
     if source.metadata.kind != profile.input_format:
         raise ReceiverError(
             "MAPPING_SOURCE_FORMAT_MISMATCH",
@@ -57,6 +63,36 @@ def project_source(
             exit_code=3,
         )
     return _project_exercises(source, profile, enrichment_path=enrichment_path)
+
+
+def _validate_localization_bundle(
+    profile: MappingProfile,
+    bundle: LocalizationBundle,
+) -> None:
+    for field in ("catalog_kind", "source_name"):
+        observed = getattr(bundle, field)
+        expected = getattr(profile, field)
+        if observed == expected:
+            continue
+        message = (
+            f"Localization bundle {field} {observed!r} does not match "
+            f"mapping profile {field} {expected!r}."
+        )
+        issue = ReceiverIssue(
+            severity="error",
+            code=LOCALIZATION_INVALID,
+            source_path=str(bundle.localization_path),
+            field=field,
+            observed=observed,
+            expected=str(expected),
+            message=message,
+        )
+        raise ReceiverError(
+            LOCALIZATION_INVALID,
+            message,
+            exit_code=4,
+            issue=issue,
+        )
 
 
 def _project_foods(
@@ -112,7 +148,7 @@ def _project_foods(
         else:
             tw2sp_name = convert_tw2sp(upstream_name)
             localized = localization_bundle.food(identity)
-            if localized.review_note is not None:
+            if localized is not None and localized.review_note is not None:
                 canonical_name = localized.name_zh_cn
                 localization_method = "record_override"
             else:
@@ -120,7 +156,7 @@ def _project_foods(
                     baseline_name,
                     localization_bundle.food_glossary,
                 )
-                if localized.name_zh_cn != glossary_name:
+                if localized is not None:
                     issues.append(
                         ReceiverIssue(
                             severity="error",
@@ -511,30 +547,32 @@ def _aliases_without_canonical(
     canonical_name: str,
 ) -> tuple[str, ...]:
     canonical_key = unicodedata.normalize("NFKC", canonical_name).casefold()
-    return tuple(
-        alias
-        for alias in _unique_text(values)
-        if unicodedata.normalize("NFKC", alias).casefold() != canonical_key
-    )
+    aliases: list[str] = []
+    seen = {canonical_key}
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        alias = value.strip()
+        key = unicodedata.normalize("NFKC", alias).casefold()
+        if key in seen:
+            continue
+        aliases.append(alias)
+        seen.add(key)
+    return tuple(aliases)
 
 
 def _apply_food_glossary(value: str, rules: tuple[FoodGlossaryRule, ...]) -> str:
-    matches = [
-        (index, rule)
-        for index, rule in enumerate(rules)
-        if _food_glossary_rule_matches(value, rule)
-    ]
+    matches = [rule for rule in rules if _food_glossary_rule_matches(value, rule)]
     if not matches:
         return value
-    _index, rule = min(matches, key=lambda match: (-len(match[1].source), match[0]))
+    rule = min(matches, key=lambda match: (-len(match.source), match.priority))
     if rule.match_mode == "exact":
         return rule.target
     if rule.match_mode == "prefix":
         return rule.target + value[len(rule.source) :]
     if rule.match_mode == "suffix":
         return value[: -len(rule.source)] + rule.target
-    position = value.index(rule.source)
-    return value[:position] + rule.target + value[position + len(rule.source) :]
+    return value.replace(rule.source, rule.target)
 
 
 def _food_glossary_rule_matches(value: str, rule: FoodGlossaryRule) -> bool:

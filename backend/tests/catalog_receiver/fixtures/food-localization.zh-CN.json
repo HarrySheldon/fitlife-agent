@@ -4,8 +4,8 @@
   "source_name": "Taiwan FDA Food Nutrient Database",
   "locale": "zh-CN",
   "glossary": [
-    {"source": "白饭", "target": "米饭", "match_mode": "exact"},
-    {"source": "马铃薯", "target": "土豆", "match_mode": "exact"}
+    {"source": "白饭", "target": "米饭", "match_mode": "exact", "priority": 10},
+    {"source": "马铃薯", "target": "土豆", "match_mode": "exact", "priority": 20}
   ],
   "entries": {
     "A001": {

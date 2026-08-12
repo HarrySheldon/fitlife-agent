@@ -129,6 +129,7 @@ class FoodGlossaryRule(_StrictFrozenModel):
     source: str
     target: str
     match_mode: Literal["exact", "prefix", "suffix", "contains"]
+    priority: int = Field(ge=0)
 
     @field_validator("source", "target")
     @classmethod
@@ -216,11 +217,15 @@ class FoodLocalizationAsset(_StrictFrozenModel):
     @model_validator(mode="after")
     def freeze_entries(self) -> "FoodLocalizationAsset":
         seen_rules: set[tuple[str, str]] = set()
+        seen_priorities: set[int] = set()
         for rule in self.glossary:
             key = (_normalize(rule.source), rule.match_mode)
             if key in seen_rules:
                 raise ValueError("food glossary source and match_mode pairs must be unique")
+            if rule.priority in seen_priorities:
+                raise ValueError("food glossary priorities must be unique")
             seen_rules.add(key)
+            seen_priorities.add(rule.priority)
         object.__setattr__(self, "entries", _validated_mapping(self.entries, "entries"))
         return self
 
@@ -328,17 +333,8 @@ class LocalizationBundle(_StrictFrozenModel):
         object.__setattr__(self, "exercise_entries", MappingProxyType(dict(self.exercise_entries)))
         return self
 
-    def food(self, source_id: str) -> FoodLocalizationEntry:
-        entry = self.food_entries.get(source_id)
-        if entry is None:
-            raise _localization_error(
-                LOCALIZATION_MISSING,
-                f"Food localization is missing for source ID {source_id}.",
-                record=source_id,
-                source_path=str(self.localization_path),
-                field="source_record_id",
-            )
-        return entry
+    def food(self, source_id: str) -> FoodLocalizationEntry | None:
+        return self.food_entries.get(source_id)
 
     def exercise(
         self,
@@ -481,17 +477,18 @@ def validate_localization_coverage(
         else set(bundle.exercise_entries)
     )
     issues: list[ReceiverIssue] = []
-    for source_id in sorted(source_ids - localized_ids):
-        issues.append(
-            ReceiverIssue(
-                severity="error",
-                code=LOCALIZATION_MISSING,
-                record=source_id,
-                source_path=str(bundle.localization_path),
-                field="source_record_id",
-                expected="one localization entry per source ID",
+    if bundle.catalog_kind == "exercise":
+        for source_id in sorted(source_ids - localized_ids):
+            issues.append(
+                ReceiverIssue(
+                    severity="error",
+                    code=LOCALIZATION_MISSING,
+                    record=source_id,
+                    source_path=str(bundle.localization_path),
+                    field="source_record_id",
+                    expected="one localization entry per source ID",
+                )
             )
-        )
     for source_id in sorted(localized_ids - source_ids):
         issues.append(
             ReceiverIssue(

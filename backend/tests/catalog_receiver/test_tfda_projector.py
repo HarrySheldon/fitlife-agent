@@ -25,34 +25,40 @@ FOOD_GLOSSARY = (
         "source": "红马铃薯(粉红珍珠马铃薯)",
         "target": "红土豆(粉红珍珠土豆)",
         "match_mode": "exact",
+        "priority": 10,
     },
     {
         "source": "小马铃薯(珍珠马铃薯)",
         "target": "小土豆(珍珠土豆)",
         "match_mode": "exact",
+        "priority": 20,
     },
-    {"source": "白饭", "target": "米饭", "match_mode": "exact"},
-    {"source": "鲔鱼", "target": "金枪鱼", "match_mode": "contains"},
-    {"source": "马铃薯", "target": "土豆", "match_mode": "contains"},
-    {"source": "青花菜", "target": "西兰花", "match_mode": "prefix"},
-    {"source": "青花菜", "target": "西兰花", "match_mode": "suffix"},
-    {"source": "奇异果", "target": "猕猴桃", "match_mode": "suffix"},
-    {"source": "凤梨", "target": "菠萝", "match_mode": "prefix"},
-    {"source": "凤梨", "target": "菠萝", "match_mode": "suffix"},
+    {"source": "白饭", "target": "米饭", "match_mode": "exact", "priority": 30},
+    {"source": "鲔鱼", "target": "金枪鱼", "match_mode": "contains", "priority": 40},
+    {"source": "马铃薯", "target": "土豆", "match_mode": "contains", "priority": 50},
+    {"source": "青花菜", "target": "西兰花", "match_mode": "prefix", "priority": 60},
+    {"source": "青花菜", "target": "西兰花", "match_mode": "suffix", "priority": 70},
+    {"source": "奇异果", "target": "猕猴桃", "match_mode": "suffix", "priority": 80},
+    {"source": "凤梨", "target": "菠萝", "match_mode": "prefix", "priority": 90},
+    {"source": "凤梨", "target": "菠萝", "match_mode": "suffix", "priority": 100},
 )
 
 
 def _food_localization(
     tmp_path: Path,
     *,
-    name: str,
+    name: str | None = None,
     review_note: str | None = None,
     source_id: str = "A001",
-    glossary: tuple[dict[str, str], ...] | None = None,
+    aliases: tuple[str, ...] = (),
+    glossary: tuple[dict[str, object], ...] | None = None,
 ) -> Path:
-    entry: dict[str, object] = {"name_zh_cn": name, "aliases": []}
-    if review_note is not None:
-        entry["review_note"] = review_note
+    entries: dict[str, object] = {}
+    if name is not None:
+        entry: dict[str, object] = {"name_zh_cn": name, "aliases": aliases}
+        if review_note is not None:
+            entry["review_note"] = review_note
+        entries[source_id] = entry
     path = tmp_path / f"food-localization-{len(list(tmp_path.iterdir()))}.json"
     path.write_text(
         json.dumps(
@@ -62,7 +68,7 @@ def _food_localization(
                 "source_name": "Taiwan FDA Food Nutrient Database",
                 "locale": "zh-CN",
                 "glossary": glossary if glossary is not None else FOOD_GLOSSARY,
-                "entries": {source_id: entry},
+                "entries": entries,
             },
             ensure_ascii=False,
         ),
@@ -78,7 +84,7 @@ def test_projects_grouped_tfda_nutrients_and_preserves_aliases() -> None:
     )
     localization = load_localization_bundle(
         catalog_kind="food",
-        localization_path=FOOD_LOCALIZATION,
+        localization_path=CATALOG_LOCALIZATION,
     )
 
     result = project_source(source, profile, localization_bundle=localization)
@@ -94,7 +100,7 @@ def test_projects_grouped_tfda_nutrients_and_preserves_aliases() -> None:
     assert food.provenance["name_conversion"] == "opencc_tw2sp"
     assert food.provenance["localization"] == {
         "locale": "zh-CN",
-        "asset_version": "1.0.0",
+        "asset_version": "1.3.0",
         "upstream_name": "白飯",
         "method": "glossary",
     }
@@ -119,16 +125,54 @@ def test_no_bundle_preserves_profile_resolved_name() -> None:
     assert result.records[0].provenance["name_conversion"] is None
 
 
+@pytest.mark.parametrize(
+    ("bundle_update", "field"),
+    [
+        ({"catalog_kind": "exercise"}, "catalog_kind"),
+        ({"source_name": "another-food-source"}, "source_name"),
+    ],
+)
+def test_rejects_localization_bundle_that_does_not_match_profile(
+    bundle_update: dict[str, str],
+    field: str,
+) -> None:
+    profile = load_mapping_profile(
+        Path(__file__).parents[2] / "data" / "catalog" / "mappings" / "tfda-foods.v1.json"
+    )
+    bundle = load_localization_bundle(
+        catalog_kind="food",
+        localization_path=FOOD_LOCALIZATION,
+    ).model_copy(update=bundle_update)
+
+    with pytest.raises(ReceiverError) as raised:
+        project_source(
+            read_source(ROOT / "fixtures" / "tfda-foods.csv"),
+            profile,
+            localization_bundle=bundle,
+        )
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+    assert raised.value.issue is not None
+    assert raised.value.issue.field == field
+
+
 def test_bundled_food_localization_contains_mainland_glossary_and_reviewed_override() -> None:
     bundle = load_localization_bundle(
         catalog_kind="food",
         localization_path=CATALOG_LOCALIZATION,
     )
 
-    assert bundle.version == "1.2.0"
-    localized_names = {entry.name_zh_cn for entry in bundle.food_entries.values()}
-    assert {"米饭", "金枪鱼肚", "土豆", "西兰花芽", "猕猴桃", "菠萝酥"} <= localized_names
+    assert bundle.version == "1.3.0"
+    assert {rule.target for rule in bundle.food_glossary} >= {
+        "米饭",
+        "金枪鱼",
+        "土豆",
+        "西兰花",
+        "猕猴桃",
+        "菠萝",
+    }
     assert tuple(rule.model_dump() for rule in bundle.food_glossary) == FOOD_GLOSSARY
+    assert tuple(bundle.food_entries) == ("D1200201",)
     override = bundle.food("D1200201")
     assert override.name_zh_cn == "凤梨释迦"
     assert override.review_note
@@ -144,7 +188,7 @@ def test_food_localization_precedence_is_override_then_glossary_then_tw2sp(
 
     def project_name(
         traditional_name: str,
-        localized_name: str,
+        localized_name: str | None = None,
         review_note: str | None = None,
         source_id: str = "A001",
     ) -> tuple[str, str]:
@@ -167,40 +211,37 @@ def test_food_localization_precedence_is_override_then_glossary_then_tw2sp(
         food = result.records[0]
         return food.name, food.provenance["localization"]["method"]
 
-    assert project_name("臺灣米", "台湾米") == (
+    assert project_name("臺灣米") == (
         "台湾米",
         "opencc_tw2sp",
     )
-    assert project_name("白飯", "米饭") == ("米饭", "glossary")
+    assert project_name("白飯") == ("米饭", "glossary")
     assert project_name("白飯", "家常米饭", "Distinguishes this reviewed record.") == (
         "家常米饭",
         "record_override",
     )
 
 
-def test_configured_food_localization_rejects_missing_source_id(tmp_path: Path) -> None:
+def test_configured_food_localization_falls_back_for_unlisted_source_id(
+    tmp_path: Path,
+) -> None:
     profile = load_mapping_profile(
         Path(__file__).parents[2] / "data" / "catalog" / "mappings" / "tfda-foods.v1.json"
     )
     bundle = load_localization_bundle(
         catalog_kind="food",
-        localization_path=_food_localization(
-            tmp_path,
-            name="未使用",
-            source_id="A999",
-        ),
+        localization_path=_food_localization(tmp_path),
     )
 
-    with pytest.raises(ReceiverError) as raised:
-        project_source(
-            read_source(ROOT / "fixtures" / "tfda-foods.csv"),
-            profile,
-            localization_bundle=bundle,
-        )
+    result = project_source(
+        read_source(ROOT / "fixtures" / "tfda-foods.csv"),
+        profile,
+        localization_bundle=bundle,
+    )
 
-    assert raised.value.code == "LOCALIZATION_MISSING"
-    assert raised.value.issue is not None
-    assert raised.value.issue.record == "A001"
+    assert result.rejected_count == 0
+    assert result.records[0].name == "米饭"
+    assert result.records[0].provenance["localization"]["method"] == "glossary"
 
 
 def test_reviewed_override_prevents_contextual_glossary_replacement(tmp_path: Path) -> None:
@@ -241,10 +282,19 @@ def test_food_glossary_prefers_longest_parsed_name_term(tmp_path: Path) -> None:
         catalog_kind="food",
         localization_path=_food_localization(
             tmp_path,
-            name="番荔枝",
             glossary=(
-                {"source": "凤梨", "target": "菠萝", "match_mode": "prefix"},
-                {"source": "凤梨释迦", "target": "番荔枝", "match_mode": "exact"},
+                {
+                    "source": "凤梨",
+                    "target": "菠萝",
+                    "match_mode": "prefix",
+                    "priority": 20,
+                },
+                {
+                    "source": "凤梨释迦",
+                    "target": "番荔枝",
+                    "match_mode": "exact",
+                    "priority": 10,
+                },
             ),
         ),
     )
@@ -313,10 +363,19 @@ def test_food_glossary_does_not_cascade_rules(tmp_path: Path) -> None:
         catalog_kind="food",
         localization_path=_food_localization(
             tmp_path,
-            name="土豆",
             glossary=(
-                {"source": "马铃薯", "target": "土豆", "match_mode": "exact"},
-                {"source": "土豆", "target": "豆子", "match_mode": "exact"},
+                {
+                    "source": "马铃薯",
+                    "target": "土豆",
+                    "match_mode": "exact",
+                    "priority": 10,
+                },
+                {
+                    "source": "土豆",
+                    "target": "豆子",
+                    "match_mode": "exact",
+                    "priority": 20,
+                },
             ),
         ),
     )
@@ -330,7 +389,9 @@ def test_food_glossary_does_not_cascade_rules(tmp_path: Path) -> None:
     assert result.records[0].name == "土豆"
 
 
-def test_food_glossary_replaces_only_one_contains_occurrence(tmp_path: Path) -> None:
+def test_food_glossary_replaces_all_non_overlapping_contains_occurrences(
+    tmp_path: Path,
+) -> None:
     fixture = (ROOT / "fixtures" / "tfda-foods.csv").read_text(encoding="utf-8")
     source_path = tmp_path / "one-occurrence.csv"
     source_path.write_text(fixture.replace("白飯", "馬鈴薯馬鈴薯"), encoding="utf-8")
@@ -341,9 +402,13 @@ def test_food_glossary_replaces_only_one_contains_occurrence(tmp_path: Path) -> 
         catalog_kind="food",
         localization_path=_food_localization(
             tmp_path,
-            name="土豆马铃薯",
             glossary=(
-                {"source": "马铃薯", "target": "土豆", "match_mode": "contains"},
+                {
+                    "source": "马铃薯",
+                    "target": "土豆",
+                    "match_mode": "contains",
+                    "priority": 10,
+                },
             ),
         ),
     )
@@ -354,10 +419,10 @@ def test_food_glossary_replaces_only_one_contains_occurrence(tmp_path: Path) -> 
         localization_bundle=bundle,
     )
 
-    assert result.records[0].name == "土豆马铃薯"
+    assert result.records[0].name == "土豆土豆"
 
 
-def test_food_glossary_uses_asset_order_for_equal_length_rules(tmp_path: Path) -> None:
+def test_food_glossary_uses_priority_for_equal_specificity_rules(tmp_path: Path) -> None:
     fixture = (ROOT / "fixtures" / "tfda-foods.csv").read_text(encoding="utf-8")
     source_path = tmp_path / "stable-order.csv"
     source_path.write_text(fixture.replace("白飯", "鳳梨酥"), encoding="utf-8")
@@ -368,10 +433,19 @@ def test_food_glossary_uses_asset_order_for_equal_length_rules(tmp_path: Path) -
         catalog_kind="food",
         localization_path=_food_localization(
             tmp_path,
-            name="菠萝酥",
             glossary=(
-                {"source": "凤梨", "target": "菠萝", "match_mode": "prefix"},
-                {"source": "凤梨", "target": "黄梨", "match_mode": "contains"},
+                {
+                    "source": "凤梨",
+                    "target": "菠萝",
+                    "match_mode": "prefix",
+                    "priority": 20,
+                },
+                {
+                    "source": "凤梨",
+                    "target": "黄梨",
+                    "match_mode": "contains",
+                    "priority": 10,
+                },
             ),
         ),
     )
@@ -382,7 +456,39 @@ def test_food_glossary_uses_asset_order_for_equal_length_rules(tmp_path: Path) -
         localization_bundle=bundle,
     )
 
-    assert result.records[0].name == "菠萝酥"
+    assert result.records[0].name == "黄梨酥"
+
+
+def test_food_alias_merge_dedupes_nfkc_casefold_and_removes_canonical(
+    tmp_path: Path,
+) -> None:
+    fixture = (ROOT / "fixtures" / "tfda-foods.csv").read_text(encoding="utf-8")
+    source_path = tmp_path / "compatibility-aliases.csv"
+    source_path.write_text(
+        fixture.replace("白飯", "神").replace("米飯", "神").replace("Cooked rice", "ＴＥＳＴ"),
+        encoding="utf-8",
+    )
+    profile = load_mapping_profile(
+        Path(__file__).parents[2] / "data" / "catalog" / "mappings" / "tfda-foods.v1.json"
+    )
+    bundle = load_localization_bundle(
+        catalog_kind="food",
+        localization_path=_food_localization(
+            tmp_path,
+            name="神",
+            review_note="Context-specific reviewed canonical name.",
+            aliases=("test",),
+            glossary=(),
+        ),
+    )
+
+    result = project_source(
+        read_source(source_path),
+        profile,
+        localization_bundle=bundle,
+    )
+
+    assert result.records[0].aliases == ("ＴＥＳＴ",)
 
 
 def test_rejects_food_record_override_without_review_note(tmp_path: Path) -> None:

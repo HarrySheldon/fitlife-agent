@@ -48,8 +48,8 @@ def test_loads_valid_food_asset_and_preserves_authored_aliases() -> None:
     assert bundle.localization_path == FOOD_LOCALIZATION.resolve()
     assert bundle.taxonomy_path is None
     assert [rule.model_dump() for rule in bundle.food_glossary] == [
-        {"source": "白饭", "target": "米饭", "match_mode": "exact"},
-        {"source": "马铃薯", "target": "土豆", "match_mode": "exact"},
+        {"source": "白饭", "target": "米饭", "match_mode": "exact", "priority": 10},
+        {"source": "马铃薯", "target": "土豆", "match_mode": "exact", "priority": 20},
     ]
     assert localized.name_zh_cn == "米饭"
     assert localized.aliases == ("白飯", "Cooked rice")
@@ -61,6 +61,28 @@ def test_loads_valid_food_asset_and_preserves_authored_aliases() -> None:
         bundle.food_glossary[0].target = "粥"
     with pytest.raises(AttributeError):
         bundle.food_glossary.append(bundle.food_glossary[0])  # type: ignore[attr-defined]
+
+
+def test_rejects_food_glossary_without_explicit_priority(tmp_path: Path) -> None:
+    payload = json.loads(FOOD_LOCALIZATION.read_text(encoding="utf-8"))
+    del payload["glossary"][0]["priority"]
+    path = _localized_copy(tmp_path, FOOD_LOCALIZATION, payload)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path=path)
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
+
+
+def test_rejects_duplicate_food_glossary_priorities(tmp_path: Path) -> None:
+    payload = json.loads(FOOD_LOCALIZATION.read_text(encoding="utf-8"))
+    payload["glossary"][1]["priority"] = payload["glossary"][0]["priority"]
+    path = _localized_copy(tmp_path, FOOD_LOCALIZATION, payload)
+
+    with pytest.raises(ReceiverError) as raised:
+        load_localization_bundle(catalog_kind="food", localization_path=path)
+
+    assert raised.value.code == "LOCALIZATION_INVALID"
 
 
 def test_loads_valid_exercise_and_taxonomy_assets() -> None:
@@ -123,8 +145,8 @@ def test_immutable_models_serialize_to_json_without_warnings() -> None:
         exercise_bundle,
     )
     assert models[0].model_dump(mode="json")["glossary"] == [
-        {"source": "白饭", "target": "米饭", "match_mode": "exact"},
-        {"source": "马铃薯", "target": "土豆", "match_mode": "exact"},
+        {"source": "白饭", "target": "米饭", "match_mode": "exact", "priority": 10},
+        {"source": "马铃薯", "target": "土豆", "match_mode": "exact", "priority": 20},
     ]
 
     with warnings.catch_warnings(record=True) as caught:
@@ -316,7 +338,7 @@ def test_rejects_windows_reserved_device_without_opening(
     assert raised.value.issue.source_path == str(source.absolute())
 
 
-def test_reports_missing_and_orphan_source_ids() -> None:
+def test_sparse_food_coverage_reports_only_orphan_source_ids() -> None:
     bundle = load_localization_bundle(
         catalog_kind="food",
         localization_path=FOOD_LOCALIZATION,
@@ -325,10 +347,27 @@ def test_reports_missing_and_orphan_source_ids() -> None:
     issues = validate_localization_coverage(bundle, {"A001", "A003"})
 
     assert [(issue.code, issue.record) for issue in issues] == [
-        ("LOCALIZATION_MISSING", "A003"),
         ("LOCALIZATION_ORPHAN", "A002"),
     ]
     assert {issue.source_path for issue in issues} == {str(FOOD_LOCALIZATION.resolve())}
+
+
+def test_exercise_coverage_remains_exact_by_source_id() -> None:
+    bundle = load_localization_bundle(
+        catalog_kind="exercise",
+        localization_path=EXERCISE_LOCALIZATION,
+        taxonomy_path=EXERCISE_TAXONOMY,
+    )
+
+    issues = validate_localization_coverage(
+        bundle,
+        {"Barbell_Full_Squat", "Missing_Exercise"},
+    )
+
+    assert [(issue.code, issue.record) for issue in issues] == [
+        ("LOCALIZATION_MISSING", "Missing_Exercise"),
+        ("LOCALIZATION_ORPHAN", "Pushups"),
+    ]
 
 
 def test_rejects_instruction_count_mismatch() -> None:
