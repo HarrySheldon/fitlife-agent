@@ -6,9 +6,8 @@ from typing import Protocol, Sequence
 
 from backend.catalog_receiver.inspector import inspect_structure
 from backend.catalog_receiver.localization import (
-    LOCALIZATION_INVALID,
     LocalizationBundle,
-    load_localization_bundle,
+    resolve_localization_bundle,
     validate_localization_coverage,
 )
 from backend.catalog_receiver.mapping import load_mapping_profile
@@ -221,15 +220,10 @@ def _load_run_localization(
     paths = tuple(localization_paths)
     if not paths:
         return None
-    if len(paths) != 1:
-        raise ReceiverError(
-            LOCALIZATION_INVALID,
-            "Exactly one localization asset must match a catalog receiver run.",
-            exit_code=4,
-        )
-    return load_localization_bundle(
+    return resolve_localization_bundle(
         catalog_kind=profile.catalog_kind,
-        localization_path=paths[0],
+        source_name=profile.source_name,
+        localization_paths=paths,
         taxonomy_path=taxonomy_path,
     )
 

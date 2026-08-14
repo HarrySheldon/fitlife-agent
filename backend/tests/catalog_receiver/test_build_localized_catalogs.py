@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
 
+from scripts import build_localized_catalogs as build_module
 from scripts.build_localized_catalogs import main
 
 
@@ -226,3 +228,93 @@ def test_second_replace_failure_rolls_back_both_outputs(
     assert exercise_catalog.read_bytes() == original_exercise
     assert list(tmp_path.glob(".*.tmp")) == []
     assert list(tmp_path.glob(".*.bak")) == []
+
+
+def test_restore_failure_retains_unrecovered_backup_with_diagnostic(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    args, food_catalog, exercise_catalog = _build_args(tmp_path)
+    original_food = food_catalog.read_bytes()
+    original_exercise = exercise_catalog.read_bytes()
+    real_replace = Path.replace
+    failed_second_replace = False
+    failed_restore = False
+    retained_backup: Path | None = None
+
+    def fail_replace_and_restore(path: Path, target: Path) -> Path:
+        nonlocal failed_second_replace, failed_restore, retained_backup
+        if (
+            not failed_second_replace
+            and path.name.startswith(f".{exercise_catalog.name}.")
+            and path.suffix == ".tmp"
+        ):
+            failed_second_replace = True
+            raise OSError("forced second replacement failure")
+        if (
+            failed_second_replace
+            and not failed_restore
+            and path.name.startswith(f".{food_catalog.name}.")
+            and path.suffix == ".bak"
+        ):
+            failed_restore = True
+            retained_backup = path
+            raise OSError("forced backup restoration failure")
+        return real_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_replace_and_restore)
+
+    assert main(args) == 5
+
+    error = json.loads(capsys.readouterr().err)["error"]
+    assert error["code"] == "CATALOG_ROLLBACK_INCOMPLETE"
+    assert failed_second_replace is True
+    assert failed_restore is True
+    assert retained_backup is not None
+    assert str(retained_backup) in error["message"]
+    assert retained_backup.read_bytes() == original_food
+    assert exercise_catalog.read_bytes() == original_exercise
+    assert list(tmp_path.glob(".*.tmp")) == []
+    assert list(tmp_path.glob(".*.bak")) == [retained_backup]
+
+
+def test_atomic_outputs_use_sibling_temps_fsynced_before_replacement(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    args, _food_catalog, _exercise_catalog = _build_args(tmp_path)
+    real_fsync = os.fsync
+    real_replace = Path.replace
+    events: list[tuple[str, object]] = []
+
+    def record_fsync(file_descriptor: int) -> None:
+        events.append(("fsync", os.fstat(file_descriptor).st_size))
+        real_fsync(file_descriptor)
+
+    def record_replace(path: Path, target: Path) -> Path:
+        if path.suffix == ".tmp":
+            events.append(("replace", (path, target)))
+        return real_replace(path, target)
+
+    monkeypatch.setattr(build_module.os, "fsync", record_fsync)
+    monkeypatch.setattr(Path, "replace", record_replace)
+
+    assert main(args) == 0
+
+    replace_indexes = [
+        index for index, (event, _detail) in enumerate(events) if event == "replace"
+    ]
+    assert len(replace_indexes) == 2
+    assert all(
+        detail > 0
+        for event, detail in events[: replace_indexes[0]]
+        if event == "fsync"
+    )
+    assert sum(
+        event == "fsync" for event, _detail in events[: replace_indexes[0]]
+    ) == 4
+    for index in replace_indexes:
+        temporary, output = events[index][1]
+        assert temporary.parent == output.parent
+        assert temporary.name.startswith(f".{output.name}.")

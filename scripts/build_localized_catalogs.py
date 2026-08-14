@@ -388,6 +388,7 @@ def _replace_catalog_pair(
     )
     existed = tuple(output.exists() for output in outputs)
     replaced = [False, False]
+    unrecovered_backups: set[Path] = set()
     try:
         _write_fsynced(temporaries[0], food[1])
         _write_fsynced(temporaries[1], exercise[1])
@@ -398,18 +399,41 @@ def _replace_catalog_pair(
         replaced[0] = True
         temporaries[1].replace(outputs[1])
         replaced[1] = True
-    except Exception:
+    except Exception as replace_error:
+        restore_failures: list[tuple[Path, Path, Exception]] = []
         for index in (1, 0):
             if not replaced[index]:
                 continue
             if existed[index] and backups[index].exists():
-                backups[index].replace(outputs[index])
+                try:
+                    backups[index].replace(outputs[index])
+                except Exception as restore_error:
+                    unrecovered_backups.add(backups[index])
+                    restore_failures.append(
+                        (outputs[index], backups[index], restore_error)
+                    )
             elif outputs[index].exists():
-                outputs[index].unlink()
+                try:
+                    outputs[index].unlink()
+                except Exception as restore_error:
+                    restore_failures.append(
+                        (outputs[index], backups[index], restore_error)
+                    )
+        if restore_failures:
+            details = "; ".join(
+                f"output={output}, backup={backup}, error={error}"
+                for output, backup, error in restore_failures
+            )
+            raise ReceiverError(
+                "CATALOG_ROLLBACK_INCOMPLETE",
+                f"Catalog replacement failed and rollback was incomplete: {details}",
+                exit_code=5,
+            ) from replace_error
         raise
     finally:
         for path in (*temporaries, *backups):
-            path.unlink(missing_ok=True)
+            if path not in unrecovered_backups:
+                path.unlink(missing_ok=True)
 
 
 def _write_fsynced(path: Path, value: str) -> None:

@@ -1,6 +1,7 @@
 from pathlib import Path
 from unittest.mock import Mock
 
+from backend.catalog_receiver import localization as localization_module
 from backend.catalog_receiver import service as service_module
 from backend.catalog_receiver.localization import load_localization_bundle
 from backend.catalog_receiver.mapping import load_mapping_profile
@@ -12,6 +13,7 @@ ROOT = Path(__file__).parent
 PROFILE = Path(__file__).parents[2] / "data/catalog/mappings/tfda-foods.v1.json"
 EXERCISE_PROFILE = Path(__file__).parents[2] / "data/catalog/mappings/free-exercise-db.v1.json"
 EXERCISE_LOCALIZATION = ROOT / "fixtures/exercise-localization.zh-CN.json"
+FOOD_LOCALIZATION = ROOT / "fixtures/food-localization.zh-CN.json"
 EXERCISE_TAXONOMY = Path(__file__).parents[2] / "data/catalog/localizations/exercise-taxonomy.zh-CN.v1.json"
 
 
@@ -106,3 +108,62 @@ def test_import_blocks_sink_when_injected_projection_has_errors(monkeypatch) -> 
     assert result.report.issue_counts["LOCALIZATION_MISSING"] == 1
     assert result.report.transaction == {"status": "blocked", "reason": "validation_errors"}
     assert [record.source_record_id for record in result.records] == ["Barbell_Full_Squat"]
+
+
+def test_localization_candidates_load_once_and_selected_bundle_reaches_projector(
+    monkeypatch,
+) -> None:
+    real_load_document = localization_module._load_asset_document
+    real_resolve_bundle = service_module.resolve_localization_bundle
+    real_project_source = project_source
+    load_counts: dict[Path, int] = {}
+    resolved_bundles = []
+    projected_bundles = []
+
+    def counted_load(path, *, label):
+        resolved = Path(path).resolve()
+        if label == "Localization":
+            load_counts[resolved] = load_counts.get(resolved, 0) + 1
+        return real_load_document(path, label=label)
+
+    def capture_resolved_bundle(**kwargs):
+        bundle = real_resolve_bundle(**kwargs)
+        resolved_bundles.append(bundle)
+        return bundle
+
+    def capture_bundle(
+        source,
+        profile,
+        *,
+        enrichment_path=None,
+        localization_bundle=None,
+    ):
+        projected_bundles.append(localization_bundle)
+        return real_project_source(
+            source,
+            profile,
+            enrichment_path=enrichment_path,
+            localization_bundle=localization_bundle,
+        )
+
+    monkeypatch.setattr(localization_module, "_load_asset_document", counted_load)
+    monkeypatch.setattr(
+        service_module,
+        "resolve_localization_bundle",
+        capture_resolved_bundle,
+    )
+    monkeypatch.setattr(service_module, "project_source", capture_bundle)
+
+    CatalogReceiver().validate(
+        ROOT / "fixtures/tfda-foods.csv",
+        mapping=PROFILE,
+        localization_paths=(EXERCISE_LOCALIZATION, FOOD_LOCALIZATION),
+    )
+
+    assert load_counts == {
+        EXERCISE_LOCALIZATION.resolve(): 1,
+        FOOD_LOCALIZATION.resolve(): 1,
+    }
+    assert len(resolved_bundles) == 1
+    assert projected_bundles == resolved_bundles
+    assert resolved_bundles[0].localization_path == FOOD_LOCALIZATION.resolve()

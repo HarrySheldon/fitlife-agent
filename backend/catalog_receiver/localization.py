@@ -10,7 +10,7 @@ import unicodedata
 from bisect import bisect_right
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, TypeVar
+from typing import Any, Literal, Mapping, Sequence, TypeVar
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from pydantic import (
@@ -385,6 +385,104 @@ def load_localization_bundle(
     taxonomy_path: str | Path | None = None,
 ) -> LocalizationBundle:
     localization_file, document = _load_asset_document(localization_path, label="Localization")
+    return _localization_bundle_from_document(
+        catalog_kind=catalog_kind,
+        localization_file=localization_file,
+        document=document,
+        taxonomy_path=taxonomy_path,
+    )
+
+
+def resolve_localization_bundle(
+    *,
+    catalog_kind: CatalogKind,
+    source_name: str,
+    localization_paths: Sequence[str | Path],
+    taxonomy_path: str | Path | None = None,
+) -> LocalizationBundle:
+    candidates: list[tuple[Path, Any]] = []
+    observed: list[dict[str, str]] = []
+    seen_paths: set[Path] = set()
+    for localization_path in localization_paths:
+        localization_file, document = _load_asset_document(
+            localization_path,
+            label="Localization",
+        )
+        if localization_file in seen_paths:
+            raise _invalid_asset_error(
+                "Localization",
+                localization_file,
+                "the same asset path was provided more than once",
+            )
+        seen_paths.add(localization_file)
+        candidate_kind, candidate_source = _localization_identity(
+            localization_file,
+            document,
+        )
+        observed.append(
+            {
+                "path": str(localization_file),
+                "catalog_kind": candidate_kind,
+                "source_name": candidate_source,
+            }
+        )
+        if candidate_kind == catalog_kind and candidate_source == source_name:
+            candidates.append((localization_file, document))
+
+    if not candidates:
+        raise _localization_error(
+            LOCALIZATION_MISSING,
+            f"No localization asset matches {catalog_kind} source {source_name}.",
+            observed=observed,
+            expected=f"exactly one {catalog_kind} localization for {source_name}",
+        )
+    if len(candidates) > 1:
+        matching_paths = tuple(str(path) for path, _document in candidates)
+        raise _localization_error(
+            LOCALIZATION_INVALID,
+            f"Multiple localization assets match {catalog_kind} source {source_name}.",
+            source_path=", ".join(matching_paths),
+            observed=matching_paths,
+            expected="exactly one matching localization asset",
+        )
+    localization_file, document = candidates[0]
+    return _localization_bundle_from_document(
+        catalog_kind=catalog_kind,
+        localization_file=localization_file,
+        document=document,
+        taxonomy_path=taxonomy_path if catalog_kind == "exercise" else None,
+    )
+
+
+def _localization_identity(
+    localization_file: Path,
+    document: Any,
+) -> tuple[CatalogKind, str]:
+    if not isinstance(document, dict):
+        raise _invalid_asset_error(
+            "Localization",
+            localization_file,
+            "document must be a JSON object",
+        )
+    source_name = document.get("source_name")
+    if source_name == FOOD_SOURCE_NAME:
+        return "food", source_name
+    if source_name == EXERCISE_SOURCE_NAME:
+        return "exercise", source_name
+    raise _invalid_asset_error(
+        "Localization",
+        localization_file,
+        "source_name is missing or unsupported",
+    )
+
+
+def _localization_bundle_from_document(
+    *,
+    catalog_kind: CatalogKind,
+    localization_file: Path,
+    document: Any,
+    taxonomy_path: str | Path | None,
+) -> LocalizationBundle:
     if catalog_kind == "food":
         if taxonomy_path is not None:
             raise _invalid_asset_error(
@@ -873,5 +971,6 @@ __all__ = [
     "LocalizationBundle",
     "LOCALIZATION_JSON_SIZE_LIMIT",
     "load_localization_bundle",
+    "resolve_localization_bundle",
     "validate_localization_coverage",
 ]

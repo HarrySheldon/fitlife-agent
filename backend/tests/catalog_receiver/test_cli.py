@@ -6,6 +6,7 @@ from backend.tools.catalog_receiver import build_parser, main
 
 ROOT = Path(__file__).parent
 FOOD_PROFILE = Path(__file__).parents[2] / "data/catalog/mappings/tfda-foods.v1.json"
+EXERCISE_LOCALIZATION = ROOT / "fixtures/exercise-localization.zh-CN.json"
 
 
 def _food_localization(tmp_path: Path, *, include_orphan: bool = False) -> Path:
@@ -57,6 +58,97 @@ def test_validate_parser_accepts_repeatable_localizations_and_optional_taxonomy(
 
     assert args.localizations == [Path("food.zh-CN.json"), Path("shared.zh-CN.json")]
     assert args.taxonomy == Path("taxonomy.zh-CN.json")
+
+
+def test_validate_resolves_matching_asset_from_repeated_localizations(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(EXERCISE_LOCALIZATION),
+            "--localization",
+            str(_food_localization(tmp_path)),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    normalized = json.loads(
+        (output_dir / "normalized-foods.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 0
+    assert normalized["foods"][0]["name"] == "米饭"
+
+
+def test_validate_rejects_localizations_without_a_matching_asset(capsys) -> None:
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(EXERCISE_LOCALIZATION),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_MISSING" in capsys.readouterr().err
+
+
+def test_validate_rejects_duplicate_matching_localizations(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    localization = _food_localization(tmp_path)
+
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(localization),
+            "--localization",
+            str(localization),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_INVALID" in capsys.readouterr().err
+
+
+def test_validate_rejects_ambiguous_matching_localizations(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    first = _food_localization(tmp_path)
+    second = tmp_path / "second-food-localization.zh-CN.json"
+    second.write_bytes(first.read_bytes())
+
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(first),
+            "--localization",
+            str(second),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_INVALID" in capsys.readouterr().err
 
 
 def test_validate_without_localization_returns_data_error(capsys) -> None:
