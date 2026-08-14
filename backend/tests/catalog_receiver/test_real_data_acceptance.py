@@ -150,9 +150,10 @@ def test_bundled_exercise_localization_projects_all_source_records(
     tmp_path: Path,
 ) -> None:
     snapshot = json.loads(EXERCISE_SNAPSHOT.read_text(encoding="utf-8"))
+    upstream = _reconstruct_upstream_exercises(snapshot)
     source_path = tmp_path / "free-exercise-db.json"
     source_path.write_text(
-        json.dumps(_reconstruct_upstream_exercises(snapshot), ensure_ascii=False),
+        json.dumps(upstream, ensure_ascii=False),
         encoding="utf-8",
     )
     bundle = load_localization_bundle(
@@ -160,16 +161,17 @@ def test_bundled_exercise_localization_projects_all_source_records(
         localization_path=EXERCISE_LOCALIZATION,
         taxonomy_path=EXERCISE_TAXONOMY,
     )
+    profile = load_mapping_profile(EXERCISE_MAPPING)
 
     result = project_source(
         read_source(source_path),
-        load_mapping_profile(EXERCISE_MAPPING),
+        profile,
         localization_bundle=bundle,
     )
 
-    source_names = {
-        record["source_record_id"]: record["provenance"]["upstream_name"]
-        for record in snapshot["exercises"]
+    source_by_id = {record["id"]: record for record in upstream}
+    projected_by_id = {
+        record.source_record_id: record for record in result.records
     }
     blocking_issues = [
         issue
@@ -182,13 +184,76 @@ def test_bundled_exercise_localization_projects_all_source_records(
     assert result.enrichment_count == 750
     assert result.enrichment_coverage == 1.0
     assert blocking_issues == []
-    assert {
-        record.source_record_id for record in result.records
-    } == set(source_names)
-    assert all(
-        source_names[record.source_record_id] in record.aliases
-        for record in result.records
-    )
+    assert set(projected_by_id) == set(source_by_id)
+
+    taxonomy = bundle.taxonomy
+    assert taxonomy is not None
+    for source_id, source in source_by_id.items():
+        entry = bundle.exercise_entries[source_id]
+        projected = projected_by_id[source_id]
+        assert projected.model_dump(mode="json") == {
+            "source_name": profile.source_name,
+            "source_record_id": source_id,
+            "dataset_version": profile.dataset_version,
+            "license": profile.license,
+            "attribution": profile.attribution,
+            "name": entry.name_zh_cn,
+            "exercise_type": profile.projection.category_map[source["category"]],
+            "primary_muscle": taxonomy.muscles[source["primaryMuscles"][0]],
+            "secondary_muscles": [
+                taxonomy.muscles[value] for value in source["secondaryMuscles"]
+            ],
+            "met": None,
+            "aliases": [source["name"], *entry.aliases, *entry.pinyin],
+            "provenance": {
+                "profile": f"{profile.profile_name}@{profile.profile_version}",
+                "upstream_name": source["name"],
+                "original_category": source["category"],
+                "equipment": source["equipment"],
+                "level": source["level"],
+                "mechanic": source["mechanic"],
+                "force": source["force"],
+                "instructions": source["instructions"],
+                "image_count": len(source["images"]),
+                "upstream": {
+                    "name": source["name"],
+                    "primary_muscle": source["primaryMuscles"][0],
+                    "secondary_muscles": source["secondaryMuscles"],
+                    "equipment": source["equipment"],
+                    "level": source["level"],
+                    "mechanic": source["mechanic"],
+                    "force": source["force"],
+                    "instructions": source["instructions"],
+                },
+                "localization": {
+                    "locale": bundle.locale,
+                    "asset_version": bundle.version,
+                    "taxonomy_version": taxonomy.version,
+                    "equipment": (
+                        taxonomy.equipment[source["equipment"]]
+                        if source["equipment"] is not None
+                        else None
+                    ),
+                    "level": (
+                        taxonomy.levels[source["level"]]
+                        if source["level"] is not None
+                        else None
+                    ),
+                    "mechanic": (
+                        taxonomy.mechanics[source["mechanic"]]
+                        if source["mechanic"] is not None
+                        else None
+                    ),
+                    "force": (
+                        taxonomy.forces[source["force"]]
+                        if source["force"] is not None
+                        else None
+                    ),
+                    "category": taxonomy.categories[source["category"]],
+                    "instructions": list(entry.instructions_zh_cn),
+                },
+            },
+        }
 
 
 def test_bundled_tfda_snapshot_contains_only_complete_foods() -> None:
