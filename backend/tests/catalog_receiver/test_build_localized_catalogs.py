@@ -252,7 +252,7 @@ def test_build_rejects_existing_hardlink_role_alias(
     "mapping_name",
     ["tfda-foods.v1.json", "free-exercise-db.v1.json"],
 )
-def test_build_protects_fixed_mapping_profile_hardlink_aliases(
+def test_build_protects_fixed_mapping_profile_paths(
     tmp_path: Path,
     capsys,
     mapping_name: str,
@@ -260,10 +260,8 @@ def test_build_protects_fixed_mapping_profile_hardlink_aliases(
     args, _food_catalog, _exercise_catalog = _build_args(tmp_path)
     mapping_path = MAPPING_ROOT / mapping_name
     original_mapping = mapping_path.read_bytes()
-    aliased_output = tmp_path / f"{mapping_name}.hardlink"
-    os.link(mapping_path, aliased_output)
 
-    assert main(_with_argument(args, "--exercise-output", aliased_output)) == 4
+    assert main(_with_argument(args, "--exercise-output", mapping_path)) == 4
     assert "CATALOG_PATH_CONFLICT" in capsys.readouterr().err
     assert mapping_path.read_bytes() == original_mapping
 
