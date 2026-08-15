@@ -6,10 +6,12 @@ import json
 import os
 import shutil
 import sys
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from itertools import combinations
 from pathlib import Path
-from typing import Any, Sequence
-from uuid import uuid4
+from typing import Any, Iterator, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -38,6 +40,64 @@ from backend.catalog_receiver.validators import validate_records
 MAPPING_ROOT = PROJECT_ROOT / "backend" / "data" / "catalog" / "mappings"
 
 
+@dataclass(frozen=True)
+class PublicationPaths:
+    food_output: Path
+    exercise_output: Path
+    food_next: Path
+    exercise_next: Path
+    food_backup: Path
+    exercise_backup: Path
+    manifest: Path
+    manifest_next: Path
+    locks: tuple[Path, ...]
+
+    @property
+    def outputs(self) -> tuple[Path, Path]:
+        return self.food_output, self.exercise_output
+
+    @property
+    def next_files(self) -> tuple[Path, Path]:
+        return self.food_next, self.exercise_next
+
+    @property
+    def backups(self) -> tuple[Path, Path]:
+        return self.food_backup, self.exercise_backup
+
+    @classmethod
+    def from_outputs(
+        cls,
+        food_output: Path,
+        exercise_output: Path,
+    ) -> PublicationPaths:
+        food_output = food_output.resolve(strict=False)
+        exercise_output = exercise_output.resolve(strict=False)
+        lock_paths = {
+            output.parent / ".catalog-localization.publish.lock"
+            for output in (food_output, exercise_output)
+        }
+        manifest = food_output.parent / ".catalog-localization.publish.json"
+        return cls(
+            food_output=food_output,
+            exercise_output=exercise_output,
+            food_next=food_output.with_name(f".{food_output.name}.catalog.next"),
+            exercise_next=exercise_output.with_name(
+                f".{exercise_output.name}.catalog.next"
+            ),
+            food_backup=food_output.with_name(
+                f".{food_output.name}.catalog.backup"
+            ),
+            exercise_backup=exercise_output.with_name(
+                f".{exercise_output.name}.catalog.backup"
+            ),
+            manifest=manifest,
+            manifest_next=manifest.with_name(f"{manifest.name}.next"),
+            locks=tuple(
+                sorted(lock_paths, key=lambda path: os.path.normcase(str(path)))
+            ),
+        )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build both bundled Mainland-localized catalogs deterministically."
@@ -54,18 +114,33 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    diagnostics: list[str] = []
     try:
-        _build_catalogs(args)
-        return 0
+        _build_catalogs(args, diagnostics)
+        exit_code = 0
     except ReceiverError as error:
         _print_error(error.code, error.message)
-        return error.exit_code
+        exit_code = error.exit_code
     except Exception as error:
         _print_error("CATALOG_BUILD_FAILED", str(error))
-        return 5
+        exit_code = 5
+    for diagnostic in diagnostics:
+        _print_diagnostic(diagnostic)
+    return exit_code
 
 
-def _build_catalogs(args: argparse.Namespace) -> None:
+def _build_catalogs(args: argparse.Namespace, diagnostics: list[str]) -> None:
+    paths = PublicationPaths.from_outputs(args.food_output, args.exercise_output)
+    _validate_role_paths(args, paths)
+    for output in paths.outputs:
+        output.parent.mkdir(parents=True, exist_ok=True)
+    with _exclusive_writer_locks(paths.locks, diagnostics):
+        _recover_publication(paths, diagnostics)
+        food_text, exercise_text = _render_catalogs(args)
+        _publish_catalog_pair(paths, (food_text, exercise_text), diagnostics)
+
+
+def _render_catalogs(args: argparse.Namespace) -> tuple[str, str]:
     food_snapshot = _read_snapshot(args.foods, collection="foods")
     exercise_snapshot = _read_snapshot(args.exercises, collection="exercises")
     food_profile = load_mapping_profile(MAPPING_ROOT / "tfda-foods.v1.json")
@@ -136,10 +211,52 @@ def _build_catalogs(args: argparse.Namespace) -> None:
     }
     food_text = _serialize_catalog(food_payload)
     exercise_text = _serialize_catalog(exercise_payload)
-    _replace_catalog_pair(
-        (args.food_output, food_text),
-        (args.exercise_output, exercise_text),
-    )
+    return food_text, exercise_text
+
+
+def _validate_role_paths(
+    args: argparse.Namespace,
+    publication: PublicationPaths,
+) -> None:
+    roles = {
+        "food input": Path(args.foods).resolve(strict=False),
+        "exercise input": Path(args.exercises).resolve(strict=False),
+        "food localization": Path(args.food_localization).resolve(strict=False),
+        "exercise localization": Path(args.exercise_localization).resolve(strict=False),
+        "exercise taxonomy": Path(args.exercise_taxonomy).resolve(strict=False),
+        "food output": publication.food_output,
+        "exercise output": publication.exercise_output,
+        "food next": publication.food_next,
+        "exercise next": publication.exercise_next,
+        "food backup": publication.food_backup,
+        "exercise backup": publication.exercise_backup,
+        "manifest": publication.manifest,
+        "manifest next": publication.manifest_next,
+    }
+    for index, lock_path in enumerate(publication.locks, start=1):
+        roles[f"lock {index}"] = lock_path
+    allowed = {
+        frozenset(("food input", "food output")),
+        frozenset(("exercise input", "exercise output")),
+    }
+    for (left_role, left), (right_role, right) in combinations(roles.items(), 2):
+        if frozenset((left_role, right_role)) in allowed:
+            continue
+        if _paths_alias(left, right):
+            raise ReceiverError(
+                "CATALOG_PATH_CONFLICT",
+                f"Catalog path roles conflict: {left_role} and {right_role} resolve to {left}.",
+                exit_code=4,
+            )
+
+
+def _paths_alias(left: Path, right: Path) -> bool:
+    if left == right:
+        return True
+    try:
+        return left.exists() and right.exists() and os.path.samefile(left, right)
+    except OSError:
+        return False
 
 
 def _read_snapshot(path: Path, *, collection: str) -> dict[str, Any]:
@@ -364,76 +481,321 @@ def _serialize_catalog(payload: dict[str, Any]) -> str:
     ) + "\n"
 
 
-def _replace_catalog_pair(
-    food: tuple[Path, str],
-    exercise: tuple[Path, str],
-) -> None:
-    outputs = (Path(food[0]), Path(exercise[0]))
-    if outputs[0].resolve() == outputs[1].resolve():
-        raise ReceiverError(
-            "CATALOG_OUTPUT_INVALID",
-            "Food and exercise outputs must be different files.",
-            exit_code=4,
-        )
-    for output in outputs:
-        output.parent.mkdir(parents=True, exist_ok=True)
-    run_id = uuid4().hex
-    temporaries = tuple(
-        output.with_name(f".{output.name}.{run_id}.tmp")
-        for output in outputs
-    )
-    backups = tuple(
-        output.with_name(f".{output.name}.{run_id}.bak")
-        for output in outputs
-    )
-    existed = tuple(output.exists() for output in outputs)
-    replaced = [False, False]
-    unrecovered_backups: set[Path] = set()
+@contextmanager
+def _exclusive_writer_locks(
+    paths: Sequence[Path],
+    diagnostics: list[str] | None = None,
+) -> Iterator[None]:
+    diagnostics = diagnostics if diagnostics is not None else []
+    streams: list[Any] = []
     try:
-        _write_fsynced(temporaries[0], food[1])
-        _write_fsynced(temporaries[1], exercise[1])
-        for output, backup, was_present in zip(outputs, backups, existed):
-            if was_present:
-                _copy_fsynced(output, backup)
-        temporaries[0].replace(outputs[0])
-        replaced[0] = True
-        temporaries[1].replace(outputs[1])
-        replaced[1] = True
-    except Exception as replace_error:
-        restore_failures: list[tuple[Path, Path, Exception]] = []
-        for index in (1, 0):
-            if not replaced[index]:
-                continue
-            if existed[index] and backups[index].exists():
-                try:
-                    backups[index].replace(outputs[index])
-                except Exception as restore_error:
-                    unrecovered_backups.add(backups[index])
-                    restore_failures.append(
-                        (outputs[index], backups[index], restore_error)
-                    )
-            elif outputs[index].exists():
-                try:
-                    outputs[index].unlink()
-                except Exception as restore_error:
-                    restore_failures.append(
-                        (outputs[index], backups[index], restore_error)
-                    )
-        if restore_failures:
-            details = "; ".join(
-                f"output={output}, backup={backup}, error={error}"
-                for output, backup, error in restore_failures
-            )
-            raise ReceiverError(
-                "CATALOG_ROLLBACK_INCOMPLETE",
-                f"Catalog replacement failed and rollback was incomplete: {details}",
-                exit_code=5,
-            ) from replace_error
-        raise
+        for path in paths:
+            stream = None
+            try:
+                stream = path.open("a+b")
+                stream.seek(0, os.SEEK_END)
+                if stream.tell() == 0:
+                    stream.write(b"\0")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                stream.seek(0)
+                _lock_stream(stream)
+            except OSError as error:
+                if stream is not None and not stream.closed:
+                    stream.close()
+                raise ReceiverError(
+                    "CATALOG_BUILD_LOCKED",
+                    f"Another catalog build holds the writer lock: {path}.",
+                    exit_code=5,
+                ) from error
+            streams.append(stream)
+        yield
     finally:
-        for path in (*temporaries, *backups):
-            if path not in unrecovered_backups:
-                path.unlink(missing_ok=True)
+        for stream in reversed(streams):
+            try:
+                try:
+                    _unlock_stream(stream)
+                except Exception as error:
+                    diagnostics.append(
+                        f"writer lock cleanup: path={Path(stream.name)}, error={error}"
+                    )
+            finally:
+                try:
+                    stream.close()
+                except Exception as error:
+                    diagnostics.append(
+                        f"writer lock cleanup: path={Path(stream.name)}, error={error}"
+                    )
+
+
+def _lock_stream(stream: Any) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock_stream(stream: Any) -> None:
+    stream.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def _publish_catalog_pair(
+    paths: PublicationPaths,
+    values: tuple[str, str],
+    diagnostics: list[str],
+) -> None:
+    existed = tuple(output.exists() for output in paths.outputs)
+    old_hashes = tuple(
+        _file_hash(output) if present else None
+        for output, present in zip(paths.outputs, existed)
+    )
+    new_hashes = tuple(_text_hash(value) for value in values)
+    manifest = _publication_manifest(
+        paths,
+        "prepared",
+        existed,
+        old_hashes,
+        new_hashes,
+    )
+    try:
+        for next_file, value in zip(paths.next_files, values):
+            _write_fsynced(next_file, value)
+        for output, backup, present in zip(paths.outputs, paths.backups, existed):
+            if present:
+                _copy_fsynced(output, backup)
+        _write_manifest(paths, manifest)
+        _publication_checkpoint("prepared")
+
+        paths.food_next.replace(paths.food_output)
+        _fsync_parent(paths.food_output)
+        _publication_checkpoint("food_output_replaced")
+        manifest["phase"] = "food_replaced"
+        _write_manifest(paths, manifest)
+        _publication_checkpoint("food_replaced")
+
+        paths.exercise_next.replace(paths.exercise_output)
+        _fsync_parent(paths.exercise_output)
+        _publication_checkpoint("exercise_output_replaced")
+        manifest["phase"] = "both_replaced"
+        _write_manifest(paths, manifest)
+        _publication_checkpoint("both_replaced")
+
+        manifest["phase"] = "committed"
+        _write_manifest(paths, manifest)
+        _publication_checkpoint("committed")
+    except Exception:
+        _recover_publication(paths, diagnostics)
+        raise
+    _cleanup_transaction(paths, diagnostics)
+
+
+def _publication_checkpoint(_phase: str) -> None:
+    pass
+
+
+def _publication_manifest(
+    paths: PublicationPaths,
+    phase: str,
+    existed: tuple[bool, bool],
+    old_hashes: tuple[str | None, str | None],
+    new_hashes: tuple[str, str],
+) -> dict[str, Any]:
+    entries: dict[str, Any] = {}
+    for role, output, next_file, backup, present, old_hash, new_hash in zip(
+        ("food", "exercise"),
+        paths.outputs,
+        paths.next_files,
+        paths.backups,
+        existed,
+        old_hashes,
+        new_hashes,
+    ):
+        entries[role] = {
+            "output": str(output),
+            "next": str(next_file),
+            "backup": str(backup),
+            "had_output": present,
+            "old_sha256": old_hash,
+            "new_sha256": new_hash,
+        }
+    return {"schema_version": 1, "phase": phase, **entries}
+
+
+def _write_manifest(paths: PublicationPaths, manifest: dict[str, Any]) -> None:
+    value = json.dumps(manifest, ensure_ascii=True, sort_keys=True) + "\n"
+    _write_fsynced(paths.manifest_next, value)
+    paths.manifest_next.replace(paths.manifest)
+    _fsync_parent(paths.manifest)
+
+
+def _recover_publication(paths: PublicationPaths, diagnostics: list[str]) -> None:
+    if not paths.manifest.exists():
+        _cleanup_paths(
+            (*paths.next_files, *paths.backups, paths.manifest_next),
+            diagnostics,
+            context="stale publication staging",
+        )
+        return
+    manifest = _read_manifest(paths)
+    _validate_manifest(manifest, paths)
+    if manifest["phase"] == "committed" and _outputs_match_new(manifest, paths):
+        _cleanup_transaction(paths, diagnostics)
+        return
+    _restore_previous_generation(manifest, paths, diagnostics)
+
+
+def _read_manifest(paths: PublicationPaths) -> dict[str, Any]:
+    try:
+        value = json.loads(paths.manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ReceiverError(
+            "CATALOG_RECOVERY_INVALID",
+            f"Catalog recovery manifest is unreadable: {paths.manifest}.",
+            exit_code=5,
+        ) from error
+    if not isinstance(value, dict):
+        raise ReceiverError(
+            "CATALOG_RECOVERY_INVALID",
+            f"Catalog recovery manifest is invalid: {paths.manifest}.",
+            exit_code=5,
+        )
+    return value
+
+
+def _validate_manifest(manifest: dict[str, Any], paths: PublicationPaths) -> None:
+    expected_paths = {
+        "food": (paths.food_output, paths.food_next, paths.food_backup),
+        "exercise": (
+            paths.exercise_output,
+            paths.exercise_next,
+            paths.exercise_backup,
+        ),
+    }
+    valid = (
+        manifest.get("schema_version") == 1
+        and manifest.get("phase")
+        in {"prepared", "food_replaced", "both_replaced", "committed"}
+    )
+    for role, expected in expected_paths.items():
+        entry = manifest.get(role)
+        valid = valid and isinstance(entry, dict)
+        if not isinstance(entry, dict):
+            continue
+        valid = valid and tuple(
+            entry.get(field) for field in ("output", "next", "backup")
+        ) == tuple(str(path) for path in expected)
+        valid = valid and isinstance(entry.get("had_output"), bool)
+        valid = valid and _valid_sha256(entry.get("new_sha256"))
+        old_hash = entry.get("old_sha256")
+        valid = valid and (
+            _valid_sha256(old_hash)
+            if entry.get("had_output")
+            else old_hash is None
+        )
+    if not valid:
+        raise ReceiverError(
+            "CATALOG_RECOVERY_INVALID",
+            f"Catalog recovery manifest does not match the requested outputs: {paths.manifest}.",
+            exit_code=5,
+        )
+
+
+def _valid_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _outputs_match_new(manifest: dict[str, Any], paths: PublicationPaths) -> bool:
+    return all(
+        output.exists() and _file_hash(output) == manifest[role]["new_sha256"]
+        for role, output in zip(("food", "exercise"), paths.outputs)
+    )
+
+
+def _restore_previous_generation(
+    manifest: dict[str, Any],
+    paths: PublicationPaths,
+    diagnostics: list[str],
+) -> None:
+    failures: list[str] = []
+    for role, output, backup in zip(
+        ("food", "exercise"), paths.outputs, paths.backups
+    ):
+        entry = manifest[role]
+        try:
+            if entry["had_output"]:
+                if output.exists() and _file_hash(output) == entry["old_sha256"]:
+                    continue
+                if not backup.exists() or _file_hash(backup) != entry["old_sha256"]:
+                    raise OSError(
+                        "durable backup is missing or does not match the manifest"
+                    )
+                backup.replace(output)
+                _fsync_parent(output)
+            elif output.exists():
+                if _file_hash(output) != entry["new_sha256"]:
+                    raise OSError("new output does not match the recovery manifest")
+                output.unlink()
+                _fsync_parent(output)
+        except Exception as error:
+            failures.append(f"output={output}, backup={backup}, error={error}")
+    if failures:
+        _cleanup_paths(
+            (*paths.next_files, paths.manifest_next),
+            diagnostics,
+            context="incomplete rollback staging",
+        )
+        raise ReceiverError(
+            "CATALOG_ROLLBACK_INCOMPLETE",
+            "Catalog rollback was incomplete; recovery data was retained: "
+            + "; ".join(failures),
+            exit_code=5,
+        )
+    _cleanup_transaction(paths, diagnostics)
+
+
+def _cleanup_transaction(paths: PublicationPaths, diagnostics: list[str]) -> None:
+    before = len(diagnostics)
+    _cleanup_paths(
+        (*paths.next_files, *paths.backups, paths.manifest_next),
+        diagnostics,
+        context="publication cleanup",
+    )
+    if len(diagnostics) == before:
+        _cleanup_paths(
+            (paths.manifest,),
+            diagnostics,
+            context="publication cleanup",
+        )
+
+
+def _cleanup_paths(
+    paths: Sequence[Path],
+    diagnostics: list[str],
+    *,
+    context: str,
+) -> None:
+    for path in dict.fromkeys(paths):
+        try:
+            path.unlink(missing_ok=True)
+            _fsync_parent(path)
+        except Exception as error:
+            diagnostics.append(f"{context}: path={path}, error={error}")
 
 
 def _write_fsynced(path: Path, value: str) -> None:
@@ -441,13 +803,36 @@ def _write_fsynced(path: Path, value: str) -> None:
         stream.write(value)
         stream.flush()
         os.fsync(stream.fileno())
+    _fsync_parent(path)
 
 
 def _copy_fsynced(source: Path, destination: Path) -> None:
-    with source.open("rb") as source_stream, destination.open("xb") as destination_stream:
+    with (
+        source.open("rb") as source_stream,
+        destination.open("xb") as destination_stream,
+    ):
         shutil.copyfileobj(source_stream, destination_stream)
         destination_stream.flush()
         os.fsync(destination_stream.fileno())
+    _fsync_parent(destination)
+
+
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _text_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _fsync_parent(path: Path) -> None:
+    if os.name == "nt":
+        return
+    descriptor = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _source_metadata(path: Path, *, kind: str) -> SourceMetadata:
@@ -486,6 +871,23 @@ def _print_error(code: str, message: str) -> None:
     print(
         json.dumps(
             {"success": False, "error": {"code": code, "message": message}},
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        file=sys.stderr,
+    )
+
+
+def _print_diagnostic(message: str) -> None:
+    print(
+        json.dumps(
+            {
+                "success": True,
+                "diagnostic": {
+                    "code": "CATALOG_CLEANUP_FAILED",
+                    "message": message,
+                },
+            },
             ensure_ascii=False,
             sort_keys=True,
         ),

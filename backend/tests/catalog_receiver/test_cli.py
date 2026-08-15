@@ -151,6 +151,31 @@ def test_validate_rejects_ambiguous_matching_localizations(
     assert "LOCALIZATION_INVALID" in capsys.readouterr().err
 
 
+def test_food_validation_rejects_any_supplied_taxonomy_path(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    localization = _food_localization(tmp_path)
+
+    for taxonomy in (tmp_path / "missing-taxonomy.json", Path("https://[")):
+        assert main(
+            [
+                "validate",
+                str(ROOT / "fixtures/tfda-foods.csv"),
+                "--mapping",
+                str(FOOD_PROFILE),
+                "--localization",
+                str(localization),
+                "--taxonomy",
+                str(taxonomy),
+            ]
+        ) == 4
+
+    errors = capsys.readouterr().err
+    assert errors.count("LOCALIZATION_INVALID") == 2
+    assert errors.count("food localization does not accept an exercise taxonomy") == 2
+
+
 def test_validate_without_localization_returns_data_error(capsys) -> None:
     exit_code = main(
         [

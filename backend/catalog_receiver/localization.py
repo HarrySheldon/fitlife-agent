@@ -400,6 +400,13 @@ def resolve_localization_bundle(
     localization_paths: Sequence[str | Path],
     taxonomy_path: str | Path | None = None,
 ) -> LocalizationBundle:
+    if catalog_kind == "food" and taxonomy_path is not None:
+        raise _invalid_asset_error(
+            "Localization",
+            None,
+            "food localization does not accept an exercise taxonomy",
+            source_path=str(taxonomy_path),
+        )
     candidates: list[tuple[Path, Any]] = []
     observed: list[dict[str, str]] = []
     seen_paths: set[Path] = set()

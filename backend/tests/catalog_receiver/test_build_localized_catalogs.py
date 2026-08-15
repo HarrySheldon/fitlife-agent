@@ -1,6 +1,10 @@
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from scripts import build_localized_catalogs as build_module
 from scripts.build_localized_catalogs import main
@@ -156,6 +160,16 @@ def _build_args(tmp_path: Path) -> tuple[list[str], Path, Path]:
     return args, food_catalog, exercise_catalog
 
 
+def _argument_path(args: list[str], option: str) -> Path:
+    return Path(args[args.index(option) + 1])
+
+
+def _with_argument(args: list[str], option: str, value: Path) -> list[str]:
+    updated = list(args)
+    updated[updated.index(option) + 1] = str(value)
+    return updated
+
+
 def test_build_is_sorted_and_byte_idempotent(tmp_path: Path) -> None:
     args, food_catalog, exercise_catalog = _build_args(tmp_path)
 
@@ -177,6 +191,58 @@ def test_build_is_sorted_and_byte_idempotent(tmp_path: Path) -> None:
     assert main(args) == 0
     assert food_catalog.read_bytes() == first_food
     assert exercise_catalog.read_bytes() == first_exercise
+
+
+@pytest.mark.parametrize(
+    ("output_option", "conflicting_role"),
+    [
+        ("--food-output", "--exercises"),
+        ("--exercise-output", "--foods"),
+        ("--exercise-output", "--food-output"),
+        ("--food-output", "--food-localization"),
+        ("--exercise-output", "--exercise-localization"),
+        ("--exercise-output", "--exercise-taxonomy"),
+        ("--exercise-output", "lock"),
+        ("--exercise-output", "manifest"),
+        ("--exercise-output", "food-next"),
+        ("--exercise-output", "food-backup"),
+    ],
+)
+def test_build_rejects_conflicting_resolved_role_paths(
+    tmp_path: Path,
+    capsys,
+    output_option: str,
+    conflicting_role: str,
+) -> None:
+    args, food_catalog, _exercise_catalog = _build_args(tmp_path)
+    controls = {
+        "lock": tmp_path / ".catalog-localization.publish.lock",
+        "manifest": tmp_path / ".catalog-localization.publish.json",
+        "food-next": food_catalog.with_name(f".{food_catalog.name}.catalog.next"),
+        "food-backup": food_catalog.with_name(
+            f".{food_catalog.name}.catalog.backup"
+        ),
+    }
+    conflict = (
+        _argument_path(args, conflicting_role)
+        if conflicting_role.startswith("--")
+        else controls[conflicting_role]
+    )
+
+    assert main(_with_argument(args, output_option, conflict)) == 4
+    assert "CATALOG_PATH_CONFLICT" in capsys.readouterr().err
+
+
+def test_build_rejects_existing_hardlink_role_alias(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    args, food_catalog, _exercise_catalog = _build_args(tmp_path)
+    aliased_output = tmp_path / "food-input-hardlink.json"
+    os.link(food_catalog, aliased_output)
+
+    assert main(_with_argument(args, "--exercise-output", aliased_output)) == 4
+    assert "CATALOG_PATH_CONFLICT" in capsys.readouterr().err
 
 
 def test_missing_upstream_text_preserves_both_outputs(
@@ -213,8 +279,7 @@ def test_second_replace_failure_rolls_back_both_outputs(
         nonlocal failed
         if (
             not failed
-            and path.name.startswith(f".{exercise_catalog.name}.")
-            and path.suffix == ".tmp"
+            and path.name == f".{exercise_catalog.name}.catalog.next"
         ):
             failed = True
             raise OSError("forced second replacement failure")
@@ -226,8 +291,93 @@ def test_second_replace_failure_rolls_back_both_outputs(
     assert failed is True
     assert food_catalog.read_bytes() == original_food
     assert exercise_catalog.read_bytes() == original_exercise
-    assert list(tmp_path.glob(".*.tmp")) == []
-    assert list(tmp_path.glob(".*.bak")) == []
+    assert list(tmp_path.glob("*.catalog.next")) == []
+    assert list(tmp_path.glob("*.catalog.backup")) == []
+    assert not (tmp_path / ".catalog-localization.publish.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("checkpoint", "committed"),
+    [
+        ("prepared", False),
+        ("food_output_replaced", False),
+        ("food_replaced", False),
+        ("exercise_output_replaced", False),
+        ("both_replaced", False),
+        ("committed", True),
+    ],
+)
+def test_next_build_recovers_each_interrupted_publication_phase(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    checkpoint: str,
+    committed: bool,
+) -> None:
+    args, food_catalog, exercise_catalog = _build_args(tmp_path)
+    original_food = food_catalog.read_bytes()
+    original_exercise = exercise_catalog.read_bytes()
+
+    class SimulatedInterruption(BaseException):
+        pass
+
+    def interrupt(current: str) -> None:
+        if current == checkpoint:
+            raise SimulatedInterruption
+
+    monkeypatch.setattr(build_module, "_publication_checkpoint", interrupt)
+
+    with pytest.raises(SimulatedInterruption):
+        main(args)
+
+    manifest = tmp_path / ".catalog-localization.publish.json"
+    assert manifest.exists()
+    interrupted_food = food_catalog.read_bytes()
+    interrupted_exercise = exercise_catalog.read_bytes()
+
+    monkeypatch.setattr(build_module, "_publication_checkpoint", lambda _phase: None)
+    _argument_path(args, "--food-localization").unlink()
+
+    assert main(args) == 4
+    assert "LOCALIZATION_INVALID" in capsys.readouterr().err
+    if committed:
+        assert food_catalog.read_bytes() == interrupted_food
+        assert exercise_catalog.read_bytes() == interrupted_exercise
+        assert interrupted_food != original_food
+        assert interrupted_exercise != original_exercise
+    else:
+        assert food_catalog.read_bytes() == original_food
+        assert exercise_catalog.read_bytes() == original_exercise
+    assert not manifest.exists()
+    assert list(tmp_path.glob("*.catalog.next")) == []
+    assert list(tmp_path.glob("*.catalog.backup")) == []
+
+
+def test_build_rejects_concurrent_writer_process(tmp_path: Path) -> None:
+    args, food_catalog, exercise_catalog = _build_args(tmp_path)
+    original_food = food_catalog.read_bytes()
+    original_exercise = exercise_catalog.read_bytes()
+    lock = tmp_path / ".catalog-localization.publish.lock"
+    command = [
+        sys.executable,
+        str(Path(build_module.__file__).resolve()),
+        *args,
+    ]
+
+    with build_module._exclusive_writer_locks((lock,)):
+        completed = subprocess.run(
+            command,
+            cwd=Path(build_module.__file__).parents[1],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    assert completed.returncode == 5
+    assert "CATALOG_BUILD_LOCKED" in completed.stderr
+    assert food_catalog.read_bytes() == original_food
+    assert exercise_catalog.read_bytes() == original_exercise
+    assert subprocess.run(command, text=True, capture_output=True, check=False).returncode == 0
 
 
 def test_restore_failure_retains_unrecovered_backup_with_diagnostic(
@@ -242,21 +392,21 @@ def test_restore_failure_retains_unrecovered_backup_with_diagnostic(
     failed_second_replace = False
     failed_restore = False
     retained_backup: Path | None = None
+    cleanup_attempts: list[Path] = []
+    real_unlink = Path.unlink
 
     def fail_replace_and_restore(path: Path, target: Path) -> Path:
         nonlocal failed_second_replace, failed_restore, retained_backup
         if (
             not failed_second_replace
-            and path.name.startswith(f".{exercise_catalog.name}.")
-            and path.suffix == ".tmp"
+            and path.name == f".{exercise_catalog.name}.catalog.next"
         ):
             failed_second_replace = True
             raise OSError("forced second replacement failure")
         if (
             failed_second_replace
             and not failed_restore
-            and path.name.startswith(f".{food_catalog.name}.")
-            and path.suffix == ".bak"
+            and path.name == f".{food_catalog.name}.catalog.backup"
         ):
             failed_restore = True
             retained_backup = path
@@ -265,25 +415,113 @@ def test_restore_failure_retains_unrecovered_backup_with_diagnostic(
 
     monkeypatch.setattr(Path, "replace", fail_replace_and_restore)
 
+    def fail_one_cleanup(path: Path, *args, **kwargs) -> None:
+        cleanup_attempts.append(path)
+        if path.name == f".{exercise_catalog.name}.catalog.next":
+            raise OSError("forced cleanup failure")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_one_cleanup)
+
     assert main(args) == 5
 
-    error = json.loads(capsys.readouterr().err)["error"]
+    messages = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
+    error = messages[0]["error"]
     assert error["code"] == "CATALOG_ROLLBACK_INCOMPLETE"
+    assert messages[1]["diagnostic"]["code"] == "CATALOG_CLEANUP_FAILED"
     assert failed_second_replace is True
     assert failed_restore is True
     assert retained_backup is not None
     assert str(retained_backup) in error["message"]
     assert retained_backup.read_bytes() == original_food
     assert exercise_catalog.read_bytes() == original_exercise
-    assert list(tmp_path.glob(".*.tmp")) == []
-    assert list(tmp_path.glob(".*.bak")) == [retained_backup]
+    assert list(tmp_path.glob("*.catalog.next")) == [
+        exercise_catalog.with_name(f".{exercise_catalog.name}.catalog.next")
+    ]
+    assert retained_backup in list(tmp_path.glob("*.catalog.backup"))
+    assert (tmp_path / ".catalog-localization.publish.json").exists()
+    assert (
+        tmp_path / ".catalog-localization.publish.json.next"
+    ) in cleanup_attempts
+
+
+def test_successful_commit_reports_cleanup_failure_and_continues(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    args, food_catalog, exercise_catalog = _build_args(tmp_path)
+    failed_path = food_catalog.with_name(f".{food_catalog.name}.catalog.backup")
+    later_path = exercise_catalog.with_name(
+        f".{exercise_catalog.name}.catalog.backup"
+    )
+    real_unlink = Path.unlink
+    attempts: list[Path] = []
+
+    def fail_one_cleanup(path: Path, *args, **kwargs) -> None:
+        attempts.append(path)
+        if path == failed_path and path.exists():
+            raise OSError("forced cleanup failure")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_one_cleanup)
+
+    assert main(args) == 0
+
+    diagnostic = json.loads(capsys.readouterr().err)["diagnostic"]
+    assert diagnostic["code"] == "CATALOG_CLEANUP_FAILED"
+    assert str(failed_path) in diagnostic["message"]
+    assert later_path in attempts
+    assert failed_path.exists()
+    assert not later_path.exists()
+    assert (tmp_path / ".catalog-localization.publish.json").exists()
+
+
+def test_cleanup_failure_does_not_mask_publication_error(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    args, food_catalog, exercise_catalog = _build_args(tmp_path)
+    original_food = food_catalog.read_bytes()
+    original_exercise = exercise_catalog.read_bytes()
+    exercise_next = exercise_catalog.with_name(
+        f".{exercise_catalog.name}.catalog.next"
+    )
+    manifest_next = tmp_path / ".catalog-localization.publish.json.next"
+    real_replace = Path.replace
+    real_unlink = Path.unlink
+    cleanup_attempts: list[Path] = []
+
+    def fail_publication(path: Path, target: Path) -> Path:
+        if path == exercise_next:
+            raise OSError("forced publication failure")
+        return real_replace(path, target)
+
+    def fail_cleanup(path: Path, *args, **kwargs) -> None:
+        cleanup_attempts.append(path)
+        if path == exercise_next and path.exists():
+            raise OSError("forced cleanup failure")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "replace", fail_publication)
+    monkeypatch.setattr(Path, "unlink", fail_cleanup)
+
+    assert main(args) == 5
+
+    messages = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
+    assert messages[0]["error"]["code"] == "CATALOG_BUILD_FAILED"
+    assert messages[1]["diagnostic"]["code"] == "CATALOG_CLEANUP_FAILED"
+    assert manifest_next in cleanup_attempts
+    assert food_catalog.read_bytes() == original_food
+    assert exercise_catalog.read_bytes() == original_exercise
 
 
 def test_atomic_outputs_use_sibling_temps_fsynced_before_replacement(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    args, _food_catalog, _exercise_catalog = _build_args(tmp_path)
+    args, food_catalog, exercise_catalog = _build_args(tmp_path)
     real_fsync = os.fsync
     real_replace = Path.replace
     events: list[tuple[str, object]] = []
@@ -293,11 +531,18 @@ def test_atomic_outputs_use_sibling_temps_fsynced_before_replacement(
         real_fsync(file_descriptor)
 
     def record_replace(path: Path, target: Path) -> Path:
-        if path.suffix == ".tmp":
+        if path in {
+            food_catalog.with_name(f".{food_catalog.name}.catalog.next"),
+            exercise_catalog.with_name(f".{exercise_catalog.name}.catalog.next"),
+        }:
             events.append(("replace", (path, target)))
         return real_replace(path, target)
 
+    def record_parent_fsync(path: Path) -> None:
+        events.append(("parent_fsync", path))
+
     monkeypatch.setattr(build_module.os, "fsync", record_fsync)
+    monkeypatch.setattr(build_module, "_fsync_parent", record_parent_fsync)
     monkeypatch.setattr(Path, "replace", record_replace)
 
     assert main(args) == 0
@@ -313,8 +558,21 @@ def test_atomic_outputs_use_sibling_temps_fsynced_before_replacement(
     )
     assert sum(
         event == "fsync" for event, _detail in events[: replace_indexes[0]]
-    ) == 4
+    ) >= 5
+    staged_paths = {
+        food_catalog.with_name(f".{food_catalog.name}.catalog.next"),
+        exercise_catalog.with_name(f".{exercise_catalog.name}.catalog.next"),
+        food_catalog.with_name(f".{food_catalog.name}.catalog.backup"),
+        exercise_catalog.with_name(f".{exercise_catalog.name}.catalog.backup"),
+        tmp_path / ".catalog-localization.publish.json.next",
+        tmp_path / ".catalog-localization.publish.json",
+    }
+    assert staged_paths <= {
+        detail
+        for event, detail in events[: replace_indexes[0]]
+        if event == "parent_fsync"
+    }
     for index in replace_indexes:
         temporary, output = events[index][1]
         assert temporary.parent == output.parent
-        assert temporary.name.startswith(f".{output.name}.")
+        assert temporary.name == f".{output.name}.catalog.next"
