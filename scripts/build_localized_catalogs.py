@@ -38,6 +38,8 @@ from backend.catalog_receiver.validators import validate_records
 
 
 MAPPING_ROOT = PROJECT_ROOT / "backend" / "data" / "catalog" / "mappings"
+FOOD_MAPPING_PROFILE = MAPPING_ROOT / "tfda-foods.v1.json"
+EXERCISE_MAPPING_PROFILE = MAPPING_ROOT / "free-exercise-db.v1.json"
 
 
 @dataclass(frozen=True)
@@ -100,7 +102,13 @@ class PublicationPaths:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Build both bundled Mainland-localized catalogs deterministically."
+        description="Build both bundled Mainland-localized catalogs deterministically.",
+        epilog=(
+            "Windows recovery covers concurrent writers and process termination. "
+            "File contents are fsynced, and parent directories are synced where the "
+            "standard library supports it. Python's standard library does not guarantee "
+            "directory-metadata ordering across Windows power loss or OS crashes."
+        ),
     )
     parser.add_argument("--foods", type=Path, required=True)
     parser.add_argument("--food-localization", type=Path, required=True)
@@ -125,7 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_error("CATALOG_BUILD_FAILED", str(error))
         exit_code = 5
     for diagnostic in diagnostics:
-        _print_diagnostic(diagnostic)
+        _print_diagnostic(diagnostic, success=exit_code == 0)
     return exit_code
 
 
@@ -143,8 +151,8 @@ def _build_catalogs(args: argparse.Namespace, diagnostics: list[str]) -> None:
 def _render_catalogs(args: argparse.Namespace) -> tuple[str, str]:
     food_snapshot = _read_snapshot(args.foods, collection="foods")
     exercise_snapshot = _read_snapshot(args.exercises, collection="exercises")
-    food_profile = load_mapping_profile(MAPPING_ROOT / "tfda-foods.v1.json")
-    exercise_profile = load_mapping_profile(MAPPING_ROOT / "free-exercise-db.v1.json")
+    food_profile = load_mapping_profile(FOOD_MAPPING_PROFILE)
+    exercise_profile = load_mapping_profile(EXERCISE_MAPPING_PROFILE)
     food_bundle = load_localization_bundle(
         catalog_kind="food",
         localization_path=args.food_localization,
@@ -224,6 +232,8 @@ def _validate_role_paths(
         "food localization": Path(args.food_localization).resolve(strict=False),
         "exercise localization": Path(args.exercise_localization).resolve(strict=False),
         "exercise taxonomy": Path(args.exercise_taxonomy).resolve(strict=False),
+        "food mapping profile": FOOD_MAPPING_PROFILE.resolve(strict=False),
+        "exercise mapping profile": EXERCISE_MAPPING_PROFILE.resolve(strict=False),
         "food output": publication.food_output,
         "exercise output": publication.exercise_output,
         "food next": publication.food_next,
@@ -650,10 +660,12 @@ def _recover_publication(paths: PublicationPaths, diagnostics: list[str]) -> Non
         return
     manifest = _read_manifest(paths)
     _validate_manifest(manifest, paths)
-    if manifest["phase"] == "committed" and _outputs_match_new(manifest, paths):
+    output_hashes = _validate_recovery_output_hashes(manifest, paths)
+    if manifest["phase"] == "committed":
         _cleanup_transaction(paths, diagnostics)
         return
-    _restore_previous_generation(manifest, paths, diagnostics)
+    _validate_recovery_backups(manifest, paths, output_hashes)
+    _restore_previous_generation(manifest, paths, output_hashes, diagnostics)
 
 
 def _read_manifest(paths: PublicationPaths) -> dict[str, Any]:
@@ -720,16 +732,108 @@ def _valid_sha256(value: Any) -> bool:
     )
 
 
-def _outputs_match_new(manifest: dict[str, Any], paths: PublicationPaths) -> bool:
-    return all(
-        output.exists() and _file_hash(output) == manifest[role]["new_sha256"]
-        for role, output in zip(("food", "exercise"), paths.outputs)
+def _validate_recovery_output_hashes(
+    manifest: dict[str, Any],
+    paths: PublicationPaths,
+) -> dict[str, str | None]:
+    phase = manifest["phase"]
+    observed: dict[str, str | None] = {}
+    conflicts: list[str] = []
+    for role, output in zip(("food", "exercise"), paths.outputs):
+        entry = manifest[role]
+        current_hash = _recovery_file_hash(output, paths, phase)
+        observed[role] = current_hash
+        allowed_hashes = _allowed_recovery_hashes(
+            phase,
+            role,
+            entry["old_sha256"],
+            entry["new_sha256"],
+        )
+        if current_hash not in allowed_hashes:
+            conflicts.append(
+                f"role={role}, output={output}, observed={current_hash or 'missing'}"
+            )
+    if conflicts:
+        raise _recovery_conflict(paths, phase, conflicts)
+    return observed
+
+
+def _allowed_recovery_hashes(
+    phase: str,
+    role: str,
+    old_hash: str | None,
+    new_hash: str,
+) -> tuple[str | None, ...]:
+    if phase == "committed":
+        return (new_hash,)
+    if phase == "prepared" and role == "exercise":
+        return (old_hash,)
+    # Replacement may precede its phase write, and an interrupted rollback may
+    # already have restored either output.
+    return tuple(dict.fromkeys((old_hash, new_hash)))
+
+
+def _validate_recovery_backups(
+    manifest: dict[str, Any],
+    paths: PublicationPaths,
+    output_hashes: dict[str, str | None],
+) -> None:
+    conflicts: list[str] = []
+    for role, backup in zip(("food", "exercise"), paths.backups):
+        entry = manifest[role]
+        if not entry["had_output"] or output_hashes[role] == entry["old_sha256"]:
+            continue
+        backup_hash = _recovery_file_hash(backup, paths, manifest["phase"])
+        if backup_hash != entry["old_sha256"]:
+            conflicts.append(
+                f"role={role}, backup={backup}, observed={backup_hash or 'missing'}"
+            )
+    if conflicts:
+        raise _recovery_conflict(paths, manifest["phase"], conflicts)
+
+
+def _recovery_file_hash(
+    path: Path,
+    paths: PublicationPaths,
+    phase: str,
+) -> str | None:
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise _recovery_conflict(
+            paths,
+            phase,
+            [f"path={path}, observed=unreadable"],
+        ) from error
+    try:
+        return _file_hash(path)
+    except OSError as error:
+        raise _recovery_conflict(
+            paths,
+            phase,
+            [f"path={path}, observed=unreadable"],
+        ) from error
+
+
+def _recovery_conflict(
+    paths: PublicationPaths,
+    phase: str,
+    conflicts: Sequence[str],
+) -> ReceiverError:
+    return ReceiverError(
+        "CATALOG_RECOVERY_CONFLICT",
+        f"Catalog recovery state conflicts with phase {phase} in {paths.manifest}: "
+        + "; ".join(conflicts),
+        exit_code=5,
     )
 
 
 def _restore_previous_generation(
     manifest: dict[str, Any],
     paths: PublicationPaths,
+    output_hashes: dict[str, str | None],
     diagnostics: list[str],
 ) -> None:
     failures: list[str] = []
@@ -739,17 +843,11 @@ def _restore_previous_generation(
         entry = manifest[role]
         try:
             if entry["had_output"]:
-                if output.exists() and _file_hash(output) == entry["old_sha256"]:
+                if output_hashes[role] == entry["old_sha256"]:
                     continue
-                if not backup.exists() or _file_hash(backup) != entry["old_sha256"]:
-                    raise OSError(
-                        "durable backup is missing or does not match the manifest"
-                    )
                 backup.replace(output)
                 _fsync_parent(output)
-            elif output.exists():
-                if _file_hash(output) != entry["new_sha256"]:
-                    raise OSError("new output does not match the recovery manifest")
+            elif output_hashes[role] == entry["new_sha256"]:
                 output.unlink()
                 _fsync_parent(output)
         except Exception as error:
@@ -878,11 +976,11 @@ def _print_error(code: str, message: str) -> None:
     )
 
 
-def _print_diagnostic(message: str) -> None:
+def _print_diagnostic(message: str, *, success: bool) -> None:
     print(
         json.dumps(
             {
-                "success": True,
+                "success": success,
                 "diagnostic": {
                     "code": "CATALOG_CLEANUP_FAILED",
                     "message": message,

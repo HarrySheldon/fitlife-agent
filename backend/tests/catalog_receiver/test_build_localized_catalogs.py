@@ -10,6 +10,9 @@ from scripts import build_localized_catalogs as build_module
 from scripts.build_localized_catalogs import main
 
 
+MAPPING_ROOT = Path(build_module.__file__).parents[1] / "backend/data/catalog/mappings"
+
+
 def _write_json(path: Path, value: object) -> Path:
     path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
     return path
@@ -245,6 +248,26 @@ def test_build_rejects_existing_hardlink_role_alias(
     assert "CATALOG_PATH_CONFLICT" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "mapping_name",
+    ["tfda-foods.v1.json", "free-exercise-db.v1.json"],
+)
+def test_build_protects_fixed_mapping_profile_hardlink_aliases(
+    tmp_path: Path,
+    capsys,
+    mapping_name: str,
+) -> None:
+    args, _food_catalog, _exercise_catalog = _build_args(tmp_path)
+    mapping_path = MAPPING_ROOT / mapping_name
+    original_mapping = mapping_path.read_bytes()
+    aliased_output = tmp_path / f"{mapping_name}.hardlink"
+    os.link(mapping_path, aliased_output)
+
+    assert main(_with_argument(args, "--exercise-output", aliased_output)) == 4
+    assert "CATALOG_PATH_CONFLICT" in capsys.readouterr().err
+    assert mapping_path.read_bytes() == original_mapping
+
+
 def test_missing_upstream_text_preserves_both_outputs(
     tmp_path: Path,
     capsys,
@@ -353,6 +376,54 @@ def test_next_build_recovers_each_interrupted_publication_phase(
     assert list(tmp_path.glob("*.catalog.backup")) == []
 
 
+@pytest.mark.parametrize(
+    ("checkpoint", "use_known_old_hash"),
+    [("food_replaced", False), ("committed", True)],
+)
+def test_recovery_rejects_divergent_output_and_retains_recovery_state(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    checkpoint: str,
+    use_known_old_hash: bool,
+) -> None:
+    args, food_catalog, _exercise_catalog = _build_args(tmp_path)
+    original_food = food_catalog.read_bytes()
+
+    class SimulatedInterruption(BaseException):
+        pass
+
+    def interrupt(current: str) -> None:
+        if current == checkpoint:
+            raise SimulatedInterruption
+
+    monkeypatch.setattr(build_module, "_publication_checkpoint", interrupt)
+    with pytest.raises(SimulatedInterruption):
+        main(args)
+
+    manifest = tmp_path / ".catalog-localization.publish.json"
+    retained_manifest = manifest.read_bytes()
+    retained_backups = {
+        path: path.read_bytes() for path in tmp_path.glob("*.catalog.backup")
+    }
+    divergent = (
+        original_food
+        if use_known_old_hash
+        else b"divergent external catalog bytes\n"
+    )
+    food_catalog.write_bytes(divergent)
+    monkeypatch.setattr(build_module, "_publication_checkpoint", lambda _phase: None)
+
+    assert main(args) == 5
+
+    error = json.loads(capsys.readouterr().err)["error"]
+    assert error["code"] == "CATALOG_RECOVERY_CONFLICT"
+    assert food_catalog.read_bytes() == divergent
+    assert manifest.read_bytes() == retained_manifest
+    assert retained_backups
+    assert all(path.read_bytes() == value for path, value in retained_backups.items())
+
+
 def test_build_rejects_concurrent_writer_process(tmp_path: Path) -> None:
     args, food_catalog, exercise_catalog = _build_args(tmp_path)
     original_food = food_catalog.read_bytes()
@@ -428,6 +499,7 @@ def test_restore_failure_retains_unrecovered_backup_with_diagnostic(
     messages = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
     error = messages[0]["error"]
     assert error["code"] == "CATALOG_ROLLBACK_INCOMPLETE"
+    assert messages[1]["success"] is False
     assert messages[1]["diagnostic"]["code"] == "CATALOG_CLEANUP_FAILED"
     assert failed_second_replace is True
     assert failed_restore is True
@@ -468,9 +540,10 @@ def test_successful_commit_reports_cleanup_failure_and_continues(
 
     assert main(args) == 0
 
-    diagnostic = json.loads(capsys.readouterr().err)["diagnostic"]
-    assert diagnostic["code"] == "CATALOG_CLEANUP_FAILED"
-    assert str(failed_path) in diagnostic["message"]
+    message = json.loads(capsys.readouterr().err)
+    assert message["success"] is True
+    assert message["diagnostic"]["code"] == "CATALOG_CLEANUP_FAILED"
+    assert str(failed_path) in message["diagnostic"]["message"]
     assert later_path in attempts
     assert failed_path.exists()
     assert not later_path.exists()
@@ -511,10 +584,24 @@ def test_cleanup_failure_does_not_mask_publication_error(
 
     messages = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
     assert messages[0]["error"]["code"] == "CATALOG_BUILD_FAILED"
+    assert messages[1]["success"] is False
     assert messages[1]["diagnostic"]["code"] == "CATALOG_CLEANUP_FAILED"
     assert manifest_next in cleanup_attempts
     assert food_catalog.read_bytes() == original_food
     assert exercise_catalog.read_bytes() == original_exercise
+
+
+def test_help_documents_windows_recovery_guarantee_boundary(capsys) -> None:
+    with pytest.raises(SystemExit) as raised:
+        main(["--help"])
+
+    assert raised.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "process termination" in help_text
+    assert "concurrent writers" in help_text
+    assert "power loss or OS crashes" in help_text
+    assert "does not guarantee" in help_text
+    assert "metadata ordering" in help_text
 
 
 def test_atomic_outputs_use_sibling_temps_fsynced_before_replacement(
