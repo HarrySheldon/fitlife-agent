@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+from backend.application.ports.meal_repository import MealDraftInput, MealDraftItemInput
 from backend.infrastructure.catalog.import_ledger import CatalogImportError
 from backend.infrastructure.catalog.seed_foods import seed_bundled_foods
 from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
     SQLiteFoodCatalogRepository,
 )
+from backend.infrastructure.repositories.sqlite_meal_repository import SQLiteMealRepository
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.sqlite.migrations import run_migrations
 from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
@@ -45,7 +48,7 @@ def test_seed_snapshot_is_complete_and_auditable() -> None:
         assert record["source_name"] == payload["source_name"]
         assert record["license"] == "Taiwan Government Open Data License 1.0"
         assert record["attribution"] == "Taiwan Food and Drug Administration"
-        assert record["provenance"]["profile"] == "tfda-foods@1.0.0"
+        assert record["provenance"]["profile"] == "tfda-foods@2.0.0"
         assert all(isinstance(alias, str) for alias in record["aliases"])
         assert (record["calories"], record["carbs"], record["protein"], record["fat"]) == (
             calories,
@@ -72,6 +75,102 @@ def test_seed_is_idempotent_and_multilingual_searchable(tmp_path: Path) -> None:
         assert match.source_name == "Taiwan FDA Food Nutrient Database"
         assert match.dataset_version == "2025-12-22"
         assert len(match.content_hash or "") == 64
+
+
+def test_localized_reimport_preserves_ids_and_historical_meal_names(
+    tmp_path: Path,
+) -> None:
+    localized = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    legacy = json.loads(json.dumps(localized, ensure_ascii=False))
+    legacy["dataset_version"] = "2025-12-21"
+    for record in legacy["foods"]:
+        record["dataset_version"] = "2025-12-21"
+    legacy_rice = next(
+        record
+        for record in legacy["foods"]
+        if record["source_record_id"] == "A0550601"
+    )
+    legacy_rice["name"] = "白饭"
+    legacy_rice["aliases"] = ["白飯", "Cooked rice"]
+    legacy_rice["provenance"] = {
+        "description": legacy_rice["provenance"]["description"],
+        "food_category": legacy_rice["provenance"]["food_category"],
+        "name_conversion": "opencc_t2s",
+        "nutrient_basis": legacy_rice["provenance"]["nutrient_basis"],
+        "profile": "tfda-foods@1.0.0",
+    }
+    legacy_path = tmp_path / "foods.legacy.json"
+    legacy_path.write_text(
+        json.dumps(legacy, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    database = _database(tmp_path)
+    seed_bundled_foods(database, legacy_path)
+    catalog = SQLiteFoodCatalogRepository(database)
+    old_rice = next(
+        item
+        for item in catalog.search("user-a", "白饭", limit=20)
+        if item.source_record_id == "A0550601"
+    )
+    old_ids = _public_catalog_ids(database, "food_catalog")
+    meals = SQLiteMealRepository(
+        database,
+        clock=lambda: datetime(2026, 8, 15, tzinfo=timezone.utc),
+    )
+    draft = meals.create_draft(
+        "user-a",
+        MealDraftInput(
+            log_date="2026-08-15",
+            name="午餐",
+            meal_type="lunch",
+            entry_method="form",
+            items=(
+                MealDraftItemInput(
+                    catalog_food_id=old_rice.id,
+                    amount=100,
+                    unit="g",
+                ),
+            ),
+        ),
+        expires_at="2026-09-15T00:00:00Z",
+    )
+    meals.confirm(
+        "user-a",
+        draft.id,
+        expected_version=draft.version,
+        idempotency_key="legacy-rice",
+        request_fingerprint="legacy-rice",
+    )
+
+    result = seed_bundled_foods(database, SEED_PATH)
+
+    assert result.updated_count == EXPECTED_COUNT
+    assert _public_catalog_ids(database, "food_catalog") == old_ids
+    localized_rice = next(
+        item
+        for item in catalog.search("user-a", "米饭", limit=20)
+        if item.source_record_id == "A0550601"
+    )
+    assert localized_rice.id == old_rice.id
+    assert localized_rice.name == "米饭"
+    assert {"白飯", "白饭", "Cooked rice"} <= set(localized_rice.aliases)
+    assert localized_rice.provenance["localization"]["locale"] == "zh-CN"
+    assert localized_rice.provenance["localization"]["method"] == "glossary"
+    assert next(
+        item
+        for item in catalog.search("user-a", "Cooked rice", limit=20)
+        if item.source_record_id == "A0550601"
+    ).id == old_rice.id
+    assert meals.list_meals("user-a", "2026-08-15")[0].items[0].food_name == "白饭"
+
+
+def _public_catalog_ids(database: SQLiteDatabase, table: str) -> dict[str, str]:
+    with database.connection() as connection:
+        rows = connection.execute(
+            f"SELECT source_record_id, id FROM {table} WHERE owner_user_id IS NULL"
+        ).fetchall()
+    return {row["source_record_id"]: row["id"] for row in rows}
 
 
 def test_new_version_upserts_and_rebuilds_search_without_touching_unrelated_rows(tmp_path: Path) -> None:

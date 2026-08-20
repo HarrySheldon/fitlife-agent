@@ -22,6 +22,7 @@ EXERCISE_TAXONOMY = (
     CATALOG_ROOT / "localizations" / "exercise-taxonomy.zh-CN.v1.json"
 )
 EXERCISE_MAPPING = CATALOG_ROOT / "mappings" / "free-exercise-db.v1.json"
+FOOD_SNAPSHOT = CATALOG_ROOT / "foods.zh-CN.v1.json"
 EXERCISE_SNAPSHOT = CATALOG_ROOT / "exercises.zh-CN.v1.json"
 
 
@@ -33,18 +34,19 @@ def _reconstruct_upstream_exercises(snapshot: dict) -> list[dict]:
     upstream: list[dict] = []
     for record in snapshot["exercises"]:
         provenance = record["provenance"]
+        preserved = provenance["upstream"]
         upstream.append(
             {
                 "id": record["source_record_id"],
                 "name": provenance["upstream_name"],
                 "category": provenance["original_category"],
-                "primaryMuscles": [record["primary_muscle"]],
-                "secondaryMuscles": record["secondary_muscles"],
-                "equipment": provenance["equipment"],
-                "level": provenance["level"],
-                "mechanic": provenance["mechanic"],
-                "force": provenance["force"],
-                "instructions": provenance["instructions"],
+                "primaryMuscles": [preserved["primary_muscle"]],
+                "secondaryMuscles": preserved["secondary_muscles"],
+                "equipment": preserved["equipment"],
+                "level": preserved["level"],
+                "mechanic": preserved["mechanic"],
+                "force": preserved["force"],
+                "instructions": preserved["instructions"],
                 "images": ["preserved"] * provenance["image_count"],
             }
         )
@@ -130,12 +132,15 @@ def test_bundled_exercise_localization_matches_complete_source_contract() -> Non
     }
     for source_field, known_values in taxonomy_contract.items():
         if source_field == "primary_muscle":
-            observed = {record[source_field] for record in snapshot["exercises"]}
+            observed = {
+                record["provenance"]["upstream"][source_field]
+                for record in snapshot["exercises"]
+            }
         elif source_field == "secondary_muscles":
             observed = {
                 value
                 for record in snapshot["exercises"]
-                for value in record[source_field]
+                for value in record["provenance"]["upstream"][source_field]
             }
         else:
             observed = {
@@ -257,7 +262,7 @@ def test_bundled_exercise_localization_projects_all_source_records(
 
 
 def test_bundled_tfda_snapshot_contains_only_complete_foods() -> None:
-    payload = json.loads((CATALOG_ROOT / "foods.zh-CN.v1.json").read_text(encoding="utf-8"))
+    payload = json.loads(FOOD_SNAPSHOT.read_text(encoding="utf-8"))
 
     assert payload["source_name"] == "Taiwan FDA Food Nutrient Database"
     assert len(payload["foods"]) == 2_128
@@ -272,6 +277,20 @@ def test_bundled_tfda_snapshot_contains_only_complete_foods() -> None:
         and record["provenance"]
         for record in payload["foods"]
     )
+    rice = next(
+        record
+        for record in payload["foods"]
+        if record["source_record_id"] == "A0550601"
+    )
+    assert rice["name"] == "米饭"
+    assert {"白飯", "白饭", "Cooked rice"} <= set(rice["aliases"])
+    assert rice["provenance"]["profile"] == "tfda-foods@2.0.0"
+    assert rice["provenance"]["localization"] == {
+        "asset_version": "1.3.0",
+        "locale": "zh-CN",
+        "method": "glossary",
+        "upstream_name": "白飯",
+    }
 
 
 def test_bundled_food_policy_localizes_all_normalized_names_with_sparse_overrides(
@@ -315,10 +334,10 @@ def test_bundled_food_policy_localizes_all_normalized_names_with_sparse_override
             for nutrient, unit, amount in nutrients:
                 writer.writerow(
                     (
-                        "审计",
-                        "样品基本资料",
-                        record["source_record_id"],
-                        record["name"],
+                            "审计",
+                            "样品基本资料",
+                            record["source_record_id"],
+                            record["provenance"]["localization"]["upstream_name"],
                         "",
                         "",
                         "",
@@ -359,4 +378,20 @@ def test_bundled_exercise_snapshot_excludes_stretching_without_met_invention() -
         and record["met"] is None
         and record["license"] == "Unlicense"
         for record in payload["exercises"]
+    )
+    squat = next(
+        record
+        for record in payload["exercises"]
+        if record["source_record_id"] == "Barbell_Full_Squat"
+    )
+    assert squat["name"] == "杠铃全深蹲"
+    assert any(alias.startswith("杠铃深蹲") for alias in squat["aliases"])
+    assert squat["primary_muscle"] == "股四头肌"
+    assert squat["provenance"]["profile"] == "free-exercise-db@2.0.0"
+    assert squat["provenance"]["localization"]["locale"] == "zh-CN"
+    assert squat["provenance"]["localization"]["equipment"] == "杠铃"
+    assert squat["provenance"]["localization"]["level"] == "中级"
+    assert squat["provenance"]["localization"]["category"] == "力量训练"
+    assert squat["provenance"]["localization"]["instructions"][0].startswith(
+        "为确保安全"
     )
