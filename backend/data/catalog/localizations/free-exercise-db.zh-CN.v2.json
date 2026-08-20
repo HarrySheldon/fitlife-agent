@@ -586,12 +586,14 @@
       ]
     },
     "Barbell_Full_Squat": {
-      "name_zh_cn": "杠铃全深蹲",
+      "name_zh_cn": "杠铃深蹲",
       "aliases": [
-        "杠铃深蹲到底"
+        "杠铃全蹲",
+        "杠铃深蹲到底",
+        "杠铃全深蹲"
       ],
       "pinyin": [
-        "gang ling quan shen dun"
+        "gang ling shen dun"
       ],
       "instructions_zh_cn": [
         "为确保安全，最好在深蹲架内完成。先将杠铃架设在略高于肩部的位置，装好重量后钻到杠下，使杠铃横放在肩后、颈部稍下方。",
@@ -822,12 +824,13 @@
       ]
     },
     "Barbell_Squat": {
-      "name_zh_cn": "杠铃深蹲",
+      "name_zh_cn": "杠铃标准深蹲",
       "aliases": [
-        "杠铃后蹲"
+        "杠铃后蹲",
+        "标准杠铃深蹲"
       ],
       "pinyin": [
-        "gang ling shen dun"
+        "gang ling biao zhun shen dun"
       ],
       "instructions_zh_cn": [
         "为确保安全，最好在深蹲架内完成。先将杠铃架设在略低于肩部的位置，装好重量后钻到杠下，使杠铃横放在肩后、颈部稍下方。",

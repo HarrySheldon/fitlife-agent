@@ -66,6 +66,24 @@ _ORDER = """
         lower(exercise.name), exercise.name, exercise.id
     LIMIT ?
 """
+_SEARCH_ORDER = """
+    ORDER BY
+        CASE
+            WHEN exercise.name = ? COLLATE NOCASE THEN 0
+            WHEN EXISTS (
+                SELECT 1
+                FROM catalog_aliases AS exact_alias
+                WHERE exact_alias.exercise_id = exercise.id
+                  AND exact_alias.normalized_alias = ?
+            ) THEN 1
+            ELSE 2
+        END,
+        rank_group,
+        CASE WHEN usage.exercise_id IS NOT NULL THEN usage.last_used_at END DESC,
+        usage.use_count DESC,
+        lower(exercise.name), exercise.name, exercise.id
+    LIMIT ?
+"""
 
 
 class SQLiteExerciseCatalogRepository:
@@ -88,6 +106,7 @@ class SQLiteExerciseCatalogRepository:
         limit: int,
     ) -> tuple[ExerciseCatalogItem, ...]:
         match = _fts_query(query)
+        exact_query = unicodedata.normalize("NFKC", query).strip()
         with self.database.connection() as connection:
             if match:
                 rows = connection.execute(
@@ -99,9 +118,17 @@ class SQLiteExerciseCatalogRepository:
                           WHERE catalog_kind = 'exercise'
                             AND catalog_search MATCH ?
                       )
-                    {_ORDER}
+                    {_SEARCH_ORDER}
                     """,
-                    (user_id, user_id, user_id, match, limit),
+                    (
+                        user_id,
+                        user_id,
+                        user_id,
+                        match,
+                        exact_query,
+                        exact_query.casefold(),
+                        limit,
+                    ),
                 ).fetchall()
             else:
                 rows = connection.execute(

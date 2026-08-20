@@ -89,6 +89,20 @@ def test_bundled_exercise_localization_matches_complete_source_contract() -> Non
     assert list(entries) == source_ids
     assert set(entries) == set(source_by_id)
 
+    full_squat = entries["Barbell_Full_Squat"]
+    standard_squat = entries["Barbell_Squat"]
+    assert full_squat["name_zh_cn"] == "杠铃深蹲"
+    assert {"杠铃全蹲", "杠铃深蹲到底"} <= set(full_squat["aliases"])
+    assert standard_squat["name_zh_cn"] == "杠铃标准深蹲"
+    assert "标准杠铃深蹲" in standard_squat["aliases"]
+    assert "杠铃深蹲" not in standard_squat["aliases"]
+    assert "hamstrings are on your calves" in source_by_id[
+        "Barbell_Full_Squat"
+    ]["provenance"]["upstream"]["instructions"][3]
+    assert "slightly less than 90-degrees" in source_by_id[
+        "Barbell_Squat"
+    ]["provenance"]["upstream"]["instructions"][3]
+
     expected_instruction_counts = {
         source_id: len(record["provenance"]["instructions"])
         for source_id, record in source_by_id.items()
@@ -379,19 +393,21 @@ def test_bundled_exercise_snapshot_excludes_stretching_without_met_invention() -
         and record["license"] == "Unlicense"
         for record in payload["exercises"]
     )
-    squat = next(
-        record
-        for record in payload["exercises"]
-        if record["source_record_id"] == "Barbell_Full_Squat"
-    )
-    assert squat["name"] == "杠铃全深蹲"
-    assert any(alias.startswith("杠铃深蹲") for alias in squat["aliases"])
-    assert squat["primary_muscle"] == "股四头肌"
-    assert squat["provenance"]["profile"] == "free-exercise-db@2.0.0"
-    assert squat["provenance"]["localization"]["locale"] == "zh-CN"
-    assert squat["provenance"]["localization"]["equipment"] == "杠铃"
-    assert squat["provenance"]["localization"]["level"] == "中级"
-    assert squat["provenance"]["localization"]["category"] == "力量训练"
-    assert squat["provenance"]["localization"]["instructions"][0].startswith(
+    by_id = {
+        record["source_record_id"]: record for record in payload["exercises"]
+    }
+    full_squat = by_id["Barbell_Full_Squat"]
+    standard_squat = by_id["Barbell_Squat"]
+    assert full_squat["name"] == "杠铃深蹲"
+    assert {"杠铃全蹲", "杠铃深蹲到底"} <= set(full_squat["aliases"])
+    assert standard_squat["name"] == "杠铃标准深蹲"
+    assert "标准杠铃深蹲" in standard_squat["aliases"]
+    assert full_squat["primary_muscle"] == "股四头肌"
+    assert full_squat["provenance"]["profile"] == "free-exercise-db@2.0.0"
+    assert full_squat["provenance"]["localization"]["locale"] == "zh-CN"
+    assert full_squat["provenance"]["localization"]["equipment"] == "杠铃"
+    assert full_squat["provenance"]["localization"]["level"] == "中级"
+    assert full_squat["provenance"]["localization"]["category"] == "力量训练"
+    assert full_squat["provenance"]["localization"]["instructions"][0].startswith(
         "为确保安全"
     )

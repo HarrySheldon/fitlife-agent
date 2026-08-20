@@ -10,6 +10,9 @@ from backend.application.ports.exercise_catalog_repository import (
 from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
     SQLiteExerciseCatalogRepository,
 )
+from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
+    _source_tokens,
+)
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.sqlite.migrations import run_migrations
 from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
@@ -59,9 +62,14 @@ def _insert_exercise(
             """
             INSERT INTO catalog_search (
                 catalog_kind, catalog_id, name, aliases, pinyin, source_tokens
-            ) VALUES ('exercise', ?, ?, ?, '', '')
+            ) VALUES ('exercise', ?, ?, ?, '', ?)
             """,
-            (exercise_id, name, " ".join(aliases)),
+            (
+                exercise_id,
+                name,
+                " ".join(aliases),
+                _source_tokens(name, aliases, ""),
+            ),
         )
         for index, alias in enumerate(aliases):
             connection.execute(
@@ -151,6 +159,37 @@ def test_search_ranks_recent_favorite_private_then_public(tmp_path):
         "public-z",
     ]
     assert [item.rank_group for item in results] == [0, 1, 2, 3, 3]
+
+
+def test_search_prioritizes_exact_canonical_and_alias_matches(tmp_path):
+    database = _database(tmp_path)
+    repository = SQLiteExerciseCatalogRepository(database)
+    for exercise_id, name, aliases in (
+        ("full", "杠铃深蹲", ("Barbell Full Squat",)),
+        ("standard", "杠铃标准深蹲", ("Barbell Squat",)),
+        ("olympic", "奥林匹克杠铃深蹲", ("Olympic Squat",)),
+    ):
+        _insert_exercise(
+            database,
+            exercise_id=exercise_id,
+            owner_user_id=None,
+            name=name,
+            aliases=aliases,
+        )
+
+    assert repository.search("user-a", "杠铃深蹲", limit=20)[0].id == "full"
+    assert (
+        repository.search("user-a", "Barbell Full Squat", limit=20)[0].id
+        == "full"
+    )
+    assert (
+        repository.search("user-a", "杠铃标准深蹲", limit=20)[0].id
+        == "standard"
+    )
+    assert (
+        repository.search("user-a", "Barbell Squat", limit=20)[0].id
+        == "standard"
+    )
 
 
 def test_custom_exercise_is_owned_searchable_and_source_aware(tmp_path):

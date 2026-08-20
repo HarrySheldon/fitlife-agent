@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from backend.application.ports.exercise_catalog_repository import ExerciseCatalogItem
 from backend.application.ports.workout_repository import (
     StrengthExerciseInput,
     WorkoutDraftInput,
@@ -47,21 +48,29 @@ def test_seed_is_auditable_idempotent_and_searchable(tmp_path: Path) -> None:
     assert first.inserted_count == EXPECTED_COUNT
     assert second.unchanged_count == EXPECTED_COUNT
     repository = SQLiteExerciseCatalogRepository(database)
-    squat = next(
-        item
-        for item in repository.search("user-a", "杠铃全深蹲", limit=20)
-        if item.source_record_id == "Barbell_Full_Squat"
+    full_squat_zh = _search_by_source_id(
+        repository, "杠铃深蹲", "Barbell_Full_Squat"
+    )
+    full_squat_en = _search_by_source_id(
+        repository, "Barbell Full Squat", "Barbell_Full_Squat"
+    )
+    standard_squat_zh = _search_by_source_id(
+        repository, "杠铃标准深蹲", "Barbell_Squat"
+    )
+    standard_squat_en = _search_by_source_id(
+        repository, "Barbell Squat", "Barbell_Squat"
     )
     running = next(
         item
         for item in repository.search("user-a", "Running Treadmill", limit=50)
         if item.source_record_id == "Running_Treadmill"
     )
-    assert squat.source_record_id == "Barbell_Full_Squat"
-    assert squat.license == "Unlicense"
+    assert full_squat_zh.name == full_squat_en.name == "杠铃深蹲"
+    assert standard_squat_zh.name == standard_squat_en.name == "杠铃标准深蹲"
+    assert full_squat_zh.license == "Unlicense"
     assert running.exercise_type == "cardio"
     assert running.met is None
-    assert len(squat.content_hash or "") == 64
+    assert len(full_squat_zh.content_hash or "") == 64
 
 
 def test_localized_reimport_preserves_ids_and_historical_workout_names(
@@ -77,7 +86,7 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
         for record in legacy["exercises"]
         if record["source_record_id"] == "Barbell_Full_Squat"
     )
-    legacy_squat["name"] = "杠铃深蹲"
+    legacy_squat["name"] = "杠铃全深蹲"
     legacy_squat["primary_muscle"] = "quadriceps"
     legacy_squat["secondary_muscles"] = [
         "calves",
@@ -88,6 +97,17 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
     legacy_squat["provenance"].pop("localization", None)
     legacy_squat["provenance"].pop("upstream", None)
     legacy_squat["provenance"]["profile"] = "free-exercise-db@1.0.0"
+    legacy_standard_squat = next(
+        record
+        for record in legacy["exercises"]
+        if record["source_record_id"] == "Barbell_Squat"
+    )
+    legacy_standard_squat["name"] = "杠铃深蹲"
+    legacy_standard_squat["aliases"] = [
+        "Barbell Squat",
+        "杠铃后蹲",
+        "gang ling shen dun",
+    ]
     legacy_path = tmp_path / "exercises.legacy.json"
     legacy_path.write_text(
         json.dumps(legacy, ensure_ascii=False),
@@ -99,7 +119,7 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
     catalog = SQLiteExerciseCatalogRepository(database)
     old_squat = next(
         item
-        for item in catalog.search("user-a", "杠铃深蹲", limit=20)
+        for item in catalog.search("user-a", "杠铃全深蹲", limit=20)
         if item.source_record_id == "Barbell_Full_Squat"
     )
     old_ids = _public_exercise_ids(database)
@@ -145,10 +165,10 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
         if item.source_record_id == "Barbell_Full_Squat"
     )
     assert localized_squat.id == old_squat.id
-    assert localized_squat.name == "杠铃全深蹲"
+    assert localized_squat.name == "杠铃深蹲"
     assert "Barbell Full Squat" in localized_squat.aliases
-    assert any(
-        alias.startswith("杠铃深蹲") for alias in localized_squat.aliases
+    assert {"杠铃全蹲", "杠铃深蹲到底", "杠铃全深蹲"} <= set(
+        localized_squat.aliases
     )
     assert localized_squat.primary_muscle == "股四头肌"
     assert localized_squat.provenance["localization"]["equipment"] == "杠铃"
@@ -158,12 +178,29 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
         for item in catalog.search("user-a", "Barbell Full Squat", limit=20)
         if item.source_record_id == "Barbell_Full_Squat"
     ).id == old_squat.id
+    assert _search_by_source_id(
+        catalog, "杠铃标准深蹲", "Barbell_Squat"
+    ).name == "杠铃标准深蹲"
+    assert _search_by_source_id(
+        catalog, "Barbell Squat", "Barbell_Squat"
+    ).name == "杠铃标准深蹲"
     assert (
         workouts.list_sessions("user-a", "2026-08-15")[0]
         .strength_exercises[0]
         .exercise_name
-        == "杠铃深蹲"
+        == "杠铃全深蹲"
     )
+
+
+def _search_by_source_id(
+    repository: SQLiteExerciseCatalogRepository,
+    query: str,
+    source_record_id: str,
+) -> ExerciseCatalogItem:
+    results = repository.search("user-a", query, limit=50)
+    assert results
+    assert results[0].source_record_id == source_record_id
+    return results[0]
 
 
 def _public_exercise_ids(database: SQLiteDatabase) -> dict[str, str]:

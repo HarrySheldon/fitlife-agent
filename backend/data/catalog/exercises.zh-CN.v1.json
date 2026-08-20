@@ -2752,15 +2752,17 @@
     {
       "aliases": [
         "Barbell Full Squat",
+        "杠铃全蹲",
         "杠铃深蹲到底",
-        "gang ling quan shen dun"
+        "杠铃全深蹲",
+        "gang ling shen dun"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",
       "exercise_type": "strength",
       "license": "Unlicense",
       "met": null,
-      "name": "杠铃全深蹲",
+      "name": "杠铃深蹲",
       "primary_muscle": "股四头肌",
       "provenance": {
         "equipment": "barbell",
@@ -3886,14 +3888,15 @@
       "aliases": [
         "Barbell Squat",
         "杠铃后蹲",
-        "gang ling shen dun"
+        "标准杠铃深蹲",
+        "gang ling biao zhun shen dun"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",
       "exercise_type": "strength",
       "license": "Unlicense",
       "met": null,
-      "name": "杠铃深蹲",
+      "name": "杠铃标准深蹲",
       "primary_muscle": "股四头肌",
       "provenance": {
         "equipment": "barbell",
