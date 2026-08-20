@@ -427,7 +427,7 @@ def _reconstruct_exercise_source(
         upstream = upstream if isinstance(upstream, dict) else {}
         instructions = upstream.get("instructions", provenance.get("instructions"))
         if not isinstance(instructions, list) or not all(
-            isinstance(value, str) and value.strip() for value in instructions
+            isinstance(value, str) for value in instructions
         ):
             raise _upstream_missing(source_id, "upstream instructions")
         primary = upstream.get("primary_muscle", record.get("primary_muscle"))

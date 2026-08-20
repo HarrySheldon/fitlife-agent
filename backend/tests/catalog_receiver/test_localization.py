@@ -137,8 +137,8 @@ def test_catalog_exercise_taxonomy_covers_all_snapshot_upstream_values() -> None
         muscle
         for exercise in exercises
         for muscle in (
-            exercise["primary_muscle"],
-            *exercise["secondary_muscles"],
+            exercise["provenance"]["upstream"]["primary_muscle"],
+            *exercise["provenance"]["upstream"]["secondary_muscles"],
         )
     }
     provenance_taxonomy = {
