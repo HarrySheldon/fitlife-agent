@@ -192,6 +192,55 @@ def test_search_prioritizes_exact_canonical_and_alias_matches(tmp_path):
     )
 
 
+def test_search_exact_nfkc_alias_beats_recent_favorite_partial_before_limit(tmp_path):
+    database = _database(tmp_path)
+    repository = SQLiteExerciseCatalogRepository(database)
+    _insert_exercise(
+        database,
+        exercise_id="exact-alias",
+        owner_user_id=None,
+        name="Standard squat",
+        aliases=("ＢＡＲＢＥＬＬ ＳＱＵＡＴ",),
+    )
+    _insert_exercise(
+        database,
+        exercise_id="favorite-partial",
+        owner_user_id=None,
+        name="Favorite barbell squat variation",
+    )
+    repository.set_favorite("user-a", "favorite-partial", True)
+    repository.record_usage("user-a", "favorite-partial")
+
+    results = repository.search("user-a", "Barbell Squat", limit=1)
+
+    assert [item.id for item in results] == ["exact-alias"]
+
+
+def test_search_exact_nfkc_canonical_beats_recent_favorite_partial_before_limit(
+    tmp_path,
+):
+    database = _database(tmp_path)
+    repository = SQLiteExerciseCatalogRepository(database)
+    _insert_exercise(
+        database,
+        exercise_id="exact-canonical",
+        owner_user_id=None,
+        name="ＢＡＲＢＥＬＬ ＳＱＵＡＴ",
+    )
+    _insert_exercise(
+        database,
+        exercise_id="favorite-partial",
+        owner_user_id=None,
+        name="Favorite barbell squat variation",
+    )
+    repository.set_favorite("user-a", "favorite-partial", True)
+    repository.record_usage("user-a", "favorite-partial")
+
+    results = repository.search("user-a", "Barbell Squat", limit=1)
+
+    assert [item.id for item in results] == ["exact-canonical"]
+
+
 def test_custom_exercise_is_owned_searchable_and_source_aware(tmp_path):
     repository = SQLiteExerciseCatalogRepository(
         _database(tmp_path),

@@ -2461,7 +2461,11 @@
       "aliases": [
         "Barbell Bench Press - Medium Grip",
         "杠铃卧推",
-        "zhong wo ju gang ling wo tui"
+        "zhong wo ju gang ling wo tui",
+        "卧推",
+        "平板卧推",
+        "gangling wotui",
+        "wotui"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",
@@ -2755,7 +2759,10 @@
         "杠铃全蹲",
         "杠铃深蹲到底",
         "杠铃全深蹲",
-        "gang ling shen dun"
+        "gang ling shen dun",
+        "深蹲",
+        "gangling shendun",
+        "shendun"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",
@@ -5001,7 +5008,10 @@
       "aliases": [
         "Bent Over Barbell Row",
         "俯身杠铃划船",
-        "gang ling fu shen hua chuan"
+        "gang ling fu shen hua chuan",
+        "俯身划船",
+        "杠铃划船",
+        "gangling fushen huachuan"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",
@@ -15701,7 +15711,10 @@
       "aliases": [
         "Dumbbell Shoulder Press",
         "坐姿哑铃推举",
-        "zuo zi ya ling jian tui"
+        "zuo zi ya ling jian tui",
+        "哑铃肩推",
+        "肩推",
+        "yaling jiantui"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",
@@ -34644,7 +34657,10 @@
       "aliases": [
         "Pullups",
         "正手引体向上",
-        "zheng wo yin ti xiang shang"
+        "zheng wo yin ti xiang shang",
+        "引体向上",
+        "引体",
+        "yinti xiangshang"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",
@@ -35204,7 +35220,10 @@
       "aliases": [
         "Pushups",
         "大间距俯卧撑",
-        "jiu shi li mi shou ju fu wo cheng"
+        "jiu shi li mi shou ju fu wo cheng",
+        "俯卧撑",
+        "伏地挺身",
+        "fuwocheng"
       ],
       "attribution": "free-exercise-db contributors",
       "dataset_version": "2026-08-09",

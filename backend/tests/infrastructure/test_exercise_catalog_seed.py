@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,6 +24,9 @@ from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 
 
 SEED_PATH = Path(__file__).parents[2] / "data" / "catalog" / "exercises.zh-CN.v1.json"
+LEGACY_SEARCH_TERMS_PATH = (
+    Path(__file__).parents[2] / "data" / "catalog" / "legacy-search-terms.v1.json"
+)
 EXPECTED_COUNT = 750
 
 
@@ -71,6 +75,46 @@ def test_seed_is_auditable_idempotent_and_searchable(tmp_path: Path) -> None:
     assert running.exercise_type == "cardio"
     assert running.met is None
     assert len(full_squat_zh.content_hash or "") == 64
+
+
+def test_seed_preserves_explicit_legacy_exercise_search_terms(tmp_path: Path) -> None:
+    payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    legacy = json.loads(LEGACY_SEARCH_TERMS_PATH.read_text(encoding="utf-8"))[
+        "exercises"
+    ]
+    records = {
+        record["source_record_id"]: record for record in payload["exercises"]
+    }
+
+    for source_id, terms in legacy.items():
+        record = records[source_id]
+        available = {
+            unicodedata.normalize("NFKC", term).casefold()
+            for term in (record["name"], *record["aliases"])
+        }
+        assert {
+            unicodedata.normalize("NFKC", term).casefold() for term in terms
+        } <= available
+
+    database = _database(tmp_path)
+    seed_bundled_exercises(database, SEED_PATH)
+    with database.connection() as connection:
+        seeded = {
+            (row["source_record_id"], row["normalized_alias"])
+            for row in connection.execute(
+                """
+                SELECT exercise.source_record_id, alias.normalized_alias
+                FROM catalog_aliases AS alias
+                JOIN exercise_catalog AS exercise ON exercise.id = alias.exercise_id
+                """
+            )
+        }
+    expected = {
+        (source_id, unicodedata.normalize("NFKC", term).casefold())
+        for source_id, terms in legacy.items()
+        for term in terms
+    }
+    assert expected <= seeded
 
 
 def test_localized_reimport_preserves_ids_and_historical_workout_names(

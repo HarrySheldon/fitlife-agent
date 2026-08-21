@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sys
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -40,6 +41,9 @@ from backend.catalog_receiver.validators import validate_records
 MAPPING_ROOT = PROJECT_ROOT / "backend" / "data" / "catalog" / "mappings"
 FOOD_MAPPING_PROFILE = MAPPING_ROOT / "tfda-foods.v1.json"
 EXERCISE_MAPPING_PROFILE = MAPPING_ROOT / "free-exercise-db.v1.json"
+LEGACY_SEARCH_TERMS = (
+    PROJECT_ROOT / "backend" / "data" / "catalog" / "legacy-search-terms.v1.json"
+)
 
 
 @dataclass(frozen=True)
@@ -115,6 +119,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exercises", type=Path, required=True)
     parser.add_argument("--exercise-localization", type=Path, required=True)
     parser.add_argument("--exercise-taxonomy", type=Path, required=True)
+    parser.add_argument(
+        "--legacy-search-terms",
+        type=Path,
+        default=LEGACY_SEARCH_TERMS,
+    )
     parser.add_argument("--food-output", type=Path, required=True)
     parser.add_argument("--exercise-output", type=Path, required=True)
     return parser
@@ -162,6 +171,7 @@ def _render_catalogs(args: argparse.Namespace) -> tuple[str, str]:
         localization_path=args.exercise_localization,
         taxonomy_path=args.exercise_taxonomy,
     )
+    legacy_search_terms = _load_legacy_search_terms(args.legacy_search_terms)
 
     food_source = _reconstruct_food_source(
         args.foods,
@@ -182,6 +192,22 @@ def _render_catalogs(args: argparse.Namespace) -> tuple[str, str]:
         exercise_source,
         exercise_profile,
         localization_bundle=exercise_bundle,
+    )
+    food_projection = _merge_search_terms(
+        food_projection,
+        _snapshot_search_terms(food_snapshot, collection="foods"),
+    )
+    food_projection = _merge_search_terms(
+        food_projection,
+        legacy_search_terms["foods"],
+    )
+    exercise_projection = _merge_search_terms(
+        exercise_projection,
+        _snapshot_search_terms(exercise_snapshot, collection="exercises"),
+    )
+    exercise_projection = _merge_search_terms(
+        exercise_projection,
+        legacy_search_terms["exercises"],
     )
     _require_valid_projection(
         food_source.metadata,
@@ -232,6 +258,7 @@ def _validate_role_paths(
         "food localization": Path(args.food_localization).resolve(strict=False),
         "exercise localization": Path(args.exercise_localization).resolve(strict=False),
         "exercise taxonomy": Path(args.exercise_taxonomy).resolve(strict=False),
+        "legacy search terms": Path(args.legacy_search_terms).resolve(strict=False),
         "food mapping profile": FOOD_MAPPING_PROFILE.resolve(strict=False),
         "exercise mapping profile": EXERCISE_MAPPING_PROFILE.resolve(strict=False),
         "food output": publication.food_output,
@@ -285,6 +312,113 @@ def _read_snapshot(path: Path, *, collection: str) -> dict[str, Any]:
             exit_code=4,
         )
     return document
+
+
+def _load_legacy_search_terms(path: Path) -> dict[str, dict[str, tuple[str, ...]]]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ReceiverError(
+            "CATALOG_LEGACY_TERMS_INVALID",
+            f"Could not read legacy catalog search terms {path}.",
+            exit_code=4,
+        ) from error
+    if not isinstance(document, dict) or document.get("schema_version") != 1:
+        raise _invalid_legacy_search_terms(path)
+    result: dict[str, dict[str, tuple[str, ...]]] = {}
+    for collection in ("foods", "exercises"):
+        entries = document.get(collection)
+        if not isinstance(entries, dict):
+            raise _invalid_legacy_search_terms(path)
+        parsed: dict[str, tuple[str, ...]] = {}
+        for source_id, terms in entries.items():
+            if (
+                not isinstance(source_id, str)
+                or not source_id.strip()
+                or not isinstance(terms, list)
+                or not all(isinstance(term, str) and term.strip() for term in terms)
+            ):
+                raise _invalid_legacy_search_terms(path)
+            parsed[source_id] = tuple(term.strip() for term in terms)
+        result[collection] = parsed
+    return result
+
+
+def _invalid_legacy_search_terms(path: Path) -> ReceiverError:
+    return ReceiverError(
+        "CATALOG_LEGACY_TERMS_INVALID",
+        f"Legacy catalog search terms {path} must use the version 1 schema.",
+        exit_code=4,
+    )
+
+
+def _snapshot_search_terms(
+    snapshot: dict[str, Any],
+    *,
+    collection: str,
+) -> dict[str, tuple[str, ...]]:
+    terms_by_source_id: dict[str, tuple[str, ...]] = {}
+    for record in snapshot[collection]:
+        source_id = _required_text(record, "source_record_id")
+        canonical_name = _required_text(record, "name")
+        aliases = record.get("aliases")
+        if not isinstance(aliases, list) or not all(
+            isinstance(alias, str) and alias.strip() for alias in aliases
+        ):
+            raise ReceiverError(
+                "CATALOG_SNAPSHOT_INVALID",
+                f"Snapshot record {source_id} must provide non-empty string aliases.",
+                exit_code=4,
+            )
+        terms_by_source_id[source_id] = (
+            canonical_name,
+            *(alias.strip() for alias in aliases),
+        )
+    return terms_by_source_id
+
+
+def _merge_search_terms(
+    projection: ProjectionResult,
+    terms_by_source_id: dict[str, tuple[str, ...]],
+) -> ProjectionResult:
+    records_by_source_id = {
+        record.source_record_id: record for record in projection.records
+    }
+    unknown_ids = sorted(set(terms_by_source_id) - records_by_source_id.keys())
+    if unknown_ids:
+        raise ReceiverError(
+            "CATALOG_LEGACY_TERMS_INVALID",
+            f"Legacy search terms reference unknown source ID {unknown_ids[0]}.",
+            exit_code=4,
+        )
+    records = []
+    for record in projection.records:
+        aliases = _deduplicated_aliases(
+            record.name,
+            (*record.aliases, *terms_by_source_id.get(record.source_record_id, ())),
+        )
+        records.append(record.model_copy(update={"aliases": aliases}))
+    return projection.model_copy(update={"records": tuple(records)})
+
+
+def _deduplicated_aliases(
+    canonical_name: str,
+    candidates: Sequence[str],
+) -> tuple[str, ...]:
+    seen = {_normalized_search_term(canonical_name)}
+    aliases: list[str] = []
+    for candidate in candidates:
+        alias = candidate.strip()
+        normalized = _normalized_search_term(alias)
+        if not alias or normalized in seen:
+            continue
+        seen.add(normalized)
+        aliases.append(alias)
+    return tuple(aliases)
+
+
+def _normalized_search_term(value: str) -> str:
+    return unicodedata.normalize("NFKC", value).casefold()
 
 
 def _reconstruct_food_source(

@@ -358,7 +358,8 @@
       "aliases": [
         "高筋麵粉(2021年取樣)",
         "強力粉",
-        "High-gluten flour"
+        "High-gluten flour",
+        "高筋面粉(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -869,7 +870,8 @@
       "aliases": [
         "秈米(台中秈10號)(2024年取樣)",
         "在來米,長米",
-        "Long grain rice,Taichung Sen No. 10"
+        "Long grain rice,Taichung Sen No. 10",
+        "籼米(台中籼10号)(2024年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -1230,7 +1232,8 @@
       "aliases": [
         "稉米(高雄139號)(2021年取樣)",
         "蓬萊米,圓米",
-        "Rice (Kaohsiung 139)"
+        "Rice (Kaohsiung 139)",
+        "稉米(高雄139号)(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -1295,7 +1298,8 @@
       "aliases": [
         "越光米(台南16號)(2024年取樣)",
         "蓬萊米,圓米",
-        "Rice Tainan 16"
+        "Rice Tainan 16",
+        "越光米(台南16号)(2024年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -3536,7 +3540,8 @@
       "aliases": [
         "檳榔心芋(2021年取樣)",
         "芋頭,芋艿,芋乃,芋仔,青芋,土芝",
-        "Taro"
+        "Taro",
+        "槟榔心芋(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -3734,7 +3739,8 @@
         "馬鈴薯(2022年取樣)",
         "马铃薯(2022年采样)",
         "洋芋,洋薯,洋山芋,荷蘭薯,日本番薯,塊茄",
-        "Potato; White potato; Irish potato"
+        "Potato; White potato; Irish potato",
+        "马铃薯(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -4811,6 +4817,7 @@
     {
       "aliases": [
         "白芝麻(熟)2022年取樣)",
+        "白芝麻(熟)2022年取样)",
         "Sesame: white"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -4874,6 +4881,7 @@
     {
       "aliases": [
         "黑芝麻(熟)(2022年取樣)",
+        "黑芝麻(熟)(2022年取样)",
         "Sesame: black"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -5037,7 +5045,8 @@
       "aliases": [
         "帶膜花生仁(生)(1995年之前取樣)",
         "土豆,長生果,落花生",
-        "Peanut: raw"
+        "Peanut: raw",
+        "带膜花生仁(生)(1995年之前取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5102,7 +5111,8 @@
       "aliases": [
         "帶膜花生仁(生)(2004年取樣)",
         "土豆,長生果,落花生",
-        "Raw peanut: dry"
+        "Raw peanut: dry",
+        "带膜花生仁(生)(2004年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5457,7 +5467,8 @@
       "aliases": [
         "木瓜(2月取樣)",
         "番木瓜,番瓜",
-        "Papaya; Pawpaw"
+        "Papaya; Pawpaw",
+        "木瓜(2月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5490,7 +5501,8 @@
       "aliases": [
         "木瓜(5月取樣)",
         "番木瓜,番瓜",
-        "Papaya; Pawpaw"
+        "Papaya; Pawpaw",
+        "木瓜(5月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5523,7 +5535,8 @@
       "aliases": [
         "木瓜(8月取樣)",
         "番木瓜,番瓜",
-        "Papaya; Pawpaw"
+        "Papaya; Pawpaw",
+        "木瓜(8月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5556,7 +5569,8 @@
       "aliases": [
         "木瓜(11月取樣)",
         "番木瓜,番瓜",
-        "Papaya; Pawpaw"
+        "Papaya; Pawpaw",
+        "木瓜(11月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5917,7 +5931,8 @@
       "aliases": [
         "北蕉(2月取樣)",
         "香蕉,芎蕉,弓蕉,甘蕉",
-        "Banana"
+        "Banana",
+        "北蕉(2月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5950,7 +5965,8 @@
       "aliases": [
         "北蕉(5月取樣)",
         "香蕉,芎蕉,弓蕉,甘蕉",
-        "Banana"
+        "Banana",
+        "北蕉(5月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -5983,7 +5999,8 @@
       "aliases": [
         "北蕉(9月取樣)",
         "香蕉,芎蕉,弓蕉,甘蕉",
-        "Banana"
+        "Banana",
+        "北蕉(9月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -6016,7 +6033,8 @@
       "aliases": [
         "北蕉(11月取樣)",
         "香蕉,芎蕉,弓蕉,甘蕉",
-        "Banana"
+        "Banana",
+        "北蕉(11月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -6177,7 +6195,8 @@
     {
       "aliases": [
         "李林蕉(2007年取樣)",
-        "香蕉,芎蕉,弓蕉,甘蕉(牛角蕉,佛手蕉,美人蕉,樹蕉)"
+        "香蕉,芎蕉,弓蕉,甘蕉(牛角蕉,佛手蕉,美人蕉,樹蕉)",
+        "李林蕉(2007年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -6209,7 +6228,8 @@
     {
       "aliases": [
         "李林蕉(2012年取樣)",
-        "香蕉,芎蕉,弓蕉,甘蕉(牛角蕉,佛手蕉,美人蕉,樹蕉)"
+        "香蕉,芎蕉,弓蕉,甘蕉(牛角蕉,佛手蕉,美人蕉,樹蕉)",
+        "李林蕉(2012年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -6275,7 +6295,8 @@
       "aliases": [
         "紅皮蕉(2004年取樣)",
         "香蕉,芎蕉,弓蕉,甘蕉,蘋果蕉",
-        "Banana;"
+        "Banana;",
+        "红皮蕉(2004年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -6308,7 +6329,8 @@
       "aliases": [
         "紅皮蕉(2012年取樣)",
         "香蕉,芎蕉,弓蕉,甘蕉,蘋果蕉",
-        "banana"
+        "banana",
+        "红皮蕉(2012年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -6341,7 +6363,8 @@
       "aliases": [
         "蛋蕉(2023年取樣)",
         "旦蕉, 一口蕉",
-        "Banana,Kluai Khai(泰)"
+        "Banana,Kluai Khai(泰)",
+        "蛋蕉(2023年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -7201,7 +7224,8 @@
       "aliases": [
         "楊桃(2月取樣)",
         "羊桃,洋桃,陽桃,五稜子,五斂子",
-        "Star fruit; Carambola"
+        "Star fruit; Carambola",
+        "杨桃(2月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -7234,7 +7258,8 @@
       "aliases": [
         "楊桃(4月取樣)",
         "羊桃,洋桃,陽桃,五稜子,五斂子",
-        "Star fruit; Carambola"
+        "Star fruit; Carambola",
+        "杨桃(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -7267,7 +7292,8 @@
       "aliases": [
         "楊桃(5月取樣)",
         "羊桃,洋桃,陽桃,五稜子,五斂子",
-        "Star fruit; Carambola"
+        "Star fruit; Carambola",
+        "杨桃(5月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -7300,7 +7326,8 @@
       "aliases": [
         "楊桃(9月取樣)",
         "羊桃,洋桃,陽桃,五稜子,五斂子",
-        "Star fruit; Carambola"
+        "Star fruit; Carambola",
+        "杨桃(9月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -7333,7 +7360,8 @@
       "aliases": [
         "楊桃(11月取樣)",
         "羊桃,洋桃,陽桃,五稜子,五斂子",
-        "Star fruit; Carambola"
+        "Star fruit; Carambola",
+        "杨桃(11月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -12223,7 +12251,8 @@
       "aliases": [
         "文旦(2023年取樣)",
         "麻豆文旦,文旦柚",
-        "Pummelo,Pomelo, Shaddock"
+        "Pummelo,Pomelo, Shaddock",
+        "文旦(2023年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -12808,7 +12837,8 @@
       "aliases": [
         "紅甘蔗汁(有機,2023年取樣)",
         "甘蔗汁、高貴蔗汁、果蔗汁、干蔗汁、薯蔗汁、竹蔗汁",
-        "Sugarcane、Noble sugar cane"
+        "Sugarcane、Noble sugar cane",
+        "红甘蔗汁(有机,2023年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -13559,7 +13589,8 @@
       "aliases": [
         "根菾菜根(2023年取樣)",
         "甜菜根,火焰菜根",
-        "Beetroot"
+        "Beetroot",
+        "根菾菜根(2023年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15459,7 +15490,8 @@
       "aliases": [
         "甘藍(圓球形)(2021年取樣)",
         "高麗菜",
-        "Cabbage"
+        "Cabbage",
+        "甘蓝(圆球形)(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15524,7 +15556,8 @@
     {
       "aliases": [
         "甘藍芽",
-        "高麗菜芽"
+        "高麗菜芽",
+        "甘蓝芽"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15686,7 +15719,8 @@
       "aliases": [
         "蚵仔白菜(2022年取樣)",
         "白菜,青菜,散葉白菜,無心菜,菘,不結球白菜,尼龍白菜,皺(碎/曲)葉白菜,皺葉中蕓苔",
-        "Chinese mustard; Chinese cabbage"
+        "Chinese mustard; Chinese cabbage",
+        "蚵仔白菜(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15849,7 +15883,8 @@
       "aliases": [
         "小白菜(土植)(1月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi"
+        "Pak-choi",
+        "小白菜(土植)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15882,7 +15917,8 @@
       "aliases": [
         "小白菜(土植)(3月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi"
+        "Pak-choi",
+        "小白菜(土植)(3月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15915,7 +15951,8 @@
       "aliases": [
         "小白菜(土植)(4月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi,"
+        "Pak-choi,",
+        "小白菜(土植)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15948,7 +15985,8 @@
       "aliases": [
         "小白菜(土植)(7月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi,"
+        "Pak-choi,",
+        "小白菜(土植)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -15981,7 +16019,8 @@
       "aliases": [
         "小白菜(土植)(10月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi,"
+        "Pak-choi,",
+        "小白菜(土植)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16014,7 +16053,8 @@
       "aliases": [
         "小白菜(水耕)(1月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi,"
+        "Pak-choi,",
+        "小白菜(水耕)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16047,7 +16087,8 @@
       "aliases": [
         "小白菜(水耕)(4月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi,"
+        "Pak-choi,",
+        "小白菜(水耕)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16080,7 +16121,8 @@
       "aliases": [
         "小白菜(水耕)(7月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi,"
+        "Pak-choi,",
+        "小白菜(水耕)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16113,7 +16155,8 @@
       "aliases": [
         "小白菜(水耕)(10月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi,"
+        "Pak-choi,",
+        "小白菜(水耕)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16146,7 +16189,8 @@
       "aliases": [
         "小白菜(有機)(1月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi:organic"
+        "Pak-choi:organic",
+        "小白菜(有机)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16179,7 +16223,8 @@
       "aliases": [
         "小白菜(有機)(4月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi:organic"
+        "Pak-choi:organic",
+        "小白菜(有机)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16212,7 +16257,8 @@
       "aliases": [
         "小白菜(有機)(7月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi:organic"
+        "Pak-choi:organic",
+        "小白菜(有机)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16245,7 +16291,8 @@
       "aliases": [
         "小白菜(有機)(10月取樣)",
         "土白菜,青菜,白菜,不結球白菜,水白菜",
-        "Pak-choi:organic"
+        "Pak-choi:organic",
+        "小白菜(有机)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16372,7 +16419,8 @@
       "aliases": [
         "青江菜(土植)(1月取樣)",
         "江門白菜, 湯匙菜,青梗白菜",
-        "Pak-choi , Chinese mustard"
+        "Pak-choi , Chinese mustard",
+        "青江菜(土植)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16405,7 +16453,8 @@
       "aliases": [
         "青江菜(土植)(3月取樣)",
         "江門白菜 ,湯匙菜,青梗白菜",
-        "Pak-choi , Chinese mustard"
+        "Pak-choi , Chinese mustard",
+        "青江菜(土植)(3月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16438,7 +16487,8 @@
       "aliases": [
         "青江菜(土植)(4月取樣)",
         "江門白菜, 湯匙菜,青梗白菜",
-        "Pak-choi , Chinese mustard"
+        "Pak-choi , Chinese mustard",
+        "青江菜(土植)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16471,7 +16521,8 @@
       "aliases": [
         "青江菜(土植)(7月取樣)",
         "江門白菜,湯匙菜,青梗白菜",
-        "Pak-choi , Chinese mustard"
+        "Pak-choi , Chinese mustard",
+        "青江菜(土植)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16504,7 +16555,8 @@
       "aliases": [
         "青江菜(土植)(10月取樣)",
         "江門白菜, 湯匙菜,青梗白菜",
-        "Pak-choi , Chinese mustard"
+        "Pak-choi , Chinese mustard",
+        "青江菜(土植)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16537,7 +16589,8 @@
       "aliases": [
         "青江菜(水耕)(1月取樣)",
         "江門白菜 ,湯匙菜,青梗白菜",
-        "Pak-choi,Chinese mustard"
+        "Pak-choi,Chinese mustard",
+        "青江菜(水耕)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16570,7 +16623,8 @@
       "aliases": [
         "青江菜(水耕)(4月取樣)",
         "江門白菜 , 湯匙菜,青梗白菜",
-        "Pak-choi, Chinese mustard"
+        "Pak-choi, Chinese mustard",
+        "青江菜(水耕)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16603,7 +16657,8 @@
       "aliases": [
         "青江菜(水耕)(7月取樣)",
         "江門白菜 ,湯匙菜,青梗白菜",
-        "Pak-choi ,Chinese mustard"
+        "Pak-choi ,Chinese mustard",
+        "青江菜(水耕)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16636,7 +16691,8 @@
       "aliases": [
         "青江菜(水耕)(10月取樣)",
         "江門白菜 ,湯匙菜,青梗白菜",
-        "Pak-choi , Chinese mustard"
+        "Pak-choi , Chinese mustard",
+        "青江菜(水耕)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16669,7 +16725,8 @@
       "aliases": [
         "青江菜(有機)(1月取樣)",
         "江門白菜,湯匙菜,青梗白菜",
-        "Pak-choi ,Chinese Mustard:organic"
+        "Pak-choi ,Chinese Mustard:organic",
+        "青江菜(有机)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16702,7 +16759,8 @@
       "aliases": [
         "青江菜(有機)(4月取樣)",
         "江門白菜 ,湯匙菜,青梗白菜",
-        "Pak-choi ,Chinese Mustard:organic"
+        "Pak-choi ,Chinese Mustard:organic",
+        "青江菜(有机)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16735,7 +16793,8 @@
       "aliases": [
         "青江菜(有機)(7月取樣)",
         "江門白菜 ,湯匙菜,青梗白菜",
-        "Pak-choi ,Chinese Mustard:organic"
+        "Pak-choi ,Chinese Mustard:organic",
+        "青江菜(有机)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -16768,7 +16827,8 @@
       "aliases": [
         "青江菜(有機)(10月取樣)",
         "江門白菜 , 湯匙菜,青梗白菜",
-        "Pak-choi ,Chinese Mustard:organic"
+        "Pak-choi ,Chinese Mustard:organic",
+        "青江菜(有机)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -17640,7 +17700,8 @@
     {
       "aliases": [
         "芥藍芽",
-        "菜嬰,格藍菜嬰"
+        "菜嬰,格藍菜嬰",
+        "芥蓝芽"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18516,7 +18577,8 @@
       "aliases": [
         "本島萵苣(土植)(1月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce"
+        "Lettuce",
+        "本岛莴苣(土植)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18549,7 +18611,8 @@
       "aliases": [
         "本島萵苣(土植)(3月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce"
+        "Lettuce",
+        "本岛莴苣(土植)(3月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18582,7 +18645,8 @@
       "aliases": [
         "本島萵苣(土植)(4月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce;"
+        "Lettuce;",
+        "本岛莴苣(土植)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18615,7 +18679,8 @@
       "aliases": [
         "本島萵苣(土植)(7月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce;"
+        "Lettuce;",
+        "本岛莴苣(土植)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18648,7 +18713,8 @@
       "aliases": [
         "本島萵苣(土植)(10月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce;"
+        "Lettuce;",
+        "本岛莴苣(土植)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18681,7 +18747,8 @@
       "aliases": [
         "本島萵苣(水耕)(1月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce;"
+        "Lettuce;",
+        "本岛莴苣(水耕)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18714,7 +18781,8 @@
       "aliases": [
         "本島萵苣(水耕)(4月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce;"
+        "Lettuce;",
+        "本岛莴苣(水耕)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18747,7 +18815,8 @@
       "aliases": [
         "本島萵苣(水耕)(7月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce;"
+        "Lettuce;",
+        "本岛莴苣(水耕)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18780,7 +18849,8 @@
       "aliases": [
         "本島萵苣(水耕)(10月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce;"
+        "Lettuce;",
+        "本岛莴苣(水耕)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18813,7 +18883,8 @@
       "aliases": [
         "本島萵苣(有機)(1月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce:organic"
+        "Lettuce:organic",
+        "本岛莴苣(有机)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18846,7 +18917,8 @@
       "aliases": [
         "本島萵苣(有機)(4月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce:organic"
+        "Lettuce:organic",
+        "本岛莴苣(有机)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18879,7 +18951,8 @@
       "aliases": [
         "本島萵苣(有機)(7月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce:organic"
+        "Lettuce:organic",
+        "本岛莴苣(有机)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -18912,7 +18985,8 @@
       "aliases": [
         "本島萵苣(有機)(10月取樣)",
         "葉萵苣,葉萵,萵仔菜,刈葉萵苣,生菜,妹(媚)仔菜,鵝仔菜(草),春不老,印度萵苣",
-        "Lettuce:organic"
+        "Lettuce:organic",
+        "本岛莴苣(有机)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19075,7 +19149,8 @@
       "aliases": [
         "蕹菜(土植)(1月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach;"
+        "Water convolvulus; Water spinach;",
+        "蕹菜(土植)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19108,7 +19183,8 @@
       "aliases": [
         "蕹菜(土植)(4月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach;"
+        "Water convolvulus; Water spinach;",
+        "蕹菜(土植)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19141,7 +19217,8 @@
       "aliases": [
         "蕹菜(土植)(7月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach;"
+        "Water convolvulus; Water spinach;",
+        "蕹菜(土植)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19174,7 +19251,8 @@
       "aliases": [
         "蕹菜(土植)(10月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach;"
+        "Water convolvulus; Water spinach;",
+        "蕹菜(土植)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19207,7 +19285,8 @@
       "aliases": [
         "蕹菜(水耕)(1月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach;"
+        "Water convolvulus; Water spinach;",
+        "蕹菜(水耕)(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19240,7 +19319,8 @@
       "aliases": [
         "蕹菜(水耕)(4月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach;"
+        "Water convolvulus; Water spinach;",
+        "蕹菜(水耕)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19273,7 +19353,8 @@
       "aliases": [
         "蕹菜(水耕)(7月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach:organic"
+        "Water convolvulus; Water spinach:organic",
+        "蕹菜(水耕)(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19306,7 +19387,8 @@
       "aliases": [
         "蕹菜(水耕)(10月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach;"
+        "Water convolvulus; Water spinach;",
+        "蕹菜(水耕)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19339,7 +19421,8 @@
       "aliases": [
         "蕹菜(有機)(4月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach:organic"
+        "Water convolvulus; Water spinach:organic",
+        "蕹菜(有机)(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19372,7 +19455,8 @@
       "aliases": [
         "蕹菜(有機)(10月取樣)",
         "空心菜,應菜,壅菜,甕菜,草菜,無心菜,藤藤菜,竹葉菜,葛菜",
-        "Water convolvulus; Water spinach:organic"
+        "Water convolvulus; Water spinach:organic",
+        "蕹菜(有机)(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19563,7 +19647,8 @@
         "青花菜(1999年取樣)",
         "青花菜(1999年采样)",
         "(青花菜非綠色花椰菜)青(綠)花菜,美國花菜,青花苔,花(青)菜苔,菜苔,花菜苞",
-        "Broccoli"
+        "Broccoli",
+        "青花菜(1999年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19597,7 +19682,8 @@
         "青花菜(2021年取樣)",
         "青花菜(2021年采样)",
         "(青花菜非綠色花椰菜)青(綠)花菜,美國花菜,青花苔,花(青)菜苔,菜苔,花菜苞",
-        "Broccoli"
+        "Broccoli",
+        "青花菜(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -19955,7 +20041,8 @@
       "aliases": [
         "冬瓜(2022年取樣)",
         "白瓜,東瓜,枕瓜,水芝,地芝",
-        "Wax gourd; White gourd; winter melon"
+        "Wax gourd; White gourd; winter melon",
+        "冬瓜(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -20374,7 +20461,8 @@
       "aliases": [
         "隼人瓜(2023年取樣)",
         "梨瓜,壽瓜,合掌瓜,安南瓜,香瓜仔,拳頭瓜,佛掌瓜、香圓瓜,香櫞瓜,佛手瓜,瓦瓜",
-        "Chayote"
+        "Chayote",
+        "隼人瓜(2023年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -22129,7 +22217,8 @@
     },
     {
       "aliases": [
-        "紫甘藍芽"
+        "紫甘藍芽",
+        "紫甘蓝芽"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -22195,7 +22284,8 @@
       "aliases": [
         "黃豆芽(有機,2023年取樣)",
         "大豆芽",
-        "Soybean sprout:organic"
+        "Soybean sprout:organic",
+        "黄豆芽(有机,2023年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -22926,7 +23016,8 @@
     },
     {
       "aliases": [
-        "義大利茼蒿"
+        "義大利茼蒿",
+        "义大利茼蒿"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -27025,6 +27116,7 @@
     {
       "aliases": [
         "牛肋條(2021年取樣)",
+        "牛肋条(2021年取样)",
         "Beef Ribs"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -27381,7 +27473,8 @@
       "aliases": [
         "牛後腿腱子心(2022年取樣)",
         "牛腱,腱子",
-        "Hind shank; Heel muscle; Beef shank"
+        "Hind shank; Heel muscle; Beef shank",
+        "牛后腿腱子心(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -28147,6 +28240,7 @@
     {
       "aliases": [
         "豬肩胛排(2021年取樣)",
+        "猪肩胛排(2021年取样)",
         "Pork shoulder steak"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -28639,7 +28733,8 @@
       "aliases": [
         "豬頰肉(2022年取樣)",
         "豬舌肉,菊花肉",
-        "Pork: cheek meat"
+        "Pork: cheek meat",
+        "猪颊肉(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -30370,7 +30465,8 @@
     },
     {
       "aliases": [
-        "雞排(肉雞)(2021年取樣)"
+        "雞排(肉雞)(2021年取樣)",
+        "鸡排(肉鸡)(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -30720,6 +30816,7 @@
     {
       "aliases": [
         "雞心(肉雞)(2021年取樣)",
+        "鸡心(肉鸡)(2021年取样)",
         "chicken heart"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -30883,7 +30980,8 @@
       "aliases": [
         "雞睪丸",
         "雞子,雞弗",
-        "Chicken: testicles"
+        "Chicken: testicles",
+        "鸡睪丸"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -32597,7 +32695,8 @@
       "aliases": [
         "虱目魚(2022年取樣)",
         "海草魚,遮目魚,殺目魚,安平魚,國姓魚,麻虱目仔,虱目/麻虱目(澎湖)",
-        "Salmon herring; Bangos; Bony salmon; Milkfish; Milk fish"
+        "Salmon herring; Bangos; Bony salmon; Milkfish; Milk fish",
+        "虱目鱼(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -32793,7 +32892,8 @@
       "aliases": [
         "鬍鯰",
         "鬍子鯰,土殺,本土土虱,塘虱魚",
-        "Puntat; Walking catfish; Whitespotted freshwater catfish; Whitespotted clarias; Cat-fish; Chinese catfish"
+        "Puntat; Walking catfish; Whitespotted freshwater catfish; Whitespotted clarias; Cat-fish; Chinese catfish",
+        "胡鲶"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -32826,7 +32926,8 @@
       "aliases": [
         "斑海鯰",
         "成仔魚,成仔丁,銀成,白肉成,臭臊成,生仔魚,鰻鯰,賓士魚",
-        "Sea barbel; Sea catfish; Spotted catfish; Spotted sea catfish; Giant cat-fish; Marine catfish"
+        "Sea barbel; Sea catfish; Spotted catfish; Spotted sea catfish; Giant cat-fish; Marine catfish",
+        "斑海鲶"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -37094,7 +37195,8 @@
       "aliases": [
         "尼羅口孵非鯽(含皮)(2022年取樣)",
         "南洋鯽仔,尼羅吳郭魚",
-        "Nile tilapia; Nilotica; Cichlid; Edward tilapia; Mozambique tilapia; Mango fish"
+        "Nile tilapia; Nilotica; Cichlid; Edward tilapia; Mozambique tilapia; Mango fish",
+        "尼罗口孵非鲫(含皮)(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -37545,7 +37647,8 @@
       "aliases": [
         "莫三比克口孵非鯽",
         "非洲仔,南洋鯽仔,在來吳郭魚,吳郭魚/鹹水吳郭(澎湖)",
-        "Tilapia; Common tilapia; African mouthbrooder; Largemouth kurper; Mozambique mouthbrooder; Kurper bream; Mozambique cichlid; Java tilapia; Mozambique tilapia"
+        "Tilapia; Common tilapia; African mouthbrooder; Largemouth kurper; Mozambique mouthbrooder; Kurper bream; Mozambique cichlid; Java tilapia; Mozambique tilapia",
+        "莫三比克口孵非鲫"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -40483,7 +40586,8 @@
       "aliases": [
         "白對蝦(小)(2022年取樣)",
         "南美白蝦,美洲白蝦,南美白對蝦,白蝦",
-        "Pacific white shrimp, raw"
+        "Pacific white shrimp, raw",
+        "白对虾(小)(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -42854,6 +42958,7 @@
     {
       "aliases": [
         "土雞蛋(2022年取樣)",
+        "土鸡蛋(2022年取样)",
         "Egg, whole, raw, fresh"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -45068,7 +45173,8 @@
       "aliases": [
         "全脂鮮乳(1月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(1月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -45101,7 +45207,8 @@
       "aliases": [
         "全脂鮮乳(4月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(4月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -45134,7 +45241,8 @@
       "aliases": [
         "全脂鮮乳(6月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(6月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -45167,7 +45275,8 @@
       "aliases": [
         "全脂鮮乳(9月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(9月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -45200,7 +45309,8 @@
       "aliases": [
         "全脂鮮乳(10月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(10月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -45233,7 +45343,8 @@
       "aliases": [
         "全脂鮮乳(11月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(11月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -45266,7 +45377,8 @@
       "aliases": [
         "全脂鮮乳(12月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(12月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -45299,7 +45411,8 @@
       "aliases": [
         "全脂鮮乳(7月取樣)",
         "牛乳,牛奶",
-        "Whole fresh milk"
+        "Whole fresh milk",
+        "全脂鲜乳(7月取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -47823,6 +47936,7 @@
     {
       "aliases": [
         "豬油(2022年取樣)",
+        "猪油(2022年取样)",
         "Lard"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -48052,7 +48166,8 @@
       "aliases": [
         "人造奶油(2021年取樣)",
         "乳瑪琳",
-        "Milkmarrine,Margarine"
+        "Milkmarrine,Margarine",
+        "人造奶油(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -51446,6 +51561,7 @@
     {
       "aliases": [
         "咖哩塊",
+        "咖哩块",
         "Curry"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -52599,7 +52715,8 @@
     },
     {
       "aliases": [
-        "義式乳酪醬"
+        "義式乳酪醬",
+        "义式乳酪酱"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -52849,7 +52966,8 @@
     },
     {
       "aliases": [
-        "蕃茄義大利麵醬"
+        "蕃茄義大利麵醬",
+        "蕃茄义大利面酱"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -53981,7 +54099,8 @@
       "aliases": [
         "沙拉醬(2021年取樣)",
         "蛋黃醬",
-        "Salad dressing"
+        "Salad dressing",
+        "沙拉酱(2021年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -54044,6 +54163,7 @@
     {
       "aliases": [
         "無蛋沙拉醬(2021年取樣)",
+        "无蛋沙拉酱(2021年取样)",
         "Eggless salad dressing"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -56411,7 +56531,8 @@
     },
     {
       "aliases": [
-        "仙草凍(2020取樣)"
+        "仙草凍(2020取樣)",
+        "仙草冻(2020取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -56751,6 +56872,7 @@
     {
       "aliases": [
         "紅豆牛奶冰棒",
+        "红豆牛奶冰棒",
         "Red bean milk ice bar"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -57127,7 +57249,8 @@
     },
     {
       "aliases": [
-        "零食泡麵"
+        "零食泡麵",
+        "零食泡面"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -60391,6 +60514,7 @@
     {
       "aliases": [
         "泡麵(牛肉口味)",
+        "泡面(牛肉口味)",
         "Instant noodle"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -60423,6 +60547,7 @@
     {
       "aliases": [
         "泡麵(鮮蝦口味)",
+        "泡面(鲜虾口味)",
         "Instant noodle"
       ],
       "attribution": "Taiwan Food and Drug Administration",
@@ -63583,7 +63708,8 @@
       "aliases": [
         "傳統豆腐(2022年取樣)",
         "板豆腐",
-        "Tofu; Bean curd; Soy bean cheese"
+        "Tofu; Bean curd; Soy bean cheese",
+        "传统豆腐(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -67604,7 +67730,8 @@
       "aliases": [
         "鯖魚(醃製)(2022年取樣)",
         "鹹鯖魚",
-        "Mackerel, salted"
+        "Mackerel, salted",
+        "鲭鱼(腌制)(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,
@@ -67767,7 +67894,8 @@
       "aliases": [
         "鯔魚卵(加工)(2022年取樣)",
         "烏魚卵,烏魚子",
-        "Mullet roe"
+        "Mullet roe",
+        "鲻鱼卵(加工)(2022年取样)"
       ],
       "attribution": "Taiwan Food and Drug Administration",
       "basis_amount": 100.0,

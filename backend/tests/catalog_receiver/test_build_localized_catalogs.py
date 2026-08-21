@@ -151,12 +151,29 @@ def _build_args(tmp_path: Path) -> tuple[list[str], Path, Path]:
             "categories": {"strength": "力量训练"},
         },
     )
+    legacy_search_terms = _write_json(
+        tmp_path / "legacy-search-terms.json",
+        {
+            "schema_version": 1,
+            "foods": {
+                "A001": ["Legacy rice", "ＭＩＦＡＮ", "mifan"],
+            },
+            "exercises": {
+                "Barbell_Full_Squat": [
+                    "Legacy full squat",
+                    "ＢＡＲＢＥＬＬ ＦＵＬＬ ＳＱＵＡＴ",
+                    "Barbell Full Squat",
+                ],
+            },
+        },
+    )
     args = [
         "--foods", str(food_catalog),
         "--food-localization", str(food_localization),
         "--exercises", str(exercise_catalog),
         "--exercise-localization", str(exercise_localization),
         "--exercise-taxonomy", str(taxonomy),
+        "--legacy-search-terms", str(legacy_search_terms),
         "--food-output", str(food_catalog),
         "--exercise-output", str(exercise_catalog),
     ]
@@ -184,7 +201,19 @@ def test_build_is_sorted_and_byte_idempotent(tmp_path: Path) -> None:
 
     assert [record["source_record_id"] for record in foods] == ["A001", "B002"]
     assert [record["name"] for record in foods] == ["米饭", "土豆"]
+    assert foods[0]["aliases"] == [
+        "白飯",
+        "白饭",
+        "A001 food",
+        "Legacy rice",
+        "ＭＩＦＡＮ",
+    ]
     assert exercises[0]["name"] == "杠铃深蹲"
+    assert exercises[0]["aliases"] == [
+        "Barbell Full Squat",
+        "深蹲",
+        "Legacy full squat",
+    ]
     assert exercises[0]["provenance"]["upstream_name"] == "Barbell Full Squat"
     assert exercises[0]["provenance"]["upstream"]["instructions"] == [
         "Stand with the bar.",
