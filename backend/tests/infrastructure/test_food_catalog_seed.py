@@ -194,9 +194,9 @@ def test_localized_reimport_preserves_ids_and_historical_meal_names(
     )
     assert localized_rice.id == old_rice.id
     assert localized_rice.name == "米饭"
-    assert {"白飯", "白饭", "Cooked rice"} <= set(localized_rice.aliases)
+    assert {"白飯", "白饭", "米飯", "Cooked rice"} <= set(localized_rice.aliases)
     assert localized_rice.provenance["localization"]["locale"] == "zh-CN"
-    assert localized_rice.provenance["localization"]["method"] == "glossary"
+    assert localized_rice.provenance["localization"]["method"] == "record_override"
     assert next(
         item
         for item in catalog.search("user-a", "Cooked rice", limit=20)

@@ -297,12 +297,12 @@ def test_bundled_tfda_snapshot_contains_only_complete_foods() -> None:
         if record["source_record_id"] == "A0550601"
     )
     assert rice["name"] == "米饭"
-    assert {"白飯", "白饭", "Cooked rice"} <= set(rice["aliases"])
+    assert {"白飯", "白饭", "米飯", "Cooked rice"} <= set(rice["aliases"])
     assert rice["provenance"]["profile"] == "tfda-foods@2.0.0"
     assert rice["provenance"]["localization"] == {
-        "asset_version": "1.3.0",
+        "asset_version": "1.3.1",
         "locale": "zh-CN",
-        "method": "glossary",
+        "method": "record_override",
         "upstream_name": "白飯",
     }
 

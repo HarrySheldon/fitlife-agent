@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.3.0",
+  "version": "1.3.1",
   "source_name": "Taiwan FDA Food Nutrient Database",
   "locale": "zh-CN",
   "glossary": [
@@ -16,6 +16,11 @@
     {"source": "凤梨", "target": "菠萝", "match_mode": "suffix", "priority": 100}
   ],
   "entries": {
+    "A0550601": {
+      "name_zh_cn": "米饭",
+      "aliases": ["米飯"],
+      "review_note": "保留通用繁体写法，确保简繁搜索命中同一条米饭记录。"
+    },
     "D1200201": {
       "name_zh_cn": "凤梨释迦",
       "aliases": [],

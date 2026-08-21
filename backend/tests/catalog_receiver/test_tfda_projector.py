@@ -100,7 +100,7 @@ def test_projects_grouped_tfda_nutrients_and_preserves_aliases() -> None:
     assert food.provenance["name_conversion"] == "opencc_tw2sp"
     assert food.provenance["localization"] == {
         "locale": "zh-CN",
-        "asset_version": "1.3.0",
+        "asset_version": "1.3.1",
         "upstream_name": "白飯",
         "method": "glossary",
     }
@@ -162,7 +162,7 @@ def test_bundled_food_localization_contains_mainland_glossary_and_reviewed_overr
         localization_path=CATALOG_LOCALIZATION,
     )
 
-    assert bundle.version == "1.3.0"
+    assert bundle.version == "1.3.1"
     assert {rule.target for rule in bundle.food_glossary} >= {
         "米饭",
         "金枪鱼",
@@ -172,7 +172,11 @@ def test_bundled_food_localization_contains_mainland_glossary_and_reviewed_overr
         "菠萝",
     }
     assert tuple(rule.model_dump() for rule in bundle.food_glossary) == FOOD_GLOSSARY
-    assert tuple(bundle.food_entries) == ("D1200201",)
+    assert tuple(bundle.food_entries) == ("A0550601", "D1200201")
+    rice_override = bundle.food("A0550601")
+    assert rice_override.name_zh_cn == "米饭"
+    assert rice_override.aliases == ("米飯",)
+    assert rice_override.review_note
     override = bundle.food("D1200201")
     assert override.name_zh_cn == "凤梨释迦"
     assert override.review_note
