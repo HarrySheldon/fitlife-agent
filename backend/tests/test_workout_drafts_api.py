@@ -54,6 +54,31 @@ def _profile(client: TestClient, headers: dict[str, str]) -> None:
     assert response.status_code == 200
 
 
+def test_mainland_squat_display_preserves_english_search_alias(client):
+    headers = _register(client, "catalog-mainland-squat")
+    records = []
+
+    for query in ("杠铃深蹲", "Barbell Full Squat"):
+        response = client.get(
+            "/api/v1/catalog/exercises/search",
+            params={"q": query},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        matches = [
+            item for item in response.json()["data"]
+            if item["source_record_id"] == "Barbell_Full_Squat"
+        ]
+        assert len(matches) == 1, query
+        records.append(matches[0])
+
+    assert {record["id"] for record in records} == {records[0]["id"]}
+    assert {record["name"] for record in records} == {"杠铃深蹲"}
+    assert {record["primary_muscle"] for record in records} == {"股四头肌"}
+    assert {record["source"] for record in records} == {"public"}
+
+
 def _payload(
     squat_id: str,
     running_id: str,
