@@ -48,7 +48,6 @@ def create_workout(record: WorkoutRecord, user_id: str | None = None) -> DailyDe
 
 
 def create_agent_entry(request: AgentEntryRequest, user_id: str | None = None) -> AgentEntryResponse:
-    repository = get_fitness_repository()
     actions: list[str] = []
     day = _parse_date(request.date).isoformat()
     text = request.text.strip()
@@ -57,36 +56,10 @@ def create_agent_entry(request: AgentEntryRequest, user_id: str | None = None) -
     duration = _first_number_before_unit(text, ["分钟", "min", "mins", "minute", "minutes"])
 
     if calories is not None or protein is not None:
-        repository.append_meal(
-            MealRecord(
-                date=day,
-                meal="smart_log",
-                food=_short_text(text),
-                amount="parsed from text",
-                calories=calories or 0,
-                protein=protein or 0,
-                carbs=0,
-                fat=0,
-            ),
-            user_id,
-        )
-        actions.append("meal_record_created")
+        actions.append("meal_record_proposed")
 
     if duration is not None or _looks_like_workout(text):
-        repository.append_workout(
-            WorkoutRecord(
-                date=day,
-                type="cardio" if _looks_like_cardio(text) else "strength",
-                exercise=_short_text(text),
-                muscle_group="full_body",
-                sets=0,
-                reps=0,
-                weight=0,
-                duration_min=duration or 0,
-            ),
-            user_id,
-        )
-        actions.append("workout_record_created")
+        actions.append("workout_record_proposed")
 
     return AgentEntryResponse(parsed_actions=actions, day=get_daily_detail(day, user_id))
 
@@ -168,12 +141,3 @@ def _number_after_label(text: str, labels: list[str]) -> float | None:
 def _looks_like_workout(text: str) -> bool:
     keywords = ["训练", "跑步", "力量", "深蹲", "卧推", "workout", "run", "squat", "press"]
     return any(keyword.lower() in text.lower() for keyword in keywords)
-
-
-def _looks_like_cardio(text: str) -> bool:
-    keywords = ["跑", "有氧", "cardio", "run", "walk", "bike"]
-    return any(keyword.lower() in text.lower() for keyword in keywords)
-
-
-def _short_text(text: str) -> str:
-    return text[:80]

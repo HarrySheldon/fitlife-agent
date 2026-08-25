@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,7 +9,6 @@ import { Today } from './Today'
 const state = vi.hoisted(() => ({
   data: null as TodayOverview | null,
   refresh: vi.fn(),
-  setPlannedMealCount: vi.fn(),
 }))
 
 vi.mock('../hooks/usePreferences', () => ({
@@ -23,12 +22,6 @@ vi.mock('../hooks/useToday', () => ({
     error: null,
     refresh: state.refresh,
   }),
-}))
-
-vi.mock('../services/api', () => ({
-  api: {
-    setPlannedMealCount: state.setPlannedMealCount,
-  },
 }))
 
 vi.mock('../components/CoachPanel', () => ({
@@ -60,7 +53,6 @@ const base: TodayOverview = {
 beforeEach(async () => {
   state.data = base
   state.refresh.mockReset().mockResolvedValue(undefined)
-  state.setPlannedMealCount.mockReset().mockResolvedValue(base)
   await i18n.changeLanguage('en-US')
 })
 
@@ -110,17 +102,10 @@ describe('Today SQLite daily summary', () => {
     expect(screen.getByRole('button', { name: 'Add training' })).toBeInTheDocument()
   })
 
-  it('updates the selected day planned meal count through its own endpoint', async () => {
+  it('shows planned meal count without owning a write control', () => {
     render(<MemoryRouter><Today /></MemoryRouter>)
 
-    fireEvent.change(screen.getByLabelText('Planned meals'), {
-      target: { value: '5' },
-    })
-
-    await waitFor(() => expect(state.setPlannedMealCount).toHaveBeenCalledWith(
-      '2026-07-25',
-      5,
-    ))
-    expect(state.refresh).toHaveBeenCalledOnce()
+    expect(screen.getByText('Planned meals')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Planned meals' })).not.toBeInTheDocument()
   })
 })

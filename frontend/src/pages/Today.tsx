@@ -16,7 +16,6 @@ import { LoadingState } from '../components/LoadingState'
 import { TargetProgress } from '../components/TargetProgress'
 import { usePreferences } from '../hooks/usePreferences'
 import { useToday } from '../hooks/useToday'
-import { api } from '../services/api'
 import type { NutritionValues, TargetProgress as TargetProgressType } from '../types'
 
 export function Today() {
@@ -27,9 +26,7 @@ export function Today() {
   const [selectedDate, setSelectedDate] = useState(
     () => validDate(params.get('date')) ?? localDate(),
   )
-  const { data, loading, error, refresh } = useToday(selectedDate)
-  const [updatingMealCount, setUpdatingMealCount] = useState(false)
-  const [mealCountError, setMealCountError] = useState<string | null>(null)
+  const { data, loading, error } = useToday(selectedDate)
 
   const coachActions = useMemo(() => {
     const labels = {
@@ -45,19 +42,6 @@ export function Today() {
   const progress = data
     ? nutritionProgress(data.consumed, data.target, t)
     : []
-
-  async function setPlannedMealCount(value: number) {
-    setUpdatingMealCount(true)
-    setMealCountError(null)
-    try {
-      await api.setPlannedMealCount(selectedDate, value)
-      await refresh()
-    } catch (cause) {
-      setMealCountError((cause as Error).message)
-    } finally {
-      setUpdatingMealCount(false)
-    }
-  }
 
   return (
     <div className="page-stack today-page">
@@ -93,19 +77,10 @@ export function Today() {
                 <h2 id="today-add-record">{t('today.addRecord')}</h2>
               </div>
               <div>
-                <label className="planned-meal-count">
+                <div className="planned-meal-count">
                   <span>{t('today.plannedMeals')}</span>
-                  <select
-                    aria-label={t('today.plannedMeals')}
-                    value={data.planned_meal_count}
-                    disabled={updatingMealCount}
-                    onChange={(event) => void setPlannedMealCount(Number(event.target.value))}
-                  >
-                    {Array.from({ length: 12 }, (_, index) => index + 1).map((count) => (
-                      <option key={count} value={count}>{count}</option>
-                    ))}
-                  </select>
-                </label>
+                  <strong>{data.planned_meal_count}</strong>
+                </div>
                 <button
                   type="button"
                   className="secondary-button"
@@ -132,8 +107,6 @@ export function Today() {
                 </button>
               </div>
             </section>
-            {mealCountError ? <p className="form-error">{mealCountError}</p> : null}
-
             {data.meals?.length ? (
               <section className="daily-log-section">
                 <header>
