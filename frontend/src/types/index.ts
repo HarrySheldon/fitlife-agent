@@ -402,6 +402,24 @@ export interface GeneratedPlan {
   trace: Record<string, unknown>
 }
 
+export type PlanKind = 'deterministic' | 'agent_adjusted'
+
+export interface PlanDraft {
+  draft_id: string
+  created_at: string
+  kind: PlanKind
+  based_on_plan_id: string | null
+  plan: GeneratedPlan
+}
+
+export interface StoredPlan {
+  plan_id: string
+  activated_at: string
+  kind: PlanKind
+  based_on_plan_id: string | null
+  plan: GeneratedPlan
+}
+
 export interface EvalResult {
   total_tests: number
   pass_rate: number

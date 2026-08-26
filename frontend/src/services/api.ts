@@ -24,11 +24,13 @@ import type {
   ModelSettingsUpdate,
   OverallGoalVersion,
   OverallGoalVersionUpdate,
+  PlanDraft,
   ProfileSetup,
   ProfileSetupMutation,
   ProfileVersionUpdate,
   ProcessingMode,
   StoredWeeklyReport,
+  StoredPlan,
   TargetPreview,
   TodayOverview,
   TrainingPersonalizationUpdate,
@@ -178,6 +180,15 @@ export const api = {
   interpretWeeklyReport: (week: string) =>
     request<CoachActionResponse>(`/report/weekly/${encodeURIComponent(week)}/interpret`, { method: 'POST' }),
   generatePlan: () => request<GeneratedPlan>('/plan/generate', { method: 'POST' }),
+  listPlans: () => request<StoredPlan[]>('/plan'),
+  getPlan: (planId: string) => request<StoredPlan>(`/plan/${encodeURIComponent(planId)}`),
+  createPlanDraft: () => request<PlanDraft>('/plan/draft', { method: 'POST' }),
+  createPlanAdjustmentDraft: (planId: string, instructions: string) =>
+    request<PlanDraft>(`/plan/${encodeURIComponent(planId)}/draft`, {
+      method: 'POST', body: JSON.stringify({ instructions }),
+    }),
+  activatePlan: (draftId: string) =>
+    request<StoredPlan>('/plan/activate', { method: 'POST', body: JSON.stringify({ draft_id: draftId }) }),
   runEval: (limit = 20) => request<EvalResult>('/eval/run', { method: 'POST', body: JSON.stringify({ limit }) }),
   calendarDays: (start: string, end: string) => request<DailySummary[]>(`/calendar/days?start=${start}&end=${end}`),
   calendarDay: (date: string) => request<DailyDetail>(`/calendar/day/${date}`),

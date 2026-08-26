@@ -10,6 +10,8 @@ import { LogbookDay } from '../pages/logbook/LogbookDay'
 import { MealEntry } from '../pages/MealEntry'
 import { Onboarding } from '../pages/Onboarding'
 import { Plan } from '../pages/Plan'
+import { NewPlan } from '../pages/plan/NewPlan'
+import { PlanDetail } from '../pages/plan/PlanDetail'
 import { Profile } from '../pages/Profile'
 import { Review } from '../pages/Review'
 import { WeeklyReview } from '../pages/review/WeeklyReview'
@@ -43,6 +45,8 @@ export function AppRoutes() {
             <Route path="/review" element={<Review />} />
             <Route path="/review/week/:week" element={<WeeklyReview />} />
             <Route path="/plan" element={<Plan />} />
+            <Route path="/plan/new" element={<NewPlan />} />
+            <Route path="/plan/:planId" element={<PlanDetail />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<SettingsHome />} />
             <Route path="/settings/general" element={<GeneralSettings />} />

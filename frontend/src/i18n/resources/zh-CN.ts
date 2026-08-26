@@ -180,6 +180,11 @@ export const zhCN = {
     plan: {
       eyebrow: '下周执行', title: '计划', generate: '生成计划', empty: '尚未生成计划', adjust: '调整下周计划', validation: '校验',
       nutrition: '营养', dietPlan: '饮食计划', training: '训练', workoutPlan: '训练计划', ready: '可以使用', needsReview: '需要复核',
+      create: '创建计划', history: '计划历史', loadingHistory: '正在加载计划历史', noHistory: '尚无已启用计划',
+      back: '返回计划', newTitle: '新计划草稿', confirm: '确认并启用', activating: '正在启用……',
+      detailEyebrow: '已启用计划', loadingPlan: '正在加载计划', instructions: '调整说明',
+      instructionsPlaceholder: '描述你希望进行的调整', generateAdjustment: '生成调整草稿',
+      confirmAdjustment: '确认调整后的计划', adjustmentDraft: 'Agent 调整草稿', invalidId: '请使用有效的计划 ID。',
     },
     profile: {
       eyebrow: '个性化', title: '个人资料', loading: '正在加载个人资料', analyzeTargets: '分析我的目标', heightCm: '身高（厘米）',

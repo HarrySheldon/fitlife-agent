@@ -344,6 +344,18 @@ class GeneratedPlan(BaseModel):
     trace: dict = Field(default_factory=dict)
 
 
+class PlanAdjustmentDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instructions: str = Field(min_length=1, max_length=1000)
+
+
+class PlanActivationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: str = Field(pattern=r"^draft-[a-f0-9]{16,64}$")
+
+
 class EvalCase(BaseModel):
     question: str
     expected_tool: str | None = None

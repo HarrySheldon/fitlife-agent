@@ -186,6 +186,11 @@ export const enUS = {
       eyebrow: 'Next-week execution', title: 'Plan', generate: 'Generate plan', empty: 'No plan generated yet',
       adjust: 'Adjust next plan', validation: 'Validation', nutrition: 'Nutrition', dietPlan: 'Diet plan',
       training: 'Training', workoutPlan: 'Workout plan', ready: 'Ready to use', needsReview: 'Needs review',
+      create: 'Create plan', history: 'Plan history', loadingHistory: 'Loading plan history', noHistory: 'No active plans yet',
+      back: 'Back to plans', newTitle: 'New plan draft', confirm: 'Confirm and activate', activating: 'Activating...',
+      detailEyebrow: 'Active plan', loadingPlan: 'Loading plan', instructions: 'Adjustment instructions',
+      instructionsPlaceholder: 'Describe the change you want', generateAdjustment: 'Generate adjustment draft',
+      confirmAdjustment: 'Confirm adjusted plan', adjustmentDraft: 'Agent adjustment draft', invalidId: 'Use a valid plan ID.',
     },
     profile: {
       eyebrow: 'Personalization', title: 'Profile', loading: 'Loading profile', analyzeTargets: 'Analyze my targets',
