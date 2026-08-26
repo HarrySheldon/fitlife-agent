@@ -173,6 +173,7 @@ export const enUS = {
       addMeal: 'Add meal for {{date}}', addTraining: 'Add training for {{date}}', food: 'Food', amount: 'Amount',
       calories: 'Calories', protein: 'Protein', exercise: 'Exercise', muscleGroup: 'Muscle group', sets: 'Sets',
       weight: 'Weight ({{unit}})', minutes: 'Minutes', optionalInput: 'Optional input', csvImport: 'CSV import',
+      actions: 'Logbook actions', smartEntry: 'Smart entry',
     },
     review: {
       eyebrow: 'Trends and weekly insight', title: 'Review', generate: 'Generate weekly report',

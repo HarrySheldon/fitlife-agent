@@ -169,6 +169,7 @@ export const zhCN = {
       noMeals: '该日期没有餐食记录', noTraining: '该日期没有训练记录', addMeal: '添加 {{date}} 的餐食', addTraining: '添加 {{date}} 的训练',
       food: '食物', amount: '份量', calories: '热量', protein: '蛋白质', exercise: '动作', muscleGroup: '肌群', sets: '组数',
       weight: '重量（{{unit}}）', minutes: '分钟', optionalInput: '可选输入', csvImport: 'CSV 导入',
+      actions: '日志操作', smartEntry: '智能录入',
     },
     review: {
       eyebrow: '趋势与每周洞察', title: '复盘', generate: '生成周报', loading: '正在加载趋势', calorieTrend: '热量趋势',

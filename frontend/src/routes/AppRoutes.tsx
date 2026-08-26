@@ -5,7 +5,8 @@ import { OnboardingGate } from '../components/OnboardingGate'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { Auth } from '../pages/Auth'
 import { Evaluation } from '../pages/Evaluation'
-import { Logbook } from '../pages/Logbook'
+import { Logbook, LogbookImport } from '../pages/Logbook'
+import { LogbookDay } from '../pages/logbook/LogbookDay'
 import { MealEntry } from '../pages/MealEntry'
 import { Onboarding } from '../pages/Onboarding'
 import { Plan } from '../pages/Plan'
@@ -36,6 +37,8 @@ export function AppRoutes() {
             <Route path="/today/workout/new" element={<WorkoutEntry />} />
             <Route path="/today/smart-entry" element={<SmartEntry />} />
             <Route path="/logbook" element={<Logbook />} />
+            <Route path="/logbook/import" element={<LogbookImport />} />
+            <Route path="/logbook/:date" element={<LogbookDay />} />
             <Route path="/review" element={<Review />} />
             <Route path="/plan" element={<Plan />} />
             <Route path="/profile" element={<Profile />} />
