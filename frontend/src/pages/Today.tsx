@@ -1,16 +1,17 @@
 import {
   CalendarDays,
+  Bot,
   Dumbbell,
   Flame,
   Plus,
   Sparkles,
   Utensils,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { CoachPanel } from '../components/CoachPanel'
+import { CoachDrawer } from '../components/CoachDrawer'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { TargetProgress } from '../components/TargetProgress'
@@ -26,6 +27,8 @@ export function Today() {
   const [selectedDate, setSelectedDate] = useState(
     () => validDate(params.get('date')) ?? localDate(),
   )
+  const [coachOpen, setCoachOpen] = useState(false)
+  const coachTriggerRef = useRef<HTMLButtonElement>(null)
   const { data, loading, error } = useToday(selectedDate)
 
   const coachActions = useMemo(() => {
@@ -175,7 +178,10 @@ export function Today() {
               </section>
             ) : null}
           </div>
-          <CoachPanel surface="today" date={selectedDate} actions={coachActions} />
+          <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" onClick={() => setCoachOpen(true)}>
+            <Bot size={17} />{t('coach.open')}
+          </button>
+          <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="today" date={selectedDate} actions={coachActions} />
         </div>
       ) : null}
     </div>

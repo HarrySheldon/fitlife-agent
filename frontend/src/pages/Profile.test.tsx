@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 
 import type {
   DailyTargetVersion,
@@ -12,7 +13,8 @@ import type {
   TargetPreview,
   UserProfile,
 } from '../types'
-import { Profile } from './Profile'
+import { EditProfile as Profile } from './profile/EditProfile'
+import { Profile as ProfileSummary } from './Profile'
 
 
 const profile: ProfileVersion = {
@@ -507,9 +509,12 @@ describe('Profile', () => {
     await waitFor(() => expect(submit).toBeEnabled())
   })
 
-  it('states that Coach target analysis is advice only', () => {
-    render(<Profile />)
+  it('states that Coach target analysis is advice only in the summary Coach entry', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><ProfileSummary /></MemoryRouter>)
 
+    await user.click(screen.getByRole('button', { name: 'Ask Coach for target advice' }))
     expect(screen.getByText('Coach analysis is advice only and never changes saved targets.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Coach' })).toBeInTheDocument()
   })
 })

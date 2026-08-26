@@ -1,9 +1,9 @@
-import { Bot, FileText, Sparkles } from 'lucide-react'
+import { Bot, FileText } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 
+import { CoachDrawer } from '../../components/CoachDrawer'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingState } from '../../components/LoadingState'
 import { ReportViewer } from '../../components/ReportViewer'
@@ -16,17 +16,19 @@ export function WeeklyReview() {
   const validWeek = isIsoWeekKey(week)
   const routeWeekRef = useRef(week)
   const requestGenerationRef = useRef(0)
+  const activeOperationRef = useRef<{ kind: 'generating' | 'interpreting'; owner: symbol } | null>(null)
   if (routeWeekRef.current !== week) {
     routeWeekRef.current = week
     requestGenerationRef.current += 1
+    activeOperationRef.current = null
   }
   const [stored, setStored] = useState<StoredWeeklyReport | null>(null)
   const [loading, setLoading] = useState(validWeek)
   const [generating, setGenerating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [interpretation, setInterpretation] = useState<CoachActionResponse | null>(null)
   const [interpreting, setInterpreting] = useState(false)
-  const [interpretationError, setInterpretationError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [coachOpen, setCoachOpen] = useState(false)
+  const coachTriggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     const requestGeneration = ++requestGenerationRef.current
@@ -34,8 +36,8 @@ export function WeeklyReview() {
       setStored(null); setLoading(false); setError(t('review.invalidWeek')); return
     }
     setStored(null); setLoading(true); setError(null)
-    setGenerating(false); setInterpreting(false)
-    setInterpretation(null); setInterpretationError(null)
+    activeOperationRef.current = null
+    setGenerating(false); setInterpreting(false); setCoachOpen(false)
     api.getWeeklyReport(week).then((report) => {
       if (requestGenerationRef.current === requestGeneration) setStored(report)
     })
@@ -52,9 +54,11 @@ export function WeeklyReview() {
 
   async function generate() {
     if (!validWeek) return
+    const owner = beginOperation('generating')
+    if (!owner) return
     const requestGeneration = ++requestGenerationRef.current
     setLoading(false); setGenerating(true); setError(null)
-    setInterpreting(false); setInterpretation(null); setInterpretationError(null)
+    setCoachOpen(false)
     try {
       const report = await api.generateWeeklyReport(week)
       if (requestGenerationRef.current === requestGeneration) setStored(report)
@@ -63,24 +67,36 @@ export function WeeklyReview() {
       if (requestGenerationRef.current === requestGeneration) setError((err as Error).message)
     }
     finally {
-      if (requestGenerationRef.current === requestGeneration) setGenerating(false)
+      if (requestGenerationRef.current === requestGeneration) finishOperation(owner)
     }
   }
 
-  async function interpret() {
-    if (!validWeek || !stored) return
+  async function interpret(): Promise<CoachActionResponse> {
+    if (!validWeek || !stored) throw new Error('WEEKLY_REPORT_REQUIRED')
+    const owner = beginOperation('interpreting')
+    if (!owner) throw new Error('WEEKLY_REPORT_OPERATION_IN_PROGRESS')
     const requestGeneration = ++requestGenerationRef.current
-    setInterpreting(true); setInterpretation(null); setInterpretationError(null)
+    setInterpreting(true)
     try {
-      const answer = await api.interpretWeeklyReport(week)
-      if (requestGenerationRef.current === requestGeneration) setInterpretation(answer)
+      return await api.interpretWeeklyReport(week)
+    } finally {
+      if (requestGenerationRef.current === requestGeneration) finishOperation(owner)
     }
-    catch (err) {
-      if (requestGenerationRef.current === requestGeneration) setInterpretationError((err as Error).message)
-    }
-    finally {
-      if (requestGenerationRef.current === requestGeneration) setInterpreting(false)
-    }
+  }
+
+  function beginOperation(kind: 'generating' | 'interpreting'): symbol | null {
+    if (activeOperationRef.current) return null
+    const owner = Symbol(kind)
+    activeOperationRef.current = { kind, owner }
+    return owner
+  }
+
+  function finishOperation(owner: symbol) {
+    const operation = activeOperationRef.current
+    if (operation?.owner !== owner) return
+    activeOperationRef.current = null
+    if (operation.kind === 'generating') setGenerating(false)
+    else setInterpreting(false)
   }
 
   return <div className="page-stack review-page">
@@ -91,7 +107,8 @@ export function WeeklyReview() {
     </header>
     {error ? <ErrorState message={error} /> : null}
     {loading ? <LoadingState label={t('review.loadingReport')} /> : null}
-    {stored ? <div className="review-layout"><div className="review-main"><ReportViewer report={stored.report} /></div><aside className="coach-panel"><header><Bot size={20} /><div><span>{t('coach.eyebrow')}</span><h2>{t('coach.title')}</h2></div></header><div className="coach-actions"><button type="button" onClick={() => void interpret()} disabled={interpreting || generating}><Sparkles size={16} />{interpreting ? t('coach.thinking') : t('review.explain')}</button></div>{interpretationError ? <p className="form-error">{interpretationError}</p> : null}{interpretation ? <div className="coach-answer"><ReactMarkdown>{interpretation.answer_markdown}</ReactMarkdown></div> : <p className="coach-empty">{t('coach.empty')}</p>}</aside></div> : null}
+    {stored ? <div className="review-layout"><div className="review-main"><ReportViewer report={stored.report} /></div><button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" disabled={generating} onClick={() => { if (activeOperationRef.current?.kind !== 'generating') setCoachOpen(true) }}><Bot size={17} />{t('coach.open')}</button></div> : null}
+    <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="review" question={`ISO week: ${week}`} requestAction={interpret} actionsDisabled={generating || interpreting} actions={[{ action: 'explain_weekly_report', label: t('review.explain') }]} />
   </div>
 }
 

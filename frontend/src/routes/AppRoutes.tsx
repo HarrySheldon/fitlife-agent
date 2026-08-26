@@ -13,6 +13,7 @@ import { Plan } from '../pages/Plan'
 import { NewPlan } from '../pages/plan/NewPlan'
 import { PlanDetail } from '../pages/plan/PlanDetail'
 import { Profile } from '../pages/Profile'
+import { EditProfile } from '../pages/profile/EditProfile'
 import { Review } from '../pages/Review'
 import { WeeklyReview } from '../pages/review/WeeklyReview'
 import { ChangePassword } from '../pages/settings/ChangePassword'
@@ -48,6 +49,7 @@ export function AppRoutes() {
             <Route path="/plan/new" element={<NewPlan />} />
             <Route path="/plan/:planId" element={<PlanDetail />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/edit" element={<EditProfile />} />
             <Route path="/settings" element={<SettingsHome />} />
             <Route path="/settings/general" element={<GeneralSettings />} />
             <Route path="/settings/model" element={<ModelSettings />} />

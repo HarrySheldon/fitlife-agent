@@ -240,6 +240,8 @@ export const enUS = {
       },
       coachAdviceTitle: 'Coach advice', coachAdviceOnly: 'Coach analysis is advice only and never changes saved targets.',
       askCoachAdvice: 'Ask Coach for target advice',
+      editProfile: 'Edit profile', backToProfile: 'Back to profile', summary: 'Profile summary',
+      heightSummary: 'Height', weightSummary: 'Weight',
     },
     evaluation: {
       allPassedSummary: 'All {{total}} cases passed', failedSummary: '{{failed}} of {{total}} cases failed',
@@ -314,7 +316,7 @@ export const enUS = {
       saved: 'Model settings saved.', keyCleared: 'API key cleared.', modelsLoaded: '{{count}} models loaded.', connectionPassed: 'Connection passed in {{latency}} ms.',
     },
     coach: {
-      eyebrow: 'Contextual guidance', title: 'Coach', thinking: 'Thinking...', empty: 'Choose an action to analyze the records visible on this page.',
+      eyebrow: 'Contextual guidance', title: 'Coach', close: 'Close Coach', open: 'Open Coach', thinking: 'Thinking...', empty: 'Choose an action to analyze the records visible on this page.',
     },
     components: {
       checklist: 'Checklist', noFile: 'No file selected', uploadingFile: 'Uploading {{name}}', uploadedFile: 'Uploaded {{name}}', working: 'Working...', sendQuestion: 'Send question',

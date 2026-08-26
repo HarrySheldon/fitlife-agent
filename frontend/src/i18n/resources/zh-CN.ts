@@ -232,6 +232,8 @@ export const zhCN = {
       },
       coachAdviceTitle: '教练建议', coachAdviceOnly: '教练分析仅提供建议，绝不会修改已保存目标。',
       askCoachAdvice: '向教练询问目标建议',
+      editProfile: '编辑个人资料', backToProfile: '返回个人资料', summary: '个人资料摘要',
+      heightSummary: '身高', weightSummary: '体重',
     },
     evaluation: {
       allPassedSummary: '全部 {{total}} 个用例通过', failedSummary: '{{total}} 个用例中有 {{failed}} 个失败',
@@ -303,7 +305,7 @@ export const zhCN = {
       requestFailed: '无法完成请求。', saved: '模型设置已保存。', keyCleared: 'API 密钥已清除。', modelsLoaded: '已加载 {{count}} 个模型。',
       connectionPassed: '连接测试通过，耗时 {{latency}} 毫秒。',
     },
-    coach: { eyebrow: '上下文指导', title: '教练', thinking: '思考中...', empty: '选择一个操作来分析此页面显示的记录。' },
+    coach: { eyebrow: '上下文指导', title: '教练', close: '关闭教练', open: '打开教练', thinking: '思考中...', empty: '选择一个操作来分析此页面显示的记录。' },
     components: {
       checklist: '执行清单', noFile: '尚未选择文件', uploadingFile: '正在上传 {{name}}', uploadedFile: '已上传 {{name}}', working: '处理中...', sendQuestion: '发送问题',
       agentThinking: 'FitLife Coach Agent 正在思考...', chatPlaceholder: '询问蛋白质、热量、训练、替代方案或下周计划',

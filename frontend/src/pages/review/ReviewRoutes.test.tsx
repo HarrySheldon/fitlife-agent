@@ -97,6 +97,7 @@ describe('review task routes', () => {
     fireEvent.click(screen.getByRole('button', { name: /generate weekly report/i }))
     await waitFor(() => expect(api.generateWeeklyReport).toHaveBeenCalledWith('2026-W35'))
 
+    fireEvent.click(screen.getByRole('button', { name: /open coach/i }))
     fireEvent.click(screen.getByRole('button', { name: /explain weekly patterns/i }))
     await waitFor(() => expect(api.interpretWeeklyReport).toHaveBeenCalledWith('2026-W35'))
     expect(await screen.findByText('Agent interpretation')).toBeInTheDocument()
@@ -136,6 +137,7 @@ describe('review task routes', () => {
 
     renderNavigableWeek('/review/week/2026-W34')
     expect(await screen.findByRole('heading', { name: 'Week 34 report' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /open coach/i }))
     fireEvent.click(screen.getByRole('button', { name: /explain weekly patterns/i }))
     fireEvent.click(screen.getByRole('link', { name: 'Next week' }))
     expect(await screen.findByRole('heading', { name: 'Week 35 current' })).toBeInTheDocument()
@@ -170,6 +172,7 @@ describe('review task routes', () => {
 
     renderRoute('/review/week/2026-W35')
     expect(await screen.findByRole('heading', { name: 'Week 35 report' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /open coach/i }))
     fireEvent.click(screen.getByRole('button', { name: /explain weekly patterns/i }))
 
     const generate = screen.getByRole('button', { name: /generate weekly report/i })
@@ -183,4 +186,49 @@ describe('review task routes', () => {
     }))
     expect(screen.getByText('Current report interpretation')).toBeInTheDocument()
   })
+
+  it('prevents opening Coach or interpreting while report generation is in flight', async () => {
+    const generation = deferred<typeof storedReport>()
+    vi.mocked(api.generateWeeklyReport).mockReturnValueOnce(generation.promise)
+
+    renderRoute('/review/week/2026-W35')
+    expect(await screen.findByRole('heading', { name: 'Week 35 report' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /generate weekly report/i }))
+
+    const openCoach = screen.getByRole('button', { name: /open coach/i })
+    expect(openCoach).toBeDisabled()
+    fireEvent.click(openCoach)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(api.interpretWeeklyReport).not.toHaveBeenCalled()
+
+    await act(async () => generation.resolve(storedReport))
+    await waitFor(() => expect(openCoach).toBeEnabled())
+  })
+
+  it('does not duplicate an in-flight interpretation after closing and reopening Coach', async () => {
+    const interpretation = deferred<Awaited<ReturnType<typeof api.interpretWeeklyReport>>>()
+    vi.mocked(api.interpretWeeklyReport).mockReturnValueOnce(interpretation.promise)
+
+    renderRoute('/review/week/2026-W35')
+    expect(await screen.findByRole('heading', { name: 'Week 35 report' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /open coach/i }))
+    fireEvent.click(screen.getByRole('button', { name: /explain weekly patterns/i }))
+    fireEvent.click(screen.getByRole('button', { name: /close coach/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open coach/i }))
+    fireEvent.click(screen.getByRole('button', { name: /explain weekly patterns/i }))
+
+    expect(api.interpretWeeklyReport).toHaveBeenCalledTimes(1)
+
+    await act(async () => interpretation.resolve({
+      surface: 'review', action: 'explain_weekly_report', answer_markdown: 'Finished once',
+      intent: 'weekly', trace: {}, sources: [], model: 'configured-model', request_id: 'one-request',
+    }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /explain weekly patterns/i })).toBeEnabled())
+  })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
+  return { promise, resolve }
+}

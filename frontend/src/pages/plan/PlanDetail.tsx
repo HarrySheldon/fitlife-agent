@@ -1,8 +1,10 @@
+import { Bot } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { ErrorState } from '../../components/ErrorState'
+import { CoachDrawer } from '../../components/CoachDrawer'
 import { LoadingState } from '../../components/LoadingState'
 import { PlanCard } from '../../components/PlanCard'
 import { api } from '../../services/api'
@@ -22,6 +24,8 @@ export function PlanDetail() {
   const [loading, setLoading] = useState(validId)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [coachOpen, setCoachOpen] = useState(false)
+  const coachTriggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     const generation = ++requestGenerationRef.current
@@ -68,6 +72,7 @@ export function PlanDetail() {
     {error ? <ErrorState message={error} /> : null}
     {loading ? <LoadingState label={t('plan.loadingPlan')} /> : null}
     {stored ? <PlanCard plan={stored.plan} /> : null}
+    {stored ? <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" onClick={() => setCoachOpen(true)}><Bot size={17} />{t('coach.open')}</button> : null}
     {stored ? <section className="content-panel">
       <label htmlFor="plan-adjustment">{t('plan.instructions')}</label>
       <textarea id="plan-adjustment" value={instructions} placeholder={t('plan.instructionsPlaceholder')} onChange={(event) => setInstructions(event.target.value)} />
@@ -76,5 +81,6 @@ export function PlanDetail() {
     {draft ? <section className="page-stack"><h2>{t('plan.adjustmentDraft')}</h2><PlanCard plan={draft.plan} />
       <button className="primary-button" type="button" onClick={() => void activate()} disabled={working || !draft.plan.validation.passed}>{t('plan.confirmAdjustment')}</button>
     </section> : null}
+    <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="plan" question={`Plan ID: ${planId}`} actions={[{ action: 'adjust_next_plan', label: t('plan.generateAdjustment') }]} />
   </div>
 }
