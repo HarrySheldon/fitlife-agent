@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Execution status:** Tasks 1-6 and the Task 7 code/API/documentation slices were implemented on `origin/main` through `cdc6c60`. A fresh localization-focused backend run passed 186 tests with one warning and confirmed 2,128 foods plus 750 exercises. Frontend full-suite/build, Docker readiness, staged-file hygiene, and desktop/mobile browser acceptance remain runtime verification work; unchecked boxes below preserve that distinction instead of acting as an implementation backlog.
+
 **Goal:** Replace English and Taiwan-region public catalog display text with reviewed Mainland Chinese text while preserving stable IDs, source provenance, aliases, transactional imports, and historical snapshots.
 
 **Architecture:** Add a deterministic localization loader between source projection and canonical record construction. Every food name receives the OpenCC `tw2sp` baseline, versioned structured glossary rules apply broadly, and the food entry map remains a sparse set of ID-specific contextual or collision overrides plus review metadata. Foods do not require exact ID coverage. Exercises require a complete ID-keyed static translation overlay plus a shared taxonomy dictionary. The existing seed payloads, SQLite tables, import ledger, FTS index, API contracts, and React components remain the runtime path.

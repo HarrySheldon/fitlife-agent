@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Execution status:** Active on `codex/pending-plans-integration`. Task 1 was completed in `209ad0a` and Task 2 in `96e785b`; Tasks 3-6 remain the active implementation backlog. Each completed slice has focused automated verification and separate specification/code-quality review evidence.
+
 **Goal:** Turn Today, Logbook, Review, Plan, and Profile from multi-purpose demo pages into overview-first product surfaces with isolated task routes and confirmation boundaries.
 
 **Architecture:** Overview routes fetch and display stable read models; create/edit/generate operations live in dedicated child routes with their own state. Smart entry returns a deterministic draft and writes nothing until explicit confirmation. Plans and weekly reports gain per-user persistence so list/detail routes represent real product state, while Coach opens in a contextual drawer with independent request state.
@@ -25,12 +27,12 @@
 - Test: `backend/tests/test_smart_entry_confirmation.py`
 - Test: `frontend/src/pages/records/RecordEntry.test.tsx`
 
-- [ ] Write failing tests proving smart parsing returns meal/workout drafts without writing CSV, invalid drafts retain source text, and only explicit record POST calls persist confirmed drafts.
-- [ ] Run focused tests and confirm RED.
-- [ ] Replace direct-write `/calendar/agent-entry` behavior with a draft endpoint and typed proposed records; retain a compatibility response only if it also performs no write.
-- [ ] Make `/today` read-only and add `/today/meal/new`, `/today/workout/new`, and `/today/smart-entry` pages with back paths and isolated request state.
-- [ ] Run focused backend/frontend tests and confirm GREEN.
-- [ ] Commit as `feat: split confirmable record entry tasks`.
+- [x] Write failing tests proving smart parsing returns meal/workout drafts without writing CSV, invalid drafts retain source text, and only explicit record POST calls persist confirmed drafts.
+- [x] Run focused tests and confirm RED.
+- [x] Replace direct-write `/calendar/agent-entry` behavior with a draft endpoint and typed proposed records; retain a compatibility response only if it also performs no write.
+- [x] Make `/today` read-only and add `/today/meal/new`, `/today/workout/new`, and `/today/smart-entry` pages with back paths and isolated request state.
+- [x] Run focused backend/frontend tests and confirm GREEN.
+- [x] Commit as `feat: split confirmable record entry tasks`.
 
 ### Task 2: Logbook date navigation and detail route
 
@@ -40,12 +42,12 @@
 - Modify: `frontend/src/routes/AppRoutes.tsx`
 - Test: `frontend/src/pages/logbook/LogbookRoutes.test.tsx`
 
-- [ ] Write failing tests proving `/logbook` only owns date browsing and `/logbook/:date` owns record detail/actions without embedding create forms or CSV upload in the overview.
-- [ ] Run focused tests and confirm RED.
-- [ ] Convert calendar tiles to stable date links, move detail into `LogbookDay`, and provide contextual links to the dedicated record routes.
-- [ ] Keep CSV import as an optional input task on a dedicated `/logbook/import` route rather than the overview.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: split logbook date and import tasks`.
+- [x] Write failing tests proving `/logbook` only owns date browsing and `/logbook/:date` owns record detail/actions without embedding create forms or CSV upload in the overview.
+- [x] Run focused tests and confirm RED.
+- [x] Convert calendar tiles to stable date links, move detail into `LogbookDay`, and provide contextual links to the dedicated record routes.
+- [x] Keep CSV import as an optional input task on a dedicated `/logbook/import` route rather than the overview.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: split logbook date and import tasks`.
 
 ### Task 3: Persisted weekly reports and review routes
 

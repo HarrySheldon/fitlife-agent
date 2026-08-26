@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Execution status:** Backend Tasks 1-4 and frontend Task 5 were implemented through `ad08cfb` and are present on `origin/main`. A fresh focused frontend run passed all 13 account-settings tests and the production build. The original RED run and manual desktop/mobile inspection were not recorded, so the unchecked Task 5 steps below are retained as historical evidence gaps rather than an active implementation backlog.
+
 **Goal:** Add isolated password, session, export, and account-deletion workflows with immediate session invalidation and secret-free portable exports.
 
 **Architecture:** Account commands are independent application use cases over a locked file-backed identity store. Signed tokens carry `token_version`; password change and session revocation rotate it and issue a replacement token. Export builds an in-memory ZIP from an explicit allowlist, while deletion removes user-owned resources idempotently before deleting identity last.
