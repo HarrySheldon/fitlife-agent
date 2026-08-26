@@ -384,6 +384,12 @@ export interface WeeklyReport {
   trace: Record<string, unknown>
 }
 
+export interface StoredWeeklyReport {
+  week: string
+  generated_at: string
+  report: WeeklyReport
+}
+
 export interface GeneratedPlan {
   diet_plan: Record<string, unknown>
   workout_plan: Record<string, unknown>

@@ -96,6 +96,32 @@ def run_contextual_coach_action(
     return result
 
 
+def interpret_persisted_weekly_report(
+    *,
+    week: str,
+    report: dict,
+    user_id: str,
+    repository: FitnessRepository | None = None,
+    gateway: ModelGateway | None = None,
+    preferences: UserPreferences | None = None,
+) -> dict:
+    prompt = (
+        f"Interpret the persisted deterministic weekly report for ISO week {week}. "
+        "Use the supplied weekly_report as the report of record; do not generate or substitute another week."
+    )
+    result = run_fitlife_agent(
+        prompt,
+        user_id,
+        repository=repository,
+        gateway=gateway,
+        initial_tool_results={"report_week": week, "weekly_report": report},
+        initial_tool_calls=["load_persisted_weekly_report"],
+        preferences=preferences,
+    )
+    result["trace"] = {**result.get("trace", {}), "surface": "review", "report_week": week}
+    return result
+
+
 def _build_contextual_tool_context(
     action: str,
     date: str | None,
@@ -193,6 +219,9 @@ def data_analyzer_node(state: AgentState, repository: FitnessRepository) -> Agen
     tool_calls = list(state.get("tool_calls", []))
     user_id = state.get("current_user_id")
 
+    if "report_week" in tool_results and "weekly_report" in tool_results:
+        return {"tool_calls": tool_calls, "tool_results": tool_results}
+
     if route.get("needs_meal_analysis"):
         tool_calls = _append_tool_call({"tool_calls": tool_calls}, "analyze_meals")
         tool_results["meal_analysis"] = analyze_meals(
@@ -229,7 +258,7 @@ def generator_node(state: AgentState, repository: FitnessRepository) -> AgentSta
     tool_calls = list(state.get("tool_calls", []))
     user_id = state.get("current_user_id")
 
-    if route.get("needs_report"):
+    if route.get("needs_report") and "weekly_report" not in tool_results:
         meal_result = tool_results.get("meal_analysis")
         if meal_result is None:
             meal_result = analyze_meals(

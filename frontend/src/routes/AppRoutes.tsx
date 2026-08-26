@@ -12,6 +12,7 @@ import { Onboarding } from '../pages/Onboarding'
 import { Plan } from '../pages/Plan'
 import { Profile } from '../pages/Profile'
 import { Review } from '../pages/Review'
+import { WeeklyReview } from '../pages/review/WeeklyReview'
 import { ChangePassword } from '../pages/settings/ChangePassword'
 import { DeleteAccount } from '../pages/settings/DeleteAccount'
 import { ModelSettings } from '../pages/settings/ModelSettings'
@@ -40,6 +41,7 @@ export function AppRoutes() {
             <Route path="/logbook/import" element={<LogbookImport />} />
             <Route path="/logbook/:date" element={<LogbookDay />} />
             <Route path="/review" element={<Review />} />
+            <Route path="/review/week/:week" element={<WeeklyReview />} />
             <Route path="/plan" element={<Plan />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<SettingsHome />} />

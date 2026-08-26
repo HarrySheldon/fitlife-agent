@@ -28,6 +28,7 @@ import type {
   ProfileSetupMutation,
   ProfileVersionUpdate,
   ProcessingMode,
+  StoredWeeklyReport,
   TargetPreview,
   TodayOverview,
   TrainingPersonalizationUpdate,
@@ -170,6 +171,12 @@ export const api = {
   coachAction: (payload: CoachActionRequest) =>
     request<CoachActionResponse>('/coach/action', { method: 'POST', body: JSON.stringify(payload) }),
   weeklyReport: () => request<WeeklyReport>('/report/weekly', { method: 'POST' }),
+  listWeeklyReports: () => request<StoredWeeklyReport[]>('/report/weekly'),
+  getWeeklyReport: (week: string) => request<StoredWeeklyReport>(`/report/weekly/${encodeURIComponent(week)}`),
+  generateWeeklyReport: (week: string) =>
+    request<StoredWeeklyReport>(`/report/weekly/${encodeURIComponent(week)}/generate`, { method: 'POST' }),
+  interpretWeeklyReport: (week: string) =>
+    request<CoachActionResponse>(`/report/weekly/${encodeURIComponent(week)}/interpret`, { method: 'POST' }),
   generatePlan: () => request<GeneratedPlan>('/plan/generate', { method: 'POST' }),
   runEval: (limit = 20) => request<EvalResult>('/eval/run', { method: 'POST', body: JSON.stringify({ limit }) }),
   calendarDays: (start: string, end: string) => request<DailySummary[]>(`/calendar/days?start=${start}&end=${end}`),

@@ -179,6 +179,8 @@ export const enUS = {
       eyebrow: 'Trends and weekly insight', title: 'Review', generate: 'Generate weekly report',
       loading: 'Loading trends', calorieTrend: 'Calorie trend', proteinTrend: 'Protein trend', workoutCount: 'Workout count',
       macroSplit: 'Macro split', empty: 'Generate a report when you are ready to review the week', explain: 'Explain weekly patterns',
+      trends: 'Weekly trends', history: 'Report history', loadingHistory: 'Loading report history', noHistory: 'No saved weekly reports yet',
+      back: 'Back to review', detailEyebrow: 'Weekly report', loadingReport: 'Loading weekly report', invalidWeek: 'Use a valid ISO week in YYYY-Www format.',
     },
     plan: {
       eyebrow: 'Next-week execution', title: 'Plan', generate: 'Generate plan', empty: 'No plan generated yet',

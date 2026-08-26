@@ -174,6 +174,8 @@ export const zhCN = {
     review: {
       eyebrow: '趋势与每周洞察', title: '复盘', generate: '生成周报', loading: '正在加载趋势', calorieTrend: '热量趋势',
       proteinTrend: '蛋白质趋势', workoutCount: '训练次数', macroSplit: '宏量营养分布', empty: '准备复盘本周时生成一份报告', explain: '解释每周模式',
+      trends: '每周趋势', history: '周报历史', loadingHistory: '正在加载周报历史', noHistory: '尚无已保存的周报',
+      back: '返回复盘', detailEyebrow: '每周报告', loadingReport: '正在加载周报', invalidWeek: '请使用 YYYY-Www 格式的有效 ISO 周。',
     },
     plan: {
       eyebrow: '下周执行', title: '计划', generate: '生成计划', empty: '尚未生成计划', adjust: '调整下周计划', validation: '校验',
