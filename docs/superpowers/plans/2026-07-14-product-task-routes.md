@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Execution status:** Active on `codex/pending-plans-integration`. Task 1 was completed in `209ad0a` and Task 2 in `96e785b`; Tasks 3-6 remain the active implementation backlog. Each completed slice has focused automated verification and separate specification/code-quality review evidence.
+**Execution status:** Implementation and automated delivery verification are complete on `codex/pending-plans-integration`. Tasks 1-5 were completed in `209ad0a`, `96e785b`, `703ef16`, `7681d77`, and `0f704bd`; Task 6 implementation and review fixes were committed in `1ad954c`. Task 6 passed 990 backend tests, 229 frontend tests, the production build, 109 focused API smoke tests, live backend readiness, and a live frontend HTTP check. Automated browser inspection remains unavailable because the in-app browser blocks local addresses and no supported external browser is installed; that unchecked item is an explicit environment evidence gap, not an implementation backlog.
 
 **Goal:** Turn Today, Logbook, Review, Plan, and Profile from multi-purpose demo pages into overview-first product surfaces with isolated task routes and confirmation boundaries.
 
@@ -63,12 +63,12 @@
 - Test: `backend/tests/application/test_reports.py`
 - Test: `frontend/src/pages/review/ReviewRoutes.test.tsx`
 
-- [ ] Write failing tests for per-user report save/list/get, week-key validation, explicit generation, and user isolation.
-- [ ] Run focused tests and confirm RED.
-- [ ] Persist deterministic weekly reports under the authenticated user directory and expose list/detail/generate endpoints keyed by ISO week.
-- [ ] Keep `/review` trend-only; use `/review/week/:week` for report detail and explicit Agent interpretation.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add persisted weekly review routes`.
+- [x] Write failing tests for per-user report save/list/get, week-key validation, explicit generation, and user isolation.
+- [x] Run focused tests and confirm RED.
+- [x] Persist deterministic weekly reports under the authenticated user directory and expose list/detail/generate endpoints keyed by ISO week.
+- [x] Keep `/review` trend-only; use `/review/week/:week` for report detail and explicit Agent interpretation.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: add persisted weekly review routes`.
 
 ### Task 4: Confirmed plan drafts, persistence, and plan routes
 
@@ -86,12 +86,12 @@
 - Test: `backend/tests/application/test_plans.py`
 - Test: `frontend/src/pages/plan/PlanRoutes.test.tsx`
 
-- [ ] Write failing tests proving generation returns a validated draft, invalid drafts cannot activate, confirmation creates a per-user plan ID, and list/detail never cross users.
-- [ ] Run focused tests and confirm RED.
-- [ ] Implement deterministic and Agent-adjusted drafts separately from activation/persistence; validate both draft kinds and expose list/detail/draft/activate endpoints.
-- [ ] Keep `/plan` as current-plan/list overview, `/plan/new` as generation plus confirmation, and `/plan/:planId` as detail with Agent adjustment draft plus explicit confirmation.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: add confirmed plan task routes`.
+- [x] Write failing tests proving generation returns a validated draft, invalid drafts cannot activate, confirmation creates a per-user plan ID, and list/detail never cross users.
+- [x] Run focused tests and confirm RED.
+- [x] Implement deterministic and Agent-adjusted drafts separately from activation/persistence; validate both draft kinds and expose list/detail/draft/activate endpoints.
+- [x] Keep `/plan` as current-plan/list overview, `/plan/new` as generation plus confirmation, and `/plan/:planId` as detail with Agent adjustment draft plus explicit confirmation.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: add confirmed plan task routes`.
 
 ### Task 5: Profile summary/edit route and contextual Coach drawer
 
@@ -108,12 +108,12 @@
 - Test: `frontend/src/pages/profile/ProfileRoutes.test.tsx`
 - Test: `frontend/src/components/CoachDrawer.test.tsx`
 
-- [ ] Write failing tests proving `/profile` is read-only, `/profile/edit` owns profile form state, closing/reopening Coach does not mutate page form state, and each drawer request carries its route context.
-- [ ] Run focused tests and confirm RED.
-- [ ] Move `ProfileForm` to the edit route and render a unit-aware summary plus edit action on `/profile`.
-- [ ] Wrap Coach in an accessible drawer with independent loading/error/result state and responsive close/focus behavior.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit as `feat: split profile and contextual coach tasks`.
+- [x] Write failing tests proving `/profile` is read-only, `/profile/edit` owns profile form state, closing/reopening Coach does not mutate page form state, and each drawer request carries its route context.
+- [x] Run focused tests and confirm RED.
+- [x] Move `ProfileForm` to the edit route and render a unit-aware summary plus edit action on `/profile`.
+- [x] Wrap Coach in an accessible drawer with independent loading/error/result state and responsive close/focus behavior.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit as `feat: split profile and contextual coach tasks`.
 
 ### Task 6: Complete route matrix and delivery verification
 
@@ -125,9 +125,9 @@
 - Modify: `docs/superpowers/specs/2026-07-12-user-settings-and-execution-boundaries-design.md`
 - Modify: `docs/superpowers/plans/2026-07-14-*.md`
 
-- [ ] Add a route-matrix regression test covering every settings and product task route, auth protection, back navigation, and mobile text/layout constraints.
-- [ ] Run all backend and frontend tests plus the frontend production build.
-- [ ] Start backend/frontend and exercise registration, preferences, model settings, password rotation, session revocation, export, record confirmation, report/plan persistence, and account deletion through API smoke tests.
-- [ ] Inspect settings, Today, record entry, Logbook day, Review week, Plan detail, Profile edit, security, and privacy at desktop/mobile widths in both languages; confirm no horizontal overflow or console errors.
-- [ ] Update documentation and every plan checkbox using observed evidence only.
-- [ ] Commit as `docs: verify complete settings and task routes`.
+- [x] Add a route-matrix regression test covering every settings and product task route, auth protection, back navigation, and mobile text/layout constraints. Evidence: 42 route-matrix tests plus the existing 8 Logbook route tests passed.
+- [x] Run all backend and frontend tests plus the frontend production build. Evidence: backend `990 passed`; frontend `229 passed`; Vite production build succeeded with the known chunk-size warning.
+- [x] Start backend/frontend and exercise registration, preferences, model settings, password rotation, session revocation, export, record confirmation, report/plan persistence, and account deletion through API smoke tests. Evidence: live `/health` and `/health/ready` succeeded, the Vite entry returned HTTP 200, and the focused API group passed `109` tests.
+- [ ] Inspect settings, Today, record entry, Logbook day, Review week, Plan detail, Profile edit, security, and privacy at desktop/mobile widths in both languages; confirm no horizontal overflow or console errors. Blocked evidence: the in-app browser returns `ERR_BLOCKED_BY_CLIENT` for localhost/127.0.0.1 and no supported external browser is installed. Automated bilingual route rendering and mobile constraint tests passed, but they are not recorded as visual inspection.
+- [x] Update documentation and every plan checkbox using observed evidence only.
+- [x] Commit as `docs: verify complete settings and task routes`.

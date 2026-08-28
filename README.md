@@ -288,12 +288,13 @@ The endpoint `/calendar/agent-entry` retains its current compatibility name, but
 1. Start the backend and frontend.
 2. Register or log in with a local username, email, or phone identifier.
 3. Complete the required onboarding flow with body profile, overall goal, activity level, and an explicitly confirmed four-target nutrition plan.
-4. Open Today and use the catalog-first meal task to search local foods, add complete custom foods, build a multi-item draft, and confirm it. Legacy smart entry and workout forms remain available during the staged cutover.
+4. Open Today and choose the dedicated meal, workout, or smart-entry route. Each task builds a draft and writes a formal record only after explicit confirmation.
 5. Use the contextual Coach to explain daily progress, suggest the next meal, or adjust today's training.
-6. Open Logbook to inspect calendar history, add records for an earlier date, or import CSV data.
-7. Open Review to inspect trends, generate a weekly report, and ask the Coach to explain patterns.
-8. Open Plan to generate and validate the next diet and training plan.
-9. Use `/evaluation` separately when testing Agent quality; it is intentionally outside ordinary product navigation.
+6. Open Logbook for the calendar overview, `/logbook/:date` for a dated detail, or `/logbook/import` for optional CSV import.
+7. Open Review for trends and `/review/week/:week` to load or explicitly generate a persisted weekly report, then ask the Coach to interpret that saved report.
+8. Open Plan for current/history overview, `/plan/new` to generate and confirm a validated draft, or `/plan/:planId` to inspect and explicitly activate an adjusted draft.
+9. Open Profile for a read-only summary and `/profile/edit` for isolated personalization edits.
+10. Use `/evaluation` separately when testing Agent quality; it is intentionally outside ordinary product navigation.
 
 ## Sample Questions
 

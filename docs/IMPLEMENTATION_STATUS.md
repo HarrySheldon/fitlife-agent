@@ -1,7 +1,19 @@
 # FitLife Agent Implementation Status
 
-**Date:** 2026-07-11
-**Status:** v0.2 Today-first product implemented and verified on `codex/today-first-v0-2`.
+**Date:** 2026-08-28
+**Status:** Account/data controls, Mainland catalog localization, and overview-first product task routes are implemented on `codex/pending-plans-integration`; automated verification is complete, with visual browser acceptance retained as an environment evidence gap.
+
+## 2026-08-28 Integration Verification
+
+- Product task routes separate meal, workout, smart-entry, Logbook import/day, weekly review, plan generation/detail, and profile editing from their overview pages.
+- Formal records, weekly reports, and activated plans are per-user persisted; record and plan mutations require explicit confirmation of a draft.
+- Account security/privacy routes cover preferences, model settings, password rotation, other-session revocation, secret-free export, and idempotent account deletion.
+- Mainland catalogs expose 2,128 food records and 750 exercise records with stable IDs, compatibility aliases, and deterministic startup imports.
+- Backend suite: `990 passed` with one known Starlette/httpx deprecation warning.
+- Frontend suite: `229 passed` across 36 files; production build passed with the known chunk-size warning.
+- Delivery API smoke group: `109 passed`; live backend health/readiness and frontend HTTP entry checks passed.
+- Docker Compose configuration is valid. The project launcher started Docker Desktop but timed out after 120 seconds because the Linux engine pipe never appeared, so no current Compose runtime pass is claimed.
+- In-app browser access to local addresses is blocked by `ERR_BLOCKED_BY_CLIENT`; automated bilingual/mobile rendering and CSS constraint tests passed, but no manual visual acceptance is claimed.
 
 ## v0.2 Product Navigation
 

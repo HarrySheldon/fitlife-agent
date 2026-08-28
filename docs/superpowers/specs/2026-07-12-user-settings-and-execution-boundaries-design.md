@@ -411,21 +411,26 @@ DELETE /account
 - Profile 展示档案摘要；编辑档案使用独立任务路由。
 - Coach 使用上下文抽屉，不与主页面业务表单共享状态。
 
-建议路由：
+已实现路由：
 
 ```text
-/today
+/
 /today/meal/new
 /today/workout/new
 /today/smart-entry
+/logbook
+/logbook/import
 /logbook/:date
+/review
 /review/week/:week
-/plan/:plan_id
+/plan
 /plan/new
+/plan/:planId
+/profile
 /profile/edit
 ```
 
-该规则不要求本次设置实现同时重写所有页面，但后续页面改造必须遵守同一边界。
+餐食、训练和智能输入先保存草稿，只有显式确认才写入正式记录；周报以 ISO 周为键按用户持久化；计划生成和 Agent 调整都先返回有时限的服务端草稿，验证通过并由用户确认后才激活。列表和详情接口始终按认证用户隔离。该规则不要求设置阶段同时重写所有页面，但后续页面改造必须遵守同一边界。
 
 ## 18. 实施任务拆分
 

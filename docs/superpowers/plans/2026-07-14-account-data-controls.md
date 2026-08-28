@@ -59,9 +59,9 @@
 - Test: `backend/tests/application/test_export_account_data.py`
 - Test: `backend/tests/test_account_export_api.py`
 
-- [x] Write failing tests that open the returned ZIP and assert it contains identity metadata, profile, preferences, meals, workouts, and public model configuration but no password hash, token secret, API key plaintext, `encrypted_api_key`, or key hint. Evidence: plans/reports are not yet persisted, so no paths were invented; RED also covered symlinks, malformed data, size limits, formula injection, and allowlist bypass.
+- [x] Write failing tests that open the returned ZIP and assert it contains identity metadata, profile, preferences, meals, workouts, activated plans, persisted weekly reports, and public model configuration but no password hash, token secret, API key plaintext, `encrypted_api_key`, key hint, draft, or unknown field. Evidence: the export allowlist was extended when plans/reports became first-class persisted data; coverage includes symlinks, malformed data, size limits, formula injection, and allowlist bypass.
 - [x] Run focused tests and confirm RED. Evidence: missing use case/route, unbounded files, unsafe CSV cells, and arbitrary extension sources failed before implementation.
-- [x] Build the ZIP from an explicit filename/field allowlist using public model projection only; use deterministic archive paths and UTF-8 JSON. Evidence: the allowlist is closed, source snapshots are descriptor-validated, file/aggregate sizes are bounded, and malformed data fails with a sanitized stable error.
+- [x] Build the ZIP from an explicit filename/field allowlist using public model projection only; use deterministic archive paths and UTF-8 JSON. Evidence: fixed plan/report filename patterns and validated public schemas exclude drafts and unknown fields; source snapshots are descriptor-validated, file/aggregate sizes are bounded, and malformed data fails with a sanitized stable error.
 - [x] Add authenticated `GET /account/export` with attachment headers and no temporary plaintext archive on disk. Evidence: the response uses a fixed filename plus `Cache-Control: no-store` and `Pragma: no-cache`.
 - [x] Run focused tests and confirm GREEN. Evidence: 29 focused tests and the complete backend suite of 222 tests pass; spec and security-quality reviews approved the result.
 - [x] Commit as `feat: add private account data export`. Evidence: `7ddcfd7`, closed-allowlist fix `24bf46a`, and export hardening `dfb733e`.
@@ -98,9 +98,9 @@
 - Modify: `frontend/src/styles/index.css`
 - Test: `frontend/src/pages/settings/AccountSettings.test.tsx`
 
-- [ ] Write route-level tests proving each task has isolated loading/error/success state, password inputs never persist, export downloads a ZIP, token replacement updates the current session, and account deletion clears auth only after success.
+- [x] Write route-level tests proving each task has isolated loading/error/success state, password inputs never persist, export downloads a ZIP, token replacement updates the current session, and account deletion clears auth only after success. Evidence: the focused account-settings suite passed 13 tests, and the final frontend suite passed 229 tests.
 - [ ] Run focused tests and confirm RED.
-- [ ] Build navigation-only `/settings/security`, dedicated password and session pages, `/settings/privacy` with export, and dedicated `/settings/privacy/delete` with password plus confirmation phrase.
-- [ ] Add localized API methods and auth-session replacement/logout behavior.
-- [ ] Run frontend tests/build and inspect desktop/mobile task routes.
-- [ ] Commit as `feat: add account security and privacy tasks`.
+- [x] Build navigation-only `/settings/security`, dedicated password and session pages, `/settings/privacy` with export, and dedicated `/settings/privacy/delete` with password plus confirmation phrase.
+- [x] Add localized API methods and auth-session replacement/logout behavior.
+- [ ] Run frontend tests/build and inspect desktop/mobile task routes. Automated tests/build passed; visual inspection remains unavailable because the in-app browser blocks local addresses and no supported external browser is installed.
+- [x] Commit as `feat: add account security and privacy tasks` (`ad08cfb`).
