@@ -66,6 +66,11 @@ export function PlanDetail() {
     }
   }
 
+  async function interpret() {
+    if (!stored) throw new Error('PLAN_REQUIRED')
+    return api.interpretPlan(planId)
+  }
+
   return <div className="page-stack">
     <Link className="text-link" to="/plan">← {t('plan.back')}</Link>
     <header className="page-header"><span>{t('plan.detailEyebrow')}</span><h1>{planId}</h1></header>
@@ -81,6 +86,6 @@ export function PlanDetail() {
     {draft ? <section className="page-stack"><h2>{t('plan.adjustmentDraft')}</h2><PlanCard plan={draft.plan} />
       <button className="primary-button" type="button" onClick={() => void activate()} disabled={working || !draft.plan.validation.passed}>{t('plan.confirmAdjustment')}</button>
     </section> : null}
-    <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="plan" question={`Plan ID: ${planId}`} actions={[{ action: 'adjust_next_plan', label: t('plan.generateAdjustment') }]} />
+    <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="plan" requestAction={interpret} actionsDisabled={!stored} actions={[{ action: 'adjust_next_plan', label: t('plan.generateAdjustment') }]} />
   </div>
 }

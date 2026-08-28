@@ -2,6 +2,7 @@ import { Activity, Dumbbell, Target, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { DailyTargetsForm } from '../../components/DailyTargetsForm'
 import { ErrorState } from '../../components/ErrorState'
@@ -128,7 +129,7 @@ export function EditProfile() {
 
   return (
     <div className="page-stack profile-page">
-      <a className="text-link" href="/profile">← {t('profile.backToProfile')}</a>
+      <Link className="text-link" to="/profile">← {t('profile.backToProfile')}</Link>
       <header className="page-header">
         <span>{t('profile.eyebrow')}</span>
         <h1>{t('profile.title')}</h1>

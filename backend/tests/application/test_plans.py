@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pandas as pd
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+
+import backend.agent.graph as agent_graph
 from backend.api import plan as plan_api
+from backend.agent.planner import PlannerRoute
 from backend.api.plan import generate_adjusted_plan
 from backend.api.dependencies import require_current_user
 from backend.application.ports.plan_repository import StoredPlan
@@ -15,6 +20,7 @@ from backend.domain.errors import ApplicationError
 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedUser
+from backend.tools.data_access import DEFAULT_PROFILE, MEAL_COLUMNS, WORKOUT_COLUMNS
 
 
 VALID_PLAN = {
@@ -211,6 +217,176 @@ def test_plan_endpoints_keep_draft_and_activation_explicit(tmp_path, monkeypatch
     assert adjusted["processing_mode"] == "agent"
     assert adjusted["data"]["kind"] == "agent_adjusted"
     assert len(client.get("/plan").json()["data"]) == 1
+
+
+def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_path, monkeypatch):
+    service = Plans(
+        FilePlanRepository(tmp_path),
+        generate_deterministic=lambda user_id: VALID_PLAN,
+        generate_adjusted=lambda user_id, active, instructions: VALID_PLAN,
+        validate_plan=lambda user_id, plan: VALID_PLAN["validation"],
+        new_id=lambda: "plan-00000001",
+        new_draft_id=lambda: "draft-0000000000000001",
+    )
+    service.activate("user-a", service.draft("user-a").draft_id)
+    captured: dict = {}
+
+    def interpret(**kwargs):
+        captured.update(kwargs)
+        return {
+            "answer_markdown": "Persisted plan interpretation",
+            "intent": "plan_adjustment",
+            "trace": {"active_plan_id": kwargs["plan_id"]},
+            "sources": [],
+            "model": "test-model",
+            "request_id": "request-1",
+        }
+
+    monkeypatch.setattr(plan_api, "_plans", lambda: service)
+    monkeypatch.setattr(plan_api, "interpret_persisted_plan", interpret)
+    monkeypatch.setattr(plan_api, "preferences_for", lambda user: object())
+    app = FastAPI()
+    app.include_router(plan_api.router)
+    app.dependency_overrides[require_current_user] = lambda: AuthenticatedUser(
+        user_id="user-a", display_name="User A"
+    )
+
+    response = TestClient(app).post("/plan/plan-00000001/interpret")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["answer_markdown"] == "Persisted plan interpretation"
+    assert captured["plan_id"] == "plan-00000001"
+    assert captured["plan"] == VALID_PLAN
+    assert captured["user_id"] == "user-a"
+
+
+def test_malformed_plan_id_is_a_controlled_not_found_error(tmp_path, monkeypatch):
+    plans = Plans(
+        FilePlanRepository(tmp_path),
+        generate_deterministic=lambda user_id: VALID_PLAN,
+        generate_adjusted=lambda user_id, active, instructions: VALID_PLAN,
+        validate_plan=lambda user_id, plan: VALID_PLAN["validation"],
+    )
+
+    with pytest.raises(ApplicationError) as error:
+        plans.get("user-a", "../../other-user")
+
+    assert error.value.code == "PLAN_NOT_FOUND"
+    assert error.value.status_code == 404
+
+    app = FastAPI()
+
+    @app.exception_handler(ApplicationError)
+    async def handle_application_error(_request: Request, cause: ApplicationError):
+        return JSONResponse(
+            status_code=cause.status_code,
+            content={"error": {"code": cause.code, "message": cause.message}},
+        )
+
+    app.include_router(plan_api.router)
+    app.dependency_overrides[require_current_user] = lambda: AuthenticatedUser(
+        user_id="user-a", display_name="User A"
+    )
+    monkeypatch.setattr(plan_api, "_plans", lambda: plans)
+    response = TestClient(app).get("/plan/not-a-plan-id")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "PLAN_NOT_FOUND"
+
+
+def test_persisted_plan_interpretation_supplies_the_plan_of_record(monkeypatch):
+    captured: dict = {}
+
+    def run_agent(prompt, user_id, **kwargs):
+        captured.update({"prompt": prompt, "user_id": user_id, **kwargs})
+        return {
+            "answer_markdown": "Use this plan",
+            "intent": "plan_adjustment",
+            "trace": {"tool_calls": kwargs["initial_tool_calls"]},
+            "sources": [],
+            "model": "test-model",
+            "request_id": "request-1",
+        }
+
+    monkeypatch.setattr(agent_graph, "run_fitlife_agent", run_agent)
+    result = agent_graph.interpret_persisted_plan(
+        plan_id="plan-00000001",
+        plan=VALID_PLAN,
+        user_id="user-a",
+    )
+
+    assert captured["initial_tool_results"] == {
+        "active_plan_id": "plan-00000001",
+        "active_plan": VALID_PLAN,
+    }
+    assert captured["initial_tool_calls"] == ["load_persisted_plan"]
+    assert "do not generate" in captured["prompt"]
+    assert result["trace"]["active_plan_id"] == "plan-00000001"
+
+
+def test_persisted_plan_interpretation_never_generates_a_substitute_plan():
+    class Repository:
+        def read_profile(self, user_id=None):
+            return DEFAULT_PROFILE.model_copy()
+
+        def read_meals(self, user_id=None):
+            return pd.DataFrame(columns=MEAL_COLUMNS)
+
+        def read_workouts(self, user_id=None):
+            return pd.DataFrame(columns=WORKOUT_COLUMNS)
+
+    class Gateway:
+        model = "test-model"
+        captured_state = None
+
+        def plan_route(self, question):
+            return PlannerRoute(intent="plan_generation", needs_plan=True)
+
+        def write_answer(self, state):
+            self.captured_state = state
+            return "Advice for the persisted plan"
+
+    gateway = Gateway()
+    result = agent_graph.interpret_persisted_plan(
+        plan_id="plan-00000001",
+        plan=VALID_PLAN,
+        user_id="user-a",
+        repository=Repository(),
+        gateway=gateway,
+    )
+
+    assert gateway.captured_state["tool_results"]["active_plan"] == VALID_PLAN
+    assert "generated_plan" not in gateway.captured_state["tool_results"]
+    assert "load_persisted_plan" in result["trace"]["tool_calls"]
+    assert "generate_next_week_plan" not in result["trace"]["tool_calls"]
+
+
+def test_activation_restores_consumed_draft_when_plan_storage_fails(tmp_path):
+    class FailingRepository(FilePlanRepository):
+        fail_save = True
+
+        def save(self, user_id, plan):
+            if self.fail_save:
+                raise OSError("storage unavailable")
+            return super().save(user_id, plan)
+
+    repository = FailingRepository(tmp_path)
+    plans = Plans(
+        repository,
+        generate_deterministic=lambda user_id: VALID_PLAN,
+        generate_adjusted=lambda user_id, active, instructions: VALID_PLAN,
+        validate_plan=lambda user_id, plan: VALID_PLAN["validation"],
+        new_id=lambda: "plan-00000001",
+        new_draft_id=lambda: "draft-0000000000000001",
+    )
+    draft = plans.draft("user-a")
+
+    with pytest.raises(OSError, match="storage unavailable"):
+        plans.activate("user-a", draft.draft_id)
+
+    assert repository.get_draft("user-a", draft.draft_id) == draft
+    repository.fail_save = False
+    assert plans.activate("user-a", draft.draft_id).plan_id == "plan-00000001"
 
 
 def test_draft_activation_is_per_user_one_time_and_rejects_missing_ids(tmp_path):

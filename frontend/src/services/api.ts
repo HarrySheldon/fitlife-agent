@@ -187,6 +187,8 @@ export const api = {
     request<PlanDraft>(`/plan/${encodeURIComponent(planId)}/draft`, {
       method: 'POST', body: JSON.stringify({ instructions }),
     }),
+  interpretPlan: (planId: string) =>
+    request<CoachActionResponse>(`/plan/${encodeURIComponent(planId)}/interpret`, { method: 'POST' }),
   activatePlan: (draftId: string) =>
     request<StoredPlan>('/plan/activate', { method: 'POST', body: JSON.stringify({ draft_id: draftId }) }),
   runEval: (limit = 20) => request<EvalResult>('/eval/run', { method: 'POST', body: JSON.stringify({ limit }) }),

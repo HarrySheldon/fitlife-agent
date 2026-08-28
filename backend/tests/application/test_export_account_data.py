@@ -224,6 +224,40 @@ def test_export_includes_only_fixed_user_sources_and_sanitized_fields():
     (current_root / "workouts.csv").write_bytes(workouts.encode("utf-8"))
     (current_root / "rogue.json").write_text('{"leak": true}', encoding="utf-8")
     (current_root / "notes.tmp").write_text("temporary secret", encoding="utf-8")
+    plans_root = current_root / "plans"
+    reports_root = current_root / "reports"
+    plans_root.mkdir()
+    reports_root.mkdir()
+    (plans_root / "plan-deadbeef.json").write_text(
+        json.dumps(
+            {
+                "plan_id": "plan-deadbeef",
+                "activated_at": "2026-08-26T10:00:00Z",
+                "kind": "deterministic",
+                "based_on_plan_id": None,
+                "plan": {
+                    "diet_plan": {"calories": 2200},
+                    "workout_plan": {"days": 4},
+                    "validation": {"passed": True},
+                    "trace": {},
+                },
+                "server_secret": "plan-secret",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports_root / "2026-W35.json").write_text(
+        json.dumps(
+            {
+                "week": "2026-W35",
+                "generated_at": "2026-08-26T10:00:00Z",
+                "report": {"title": "Week 35", "sections": [], "checklist": [], "trace": {}},
+                "server_secret": "report-secret",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plans_root / "not-an-allowlisted-plan.json").write_text("directory-secret", encoding="utf-8")
     (other_root / "meals.csv").write_text("other-user-secret", encoding="utf-8")
     models = FileModelConnectionRepository(data_dir)
     models.save(
@@ -246,10 +280,12 @@ def test_export_includes_only_fixed_user_sources_and_sanitized_fields():
         assert exported.namelist() == [
             "identity.json",
             "model-connection.json",
+            "plans/plan-deadbeef.json",
             "preferences.json",
             "profile.json",
             "records/meals.csv",
             "records/workouts.csv",
+            "reports/2026-W35.json",
         ]
         contents = {name: exported.read(name) for name in exported.namelist()}
     assert contents["records/meals.csv"] == meals.encode("utf-8")
@@ -274,6 +310,9 @@ def test_export_includes_only_fixed_user_sources_and_sanitized_fields():
         b"other-user-secret",
         b"temporary secret",
         b"rogue",
+        b"plan-secret",
+        b"report-secret",
+        b"directory-secret",
     ):
         assert forbidden not in combined
     for name in ("profile.json", "preferences.json", "model-connection.json"):
@@ -281,6 +320,42 @@ def test_export_includes_only_fixed_user_sources_and_sanitized_fields():
         assert contents[name] == (
             json.dumps(decoded, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
         ).encode("utf-8")
+    assert json.loads(contents["plans/plan-deadbeef.json"])["plan_id"] == "plan-deadbeef"
+    assert json.loads(contents["reports/2026-W35.json"])["week"] == "2026-W35"
+
+
+def test_export_rejects_an_oversized_persisted_plan(monkeypatch):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register("oversized-plan", None, None, "password123", "Oversized")
+    plan_path = data_dir / "users" / user.user_id / "plans" / "plan-deadbeef.json"
+    plan_path.parent.mkdir(parents=True)
+    plan_path.write_text(json.dumps({"padding": "x" * 2048}), encoding="utf-8")
+    monkeypatch.setattr(export_module, "MAX_SOURCE_BYTES", 1024)
+
+    with pytest.raises(ApplicationError) as raised:
+        ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
+
+
+def test_export_rejects_a_symlinked_persisted_data_directory(monkeypatch):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register("linked-plans", None, None, "password123", "Linked")
+    plans_root = data_dir / "users" / user.user_id / "plans"
+    plans_root.mkdir(parents=True)
+    original_is_symlink = Path.is_symlink
+    monkeypatch.setattr(
+        Path,
+        "is_symlink",
+        lambda path: path == plans_root or original_is_symlink(path),
+    )
+
+    with pytest.raises(ApplicationError) as raised:
+        ExportAccountData(data_dir, identities).execute(user.user_id)
+
+    assert_export_failed(raised.value)
 
 
 def test_export_rejects_a_symlinked_user_root(monkeypatch):

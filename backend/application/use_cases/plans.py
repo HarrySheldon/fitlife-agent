@@ -42,7 +42,10 @@ class Plans:
         return self.repository.list(user_id)
 
     def get(self, user_id: str, plan_id: str) -> StoredPlan:
-        plan = self.repository.get(user_id, plan_id)
+        try:
+            plan = self.repository.get(user_id, plan_id)
+        except ValueError:
+            plan = None
         if plan is None:
             raise ApplicationError(
                 code="PLAN_NOT_FOUND",
@@ -58,7 +61,7 @@ class Plans:
         return self._validated_draft(user_id, "agent_adjusted", payload, based_on_plan_id=plan_id)
 
     def activate(self, user_id: str, draft_id: str) -> StoredPlan:
-        draft = self.repository.take_draft(user_id, draft_id)
+        draft = self.repository.get_draft(user_id, draft_id)
         if draft is None:
             raise ApplicationError(
                 code="PLAN_DRAFT_NOT_FOUND",
@@ -83,14 +86,26 @@ class Plans:
                 processing_mode="deterministic",
             )
         raw["validation"] = validation.model_dump()
+        consumed = self.repository.take_draft(user_id, draft_id)
+        if consumed is None:
+            raise ApplicationError(
+                code="PLAN_DRAFT_NOT_FOUND",
+                message="The requested plan draft does not exist.",
+                status_code=404,
+                processing_mode="deterministic",
+            )
         stored = StoredPlan(
             plan_id=self.new_id(),
             activated_at=self.now(),
-            kind=draft.kind,
-            based_on_plan_id=draft.based_on_plan_id,
+            kind=consumed.kind,
+            based_on_plan_id=consumed.based_on_plan_id,
             plan=raw,
         )
-        self.repository.save(user_id, stored)
+        try:
+            self.repository.save(user_id, stored)
+        except Exception:
+            self.repository.save_draft(user_id, consumed)
+            raise
         return stored
 
     def _validated_draft(

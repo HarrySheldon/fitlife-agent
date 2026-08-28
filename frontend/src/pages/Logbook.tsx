@@ -42,6 +42,7 @@ export function Logbook() {
 export function LogbookImport() {
   const { t } = useTranslation()
   return <div className="page-stack logbook-page">
+    <Link className="text-link" to="/logbook">← {t('common.back')}</Link>
     <header className="page-header"><span>{t('logbook.optionalInput')}</span><h1>{t('logbook.csvImport')}</h1></header>
     <section className="import-tool">
       <FileUploader label="meals.csv" onUpload={(file) => api.upload('meals', file).then(() => undefined)} />

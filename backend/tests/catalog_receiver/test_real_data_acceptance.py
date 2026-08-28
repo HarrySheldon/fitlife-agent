@@ -55,8 +55,8 @@ def _reconstruct_upstream_exercises(snapshot: dict) -> list[dict]:
 
 def test_bundled_exercise_localization_matches_complete_source_contract() -> None:
     snapshot = json.loads(EXERCISE_SNAPSHOT.read_text(encoding="utf-8"))
-    raw_localization = EXERCISE_LOCALIZATION.read_bytes()
-    localization = json.loads(raw_localization.decode("utf-8"))
+    raw_localization = EXERCISE_LOCALIZATION.read_text(encoding="utf-8")
+    localization = json.loads(raw_localization)
     bundle = load_localization_bundle(
         catalog_kind="exercise",
         localization_path=EXERCISE_LOCALIZATION,
@@ -76,9 +76,9 @@ def test_bundled_exercise_localization_matches_complete_source_contract() -> Non
     assert localization["version"] == "2.0.0"
     assert localization["source_name"] == "free-exercise-db"
     assert localization["locale"] == "zh-CN"
-    assert raw_localization == (
-        json.dumps(localization, ensure_ascii=False, indent=2) + "\n"
-    ).encode("utf-8")
+    assert raw_localization == json.dumps(
+        localization, ensure_ascii=False, indent=2
+    ) + "\n"
 
     source_by_id = {
         record["source_record_id"]: record for record in snapshot["exercises"]

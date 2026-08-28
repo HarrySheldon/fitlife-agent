@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -15,7 +15,7 @@ vi.mock('../../services/api', async (importOriginal) => {
     api: {
       ...original.api,
       listPlans: vi.fn(), getPlan: vi.fn(), createPlanDraft: vi.fn(),
-      createPlanAdjustmentDraft: vi.fn(), activatePlan: vi.fn(),
+      createPlanAdjustmentDraft: vi.fn(), interpretPlan: vi.fn(), activatePlan: vi.fn(),
     },
   }
 })
@@ -40,6 +40,10 @@ beforeEach(async () => {
   vi.mocked(api.getPlan).mockResolvedValue(stored)
   vi.mocked(api.createPlanDraft).mockResolvedValue(draft)
   vi.mocked(api.createPlanAdjustmentDraft).mockResolvedValue({ ...draft, kind: 'agent_adjusted', based_on_plan_id: stored.plan_id })
+  vi.mocked(api.interpretPlan).mockResolvedValue({
+    surface: 'plan', action: 'adjust_next_plan', answer_markdown: 'Use the persisted plan.',
+    intent: 'plan_adjustment', trace: { active_plan_id: stored.plan_id }, sources: [], model: 'test-model', request_id: 'request-1',
+  })
   vi.mocked(api.activatePlan).mockResolvedValue(stored)
 })
 
@@ -79,5 +83,16 @@ describe('plan task routes', () => {
     expect(api.activatePlan).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /confirm adjusted plan/i }))
     await waitFor(() => expect(api.activatePlan).toHaveBeenCalled())
+  })
+
+  it('asks the plan-specific Coach endpoint to interpret the persisted plan', async () => {
+    renderRoute('/plan/plan-00000001')
+    expect(await screen.findByRole('heading', { name: /plan-00000001/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /open coach/i }))
+    const drawer = screen.getByRole('dialog')
+    fireEvent.click(within(drawer).getByRole('button', { name: /generate adjustment/i }))
+
+    await waitFor(() => expect(api.interpretPlan).toHaveBeenCalledWith('plan-00000001'))
+    expect(await within(drawer).findByText('Use the persisted plan.')).toBeInTheDocument()
   })
 })

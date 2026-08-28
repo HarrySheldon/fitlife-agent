@@ -122,6 +122,32 @@ def interpret_persisted_weekly_report(
     return result
 
 
+def interpret_persisted_plan(
+    *,
+    plan_id: str,
+    plan: dict,
+    user_id: str,
+    repository: FitnessRepository | None = None,
+    gateway: ModelGateway | None = None,
+    preferences: UserPreferences | None = None,
+) -> dict:
+    prompt = (
+        f"Review the persisted active fitness plan {plan_id} and recommend safe, useful adjustments. "
+        "Use the supplied active_plan as the plan of record; do not generate, substitute, activate, or persist another plan."
+    )
+    result = run_fitlife_agent(
+        prompt,
+        user_id,
+        repository=repository,
+        gateway=gateway,
+        initial_tool_results={"active_plan_id": plan_id, "active_plan": plan},
+        initial_tool_calls=["load_persisted_plan"],
+        preferences=preferences,
+    )
+    result["trace"] = {**result.get("trace", {}), "surface": "plan", "active_plan_id": plan_id}
+    return result
+
+
 def _build_contextual_tool_context(
     action: str,
     date: str | None,
@@ -276,7 +302,7 @@ def generator_node(state: AgentState, repository: FitnessRepository) -> AgentSta
         tool_results["weekly_report"] = generate_weekly_report(profile, meal_result, workout_result)
         tool_calls = _append_tool_call({"tool_calls": tool_calls}, "generate_weekly_report")
 
-    if route.get("needs_plan"):
+    if route.get("needs_plan") and "active_plan" not in tool_results:
         tool_results["generated_plan"] = generate_plan(profile)
         tool_calls = _append_tool_call({"tool_calls": tool_calls}, "generate_next_week_plan")
 

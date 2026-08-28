@@ -4,8 +4,10 @@ import json
 
 from fastapi import APIRouter, Depends
 
+from backend.agent.graph import interpret_persisted_plan
 from backend.agent.validator import validate_generated_plan
 from backend.api.dependencies import optional_current_user, require_current_user
+from backend.api.preference_context import preferences_for
 from backend.api.utils import ok
 from backend.application.ports.model_gateway import ConfigurableModelGateway
 from backend.application.ports.plan_repository import StoredPlan
@@ -17,7 +19,7 @@ from backend.infrastructure.model_gateway.factory import resolve_user_model_gate
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
-from backend.schemas import AuthenticatedUser, GeneratedPlan, PlanActivationRequest, PlanAdjustmentDraftRequest
+from backend.schemas import AuthenticatedUser, CoachActionResponse, GeneratedPlan, PlanActivationRequest, PlanAdjustmentDraftRequest
 
 
 router = APIRouter(prefix="/plan")
@@ -114,6 +116,29 @@ def create_adjustment_draft(
 ):
     draft = _plans().adjustment_draft(user.user_id, plan_id, request.instructions)
     return ok(draft.model_dump(mode="json"), processing_mode="agent")
+
+
+@router.post("/{plan_id}/interpret")
+def interpret_plan(plan_id: str, user: AuthenticatedUser = Depends(require_current_user)):
+    with user_lifecycle_guard(get_settings().data_dir, user.user_id):
+        stored = _plans().get(user.user_id, plan_id)
+        result = interpret_persisted_plan(
+            plan_id=stored.plan_id,
+            plan=stored.plan.model_dump(mode="json"),
+            user_id=user.user_id,
+            preferences=preferences_for(user),
+        )
+        response = CoachActionResponse(
+            surface="plan",
+            action="adjust_next_plan",
+            answer_markdown=result["answer_markdown"],
+            intent=result["intent"],
+            trace=result["trace"],
+            sources=result.get("sources", []),
+            model=result["model"],
+            request_id=result["request_id"],
+        )
+        return ok(response.model_dump(), processing_mode="agent")
 
 
 @router.get("/{plan_id}")

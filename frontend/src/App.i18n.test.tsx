@@ -285,6 +285,7 @@ it('keeps localized fixed API errors and Agent answers untouched', async () => {
   renderRoute('/')
 
   expect(screen.getByText('请先配置并启用模型连接，再使用 Agent 功能。')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '打开教练' }))
   fireEvent.click(screen.getByRole('button', { name: '解释今天' }))
   await waitFor(() => expect(screen.getByText('Agent output: DO NOT TRANSLATE')).toBeInTheDocument())
 })

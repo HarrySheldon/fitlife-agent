@@ -12,6 +12,8 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from backend.application.ports.identity_repository import IdentityRepository
 from backend.application.ports.model_connection_repository import ModelConnectionRepository
+from backend.application.ports.plan_repository import StoredPlan
+from backend.application.ports.report_repository import StoredWeeklyReport
 from backend.domain.errors import account_export_failed_error
 
 
@@ -63,6 +65,10 @@ _RECORD_EXPORTS = (
         "workouts.csv",
         ("date", "type", "exercise", "muscle_group", "sets", "reps", "weight", "duration_min"),
     ),
+)
+_DIRECTORY_EXPORTS = (
+    ("plans", "plans", re.compile(r"^plan-[a-f0-9]{8,64}\.json$"), StoredPlan),
+    ("reports", "reports", re.compile(r"^\d{4}-W\d{2}\.json$"), StoredWeeklyReport),
 )
 
 
@@ -148,6 +154,25 @@ class ExportAccountData:
                 )
                 if snapshot is not None:
                     budget.add_entry(entries, archive_path, _stable_csv(snapshot, fields))
+            for archive_root, directory_name, filename_pattern, model_type in _DIRECTORY_EXPORTS:
+                directory = user_root / directory_name
+                for filename in _safe_matching_snapshot_names(
+                    directory,
+                    boundary=self.data_dir / "users",
+                    filename_pattern=filename_pattern,
+                ):
+                    snapshot = budget.read_snapshot(
+                        directory,
+                        filename,
+                        boundary=self.data_dir / "users",
+                    )
+                    if snapshot is not None:
+                        projected = model_type.model_validate_json(snapshot).model_dump(mode="json")
+                        budget.add_entry(
+                            entries,
+                            f"{archive_root}/{filename}",
+                            _stable_json(projected),
+                        )
             if self.model_connections is not None:
                 model_snapshot = budget.read_snapshot(
                     user_root,
@@ -272,6 +297,28 @@ def _safe_read_snapshot(
     ):
         raise ValueError("Account export source changed while reading")
     return b"".join(chunks)
+
+
+def _safe_matching_snapshot_names(
+    root: Path,
+    *,
+    boundary: Path,
+    filename_pattern: re.Pattern[str],
+) -> list[str]:
+    root_before = _validated_snapshot_root(root, boundary)
+    if root_before is None:
+        return []
+    try:
+        with os.scandir(root) as directory:
+            names = sorted(
+                entry.name for entry in directory if filename_pattern.fullmatch(entry.name)
+            )
+    except FileNotFoundError:
+        raise ValueError("Account export directory changed while reading") from None
+    root_after = _validated_snapshot_root(root, boundary)
+    if root_after is None or root_before != root_after:
+        raise ValueError("Account export directory changed while reading")
+    return names
 
 
 def _validated_snapshot_root(root: Path, boundary: Path | None) -> tuple | None:

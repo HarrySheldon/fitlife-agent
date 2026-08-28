@@ -217,7 +217,7 @@ describe('Profile', () => {
   })
 
   it('separates body profile, overall goal, daily targets, and legacy personalization', async () => {
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     expect(screen.getByRole('heading', { name: 'Body profile' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Overall goal' })).toBeInTheDocument()
@@ -232,7 +232,7 @@ describe('Profile', () => {
 
   it('shows recalculation preview after profile save without confirming it', async () => {
     const user = userEvent.setup()
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.clear(screen.getByLabelText('Weight (kg)'))
     await user.type(screen.getByLabelText('Weight (kg)'), '71')
@@ -245,7 +245,7 @@ describe('Profile', () => {
 
   it('saves the overall goal as a preview without confirming it', async () => {
     const user = userEvent.setup()
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByLabelText('Maintenance'))
     await user.click(screen.getByRole('button', { name: 'Save overall goal' }))
@@ -263,7 +263,7 @@ describe('Profile', () => {
       recalculation_preview: preview,
       recalculation_restriction: null,
     })
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.clear(screen.getByLabelText('Weight (kg)'))
     await user.type(screen.getByLabelText('Weight (kg)'), '72')
@@ -282,7 +282,7 @@ describe('Profile', () => {
       recalculation_preview: preview,
       recalculation_restriction: null,
     })
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByLabelText('Maintenance'))
     await user.clear(screen.getByLabelText('Weight (kg)'))
@@ -295,7 +295,7 @@ describe('Profile', () => {
 
   it('requires warning acknowledgement before confirming manual targets', async () => {
     const user = userEvent.setup()
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByLabelText('Set targets manually'))
     await user.click(screen.getByRole('button', { name: 'Review manual targets' }))
@@ -320,7 +320,7 @@ describe('Profile', () => {
     mocks.calculateTargets
       .mockResolvedValueOnce(manualPreview)
       .mockResolvedValueOnce(recalculatedPreview)
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByLabelText('Set targets manually'))
     await user.click(screen.getByRole('button', { name: 'Review manual targets' }))
@@ -348,7 +348,7 @@ describe('Profile', () => {
       preview_token: 'd'.repeat(64),
     }
     mocks.calculateTargets.mockResolvedValueOnce(matchingManualPreview)
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByLabelText('Set targets manually'))
     await user.clear(screen.getByLabelText('Calories (kcal)'))
@@ -373,7 +373,7 @@ describe('Profile', () => {
     mocks.confirmTargets
       .mockRejectedValueOnce(new Error('Aggregate unavailable'))
       .mockResolvedValueOnce({ ...target, ...manualPreview.targets, id: 'target-2', source: 'manual' })
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByLabelText('Set targets manually'))
     await user.click(screen.getByRole('button', { name: 'Review manual targets' }))
@@ -411,7 +411,7 @@ describe('Profile', () => {
       .mockResolvedValueOnce([confirmedTarget])
     mocks.calculateTargets.mockResolvedValueOnce(calculatedPreview)
     mocks.confirmTargets.mockResolvedValue(confirmedTarget)
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByLabelText('Set targets manually'))
     await user.clear(screen.getByLabelText('Calories (kcal)'))
@@ -436,7 +436,7 @@ describe('Profile', () => {
     const user = userEvent.setup()
     const confirmation = deferred<DailyTargetVersion>()
     mocks.confirmTargets.mockReturnValueOnce(confirmation.promise)
-    const { unmount } = render(<Profile />)
+    const { unmount } = render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await waitFor(() => expect(mocks.targetHistory).toHaveBeenCalledTimes(1))
     await user.click(screen.getByLabelText('Set targets manually'))
@@ -456,7 +456,7 @@ describe('Profile', () => {
 
   it('saves legacy training fields without invoking versioned profile writes', async () => {
     const user = userEvent.setup()
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.selectOptions(screen.getByLabelText('Experience'), 'experienced')
     await user.click(screen.getByRole('button', { name: 'Save training personalization' }))
@@ -470,7 +470,7 @@ describe('Profile', () => {
 
   it('shows a local error when reading the legacy profile fails', async () => {
     mocks.legacyError = 'Legacy profile unavailable'
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Legacy profile unavailable')
     expect(mocks.saveLegacyProfile).not.toHaveBeenCalled()
@@ -479,7 +479,7 @@ describe('Profile', () => {
   it('shows a local error when saving legacy personalization fails', async () => {
     const user = userEvent.setup()
     mocks.saveLegacyProfile.mockRejectedValueOnce(new Error('Legacy profile save failed'))
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: 'Save training personalization' }))
 
@@ -489,7 +489,7 @@ describe('Profile', () => {
   it('locks concurrent training personalization saves', async () => {
     const save = deferred<void>()
     mocks.saveLegacyProfile.mockReturnValueOnce(save.promise)
-    render(<Profile />)
+    render(<MemoryRouter><Profile /></MemoryRouter>)
 
     const submit = screen.getByRole('button', { name: 'Save training personalization' })
     act(() => {
