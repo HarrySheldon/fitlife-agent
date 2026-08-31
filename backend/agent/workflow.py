@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from copy import deepcopy
+from collections.abc import Awaitable, Callable
 
 from backend.agent.contracts import AgentCommand, AgentResult
 from backend.agent.generator import generate_plan
@@ -32,7 +33,7 @@ class FitLifeWorkflow:
         self.repository = repository
         self.gateway = gateway
         self.retriever = retriever
-        self.context_metadata = dict(context_metadata or {})
+        self.context_metadata = deepcopy(context_metadata or {})
 
     async def execute(self, command: AgentCommand, context: RuntimeContext) -> AgentResult:
         state: AgentState = {
@@ -42,7 +43,7 @@ class FitLifeWorkflow:
             "current_user_id": command.user_id,
             "surface": command.surface,
             "context_date": command.context_date,
-            "context_metadata": self.context_metadata,
+            "context_metadata": deepcopy(self.context_metadata),
             "tool_calls": list(command.initial_tool_calls),
             "tool_results": dict(command.initial_tool_results),
             "retrieved_docs": [],
@@ -58,20 +59,35 @@ class FitLifeWorkflow:
         # Phase 4 inserts input_guard before planner and safety_reviewer after writer.
         return await context.step("result_projector", lambda: self._project(state))
 
-    async def _apply(self, context: RuntimeContext, name: str, state: AgentState, operation) -> None:
-        state.update(await context.step(name, lambda: operation(state)))
+    async def _apply(
+        self,
+        context: RuntimeContext,
+        name: str,
+        state: AgentState,
+        operation: Callable[[RuntimeContext, AgentState], Awaitable[AgentState]],
+    ) -> None:
+        state.update(await context.step(name, lambda: operation(context, state)))
 
-    def _planner(self, state: AgentState) -> AgentState:
-        route = _invoke_model(lambda: self.gateway.plan_route(state["user_query"]))
+    async def _planner(self, context: RuntimeContext, state: AgentState) -> AgentState:
+        route = await context.tool(
+            "plan_route_model",
+            "never",
+            lambda: _invoke_model(lambda: self.gateway.plan_route(state["user_query"])),
+        )
         return {"intent": route.intent, "tool_requests": route.model_dump(), "llm_used": True}
 
-    def _profile_loader(self, state: AgentState) -> AgentState:
+    async def _profile_loader(self, context: RuntimeContext, state: AgentState) -> AgentState:
+        profile = await context.tool(
+            "load_profile",
+            "safe",
+            lambda: self.repository.read_profile(state.get("current_user_id")).model_dump(),
+        )
         return {
-            "profile": self.repository.read_profile(state.get("current_user_id")).model_dump(),
+            "profile": profile,
             "tool_calls": _append_tool_call(state, "load_profile"),
         }
 
-    def _data_analyzer(self, state: AgentState) -> AgentState:
+    async def _data_analyzer(self, context: RuntimeContext, state: AgentState) -> AgentState:
         route = _route(state)
         profile = state["profile"]
         results = dict(state.get("tool_results", {}))
@@ -81,27 +97,39 @@ class FitLifeWorkflow:
             return {"tool_calls": calls, "tool_results": results}
         if route.get("needs_meal_analysis"):
             calls = _append_tool_call({"tool_calls": calls}, "analyze_meals")
-            results["meal_analysis"] = analyze_meals(
-                self.repository.read_meals(user_id),
-                calorie_target=profile["daily_calorie_target"],
-                protein_target=profile["daily_protein_target"],
+            results["meal_analysis"] = await context.tool(
+                "analyze_meals",
+                "safe",
+                lambda: analyze_meals(
+                    self.repository.read_meals(user_id),
+                    calorie_target=profile["daily_calorie_target"],
+                    protein_target=profile["daily_protein_target"],
+                ),
             )
         if route.get("needs_workout_analysis"):
             calls = _append_tool_call({"tool_calls": calls}, "analyze_workouts")
-            results["workout_analysis"] = analyze_workouts(self.repository.read_workouts(user_id))
+            results["workout_analysis"] = await context.tool(
+                "analyze_workouts",
+                "safe",
+                lambda: analyze_workouts(self.repository.read_workouts(user_id)),
+            )
         return {"tool_calls": calls, "tool_results": results}
 
-    def _retriever(self, state: AgentState) -> AgentState:
+    async def _retriever(self, context: RuntimeContext, state: AgentState) -> AgentState:
         route = _route(state)
         query = _build_retrieval_query(state["user_query"], route)
-        docs = self.retriever(query, 4 if route.get("needs_report") else 3)
+        docs = await context.tool(
+            "retrieve_knowledge",
+            "safe",
+            lambda: self.retriever(query, 4 if route.get("needs_report") else 3),
+        )
         return {
             "retrieval_query": query,
             "retrieved_docs": docs,
             "tool_calls": _append_tool_call(state, "retrieve_knowledge"),
         }
 
-    def _generator(self, state: AgentState) -> AgentState:
+    async def _generator(self, context: RuntimeContext, state: AgentState) -> AgentState:
         route = _route(state)
         profile = state["profile"]
         results = dict(state.get("tool_results", {}))
@@ -110,36 +138,60 @@ class FitLifeWorkflow:
         if route.get("needs_report") and "weekly_report" not in results:
             meal = results.get("meal_analysis")
             if meal is None:
-                meal = analyze_meals(
-                    self.repository.read_meals(user_id),
-                    calorie_target=profile["daily_calorie_target"],
-                    protein_target=profile["daily_protein_target"],
+                meal = await context.tool(
+                    "analyze_meals",
+                    "safe",
+                    lambda: analyze_meals(
+                        self.repository.read_meals(user_id),
+                        calorie_target=profile["daily_calorie_target"],
+                        protein_target=profile["daily_protein_target"],
+                    ),
                 )
                 calls = _append_tool_call({"tool_calls": calls}, "analyze_meals")
             workout = results.get("workout_analysis")
             if workout is None:
-                workout = analyze_workouts(self.repository.read_workouts(user_id))
+                workout = await context.tool(
+                    "analyze_workouts",
+                    "safe",
+                    lambda: analyze_workouts(self.repository.read_workouts(user_id)),
+                )
                 calls = _append_tool_call({"tool_calls": calls}, "analyze_workouts")
-            results["weekly_report"] = generate_weekly_report(profile, meal, workout)
+            results["weekly_report"] = await context.tool(
+                "generate_weekly_report",
+                "safe",
+                lambda: generate_weekly_report(profile, meal, workout),
+            )
             calls = _append_tool_call({"tool_calls": calls}, "generate_weekly_report")
         if route.get("needs_plan") and "active_plan" not in results:
-            results["generated_plan"] = generate_plan(profile)
+            results["generated_plan"] = await context.tool(
+                "generate_next_week_plan",
+                "safe",
+                lambda: generate_plan(profile),
+            )
             calls = _append_tool_call({"tool_calls": calls}, "generate_next_week_plan")
         return {"tool_calls": calls, "tool_results": results}
 
-    def _validator(self, state: AgentState) -> AgentState:
+    async def _validator(self, context: RuntimeContext, state: AgentState) -> AgentState:
         results = dict(state.get("tool_results", {}))
         validation = {"passed": True, "warnings": [], "violations": [], "repair_suggestions": []}
         calls = list(state.get("tool_calls", []))
         plan = results.get("generated_plan")
         if plan is not None:
-            validation = validate_generated_plan(plan, state["profile"])
+            validation = await context.tool(
+                "validate_plan",
+                "safe",
+                lambda: validate_generated_plan(plan, state["profile"]),
+            )
             results["generated_plan"] = {**plan, "validation": validation}
             calls = _append_tool_call({"tool_calls": calls}, "validate_plan")
         return {"tool_calls": calls, "tool_results": results, "validation_result": validation}
 
-    def _writer(self, state: AgentState) -> AgentState:
-        answer = _invoke_model(lambda: self.gateway.write_answer(state))
+    async def _writer(self, context: RuntimeContext, state: AgentState) -> AgentState:
+        answer = await context.tool(
+            "write_answer_model",
+            "never",
+            lambda: _invoke_model(lambda: self.gateway.write_answer(state)),
+        )
         if not answer.strip():
             raise model_gateway_error(ValueError("Model returned a blank answer"))
         return {"final_answer": answer, "llm_used": True, "llm_answer_used": True}

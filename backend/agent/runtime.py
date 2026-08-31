@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from threading import Thread
 from collections.abc import Awaitable, Callable
 from typing import Literal, TypeVar
 
@@ -40,4 +41,23 @@ class AgentRuntime:
         return result.with_request_id()
 
     def execute_sync(self, command: AgentCommand, workflow: AgentWorkflow) -> AgentResult:
-        return asyncio.run(self.execute(command, workflow))
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.execute(command, workflow))
+
+        result: list[AgentResult] = []
+        failure: list[BaseException] = []
+
+        def run_in_bridge_thread() -> None:
+            try:
+                result.append(asyncio.run(self.execute(command, workflow)))
+            except BaseException as error:
+                failure.append(error)
+
+        thread = Thread(target=run_in_bridge_thread, name="fitlife-agent-sync-bridge")
+        thread.start()
+        thread.join()
+        if failure:
+            raise failure[0]
+        return result[0]

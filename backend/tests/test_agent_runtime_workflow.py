@@ -40,6 +40,18 @@ def test_runtime_executes_a_typed_command_and_projects_the_compatible_result():
     }
 
 
+def test_sync_runtime_bridge_is_safe_inside_an_existing_event_loop():
+    async def call_sync_api() -> AgentResult:
+        return AgentRuntime().execute_sync(
+            AgentCommand(operation="chat", question="inside loop", user_id=None),
+            RecordingWorkflow(),
+        )
+
+    result = asyncio.run(call_sync_api())
+
+    assert result.answer_markdown == "INSIDE LOOP"
+
+
 class Gateway:
     model = "test-model"
 
@@ -82,6 +94,66 @@ def test_explicit_workflow_includes_retriever_when_planner_requests_it():
 
     assert context.completed_steps[3] == "retriever"
     assert result.sources == ({"source": "test.md", "text": "hello"},)
+
+
+def test_reused_workflow_gives_each_run_an_independent_nested_context_snapshot():
+    metadata = {"preferences": {"language": "zh-CN"}}
+
+    class MutatingGateway(Gateway):
+        observed_languages: list[str] = []
+
+        def write_answer(self, state: dict) -> str:
+            preferences = state["context_metadata"]["preferences"]
+            self.observed_languages.append(preferences["language"])
+            preferences["language"] = "polluted"
+            return "answer"
+
+    gateway = MutatingGateway(needs_retrieval=False)
+    workflow = FitLifeWorkflow(FileFitnessRepository(), gateway, context_metadata=metadata)
+    metadata["preferences"]["language"] = "externally-mutated"
+
+    asyncio.run(workflow.execute(AgentCommand("chat", "first", None), RuntimeContext()))
+    asyncio.run(workflow.execute(AgentCommand("chat", "second", None), RuntimeContext()))
+
+    assert gateway.observed_languages == ["zh-CN", "zh-CN"]
+
+
+def test_explicit_workflow_records_named_runtime_tools_and_replay_policies():
+    class ObservingContext(RuntimeContext):
+        def __init__(self) -> None:
+            super().__init__()
+            self.tool_invocations: list[tuple[str, str]] = []
+
+        async def tool(self, name: str, replay: str, operation):
+            self.tool_invocations.append((name, replay))
+            return await super().tool(name, replay, operation)
+
+    class PlanningGateway(Gateway):
+        def plan_route(self, question: str) -> PlannerRoute:
+            return PlannerRoute(
+                intent="plan_generation",
+                needs_meal_analysis=True,
+                needs_workout_analysis=True,
+                needs_retrieval=True,
+                needs_plan=True,
+            )
+
+    context = ObservingContext()
+    workflow = FitLifeWorkflow(FileFitnessRepository(), PlanningGateway(needs_retrieval=True))
+
+    asyncio.run(workflow.execute(AgentCommand("chat", "plan with meals and workouts", None), context))
+
+    assert context.tool_invocations == [
+        ("plan_route_model", "never"),
+        ("load_profile", "safe"),
+        ("analyze_meals", "safe"),
+        ("analyze_workouts", "safe"),
+        ("retrieve_knowledge", "safe"),
+        ("generate_next_week_plan", "safe"),
+        ("validate_plan", "safe"),
+        ("write_answer_model", "never"),
+    ]
+    assert context.completed_tools == [name for name, _ in context.tool_invocations]
 
 
 def test_runtime_context_exposes_the_phase_one_tool_execution_path():
