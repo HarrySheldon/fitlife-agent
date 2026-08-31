@@ -20,6 +20,7 @@ class AgentCommand:
     context_date: str | None = None
     initial_tool_results: Mapping[str, object] = field(default_factory=dict)
     initial_tool_calls: tuple[str, ...] = ()
+    request_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class AgentResult:
     sources: tuple[Mapping[str, object], ...]
     model: str
     request_id: str = ""
+    run_id: str = ""
 
     def with_request_id(self) -> AgentResult:
         return self if self.request_id else replace(self, request_id=uuid4().hex)
@@ -44,6 +46,7 @@ class AgentResult:
             "sources": [dict(source) for source in self.sources],
             "model": self.model,
             "request_id": self.request_id,
+            "run_id": self.run_id,
         }
 
 @dataclass(frozen=True)

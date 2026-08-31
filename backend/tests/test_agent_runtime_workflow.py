@@ -37,7 +37,24 @@ def test_runtime_executes_a_typed_command_and_projects_the_compatible_result():
         "sources": [],
         "model": "test-model",
         "request_id": result.request_id,
+        "run_id": result.run_id,
     }
+
+
+def test_runtime_uses_caller_request_id_but_generates_one_when_absent():
+    supplied = asyncio.run(AgentRuntime().execute(
+        AgentCommand(operation="chat", question="hello", user_id=None, request_id="http-request"),
+        RecordingWorkflow(),
+    ))
+    generated = asyncio.run(AgentRuntime().execute(
+        AgentCommand(operation="chat", question="hello", user_id=None), RecordingWorkflow()
+    ))
+
+    assert supplied.request_id == "http-request"
+    assert supplied.result.request_id == "http-request"
+    assert supplied.run_id == supplied.result.run_id
+    assert generated.request_id
+    assert generated.request_id != "http-request"
 
 
 def test_sync_runtime_bridge_is_safe_inside_an_existing_event_loop():

@@ -75,13 +75,13 @@ class AgentRuntime:
     def active_run_ids(self): return tuple(k for k,v in self._runs.items() if v.status in ("accepted","running"))
     async def execute(self, command: AgentCommand, workflow: AgentWorkflow):
         run_id = uuid4().hex
-        request_id = uuid4().hex
+        request_id = command.request_id or uuid4().hex
         event = asyncio.Event()
         self._cancellations[run_id] = event
         self._runs[run_id]=AgentRunSnapshot(run_id,request_id,command.user_id,command.operation,"running")
         context=RuntimeContext(policy=self.policy,clock=self.clock,sleeper=self.sleeper,random_value=self.random_value,token_estimator=self.token_estimator,cancel_event=event,deadline_at=self.clock()+self.policy.deadline_seconds)
         try:
-            context.consume_input(command.question); result=replace((await workflow.execute(command,context)).with_request_id(),request_id=request_id)
+            context.consume_input(command.question); result=replace((await workflow.execute(command,context)).with_request_id(),request_id=request_id,run_id=run_id)
             self._runs[run_id]=replace(self._runs[run_id],status="succeeded",current_step=context.current_step,attempt=context.attempt)
             return AgentOutcome(run_id,request_id,"succeeded",result)
         except Exception as error:

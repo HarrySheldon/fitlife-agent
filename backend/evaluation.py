@@ -6,14 +6,14 @@ from backend.agent.graph import run_fitlife_agent
 from backend.tools.data_access import data_path, read_eval_cases
 
 
-def run_evaluation(limit: int | None = None) -> dict:
+def run_evaluation(limit: int | None = None, request_id: str | None = None) -> dict:
     cases = read_eval_cases()
     if limit is not None:
         cases = cases[:limit]
 
     results = []
     for case in cases:
-        response = run_fitlife_agent(case.question, operation="evaluation")
+        response = run_fitlife_agent(case.question, operation="evaluation", request_id=request_id)
         trace = response.get("trace", {})
         answer = response.get("answer_markdown", "")
         checks = _build_case_checks(case, trace, answer)
@@ -38,12 +38,15 @@ def run_evaluation(limit: int | None = None) -> dict:
                 "checks": checks,
                 "failure_reasons": [check["reason"] for check in checks if not check["passed"]],
                 "trace": trace,
+                "request_id": response.get("request_id"),
+                "run_id": response.get("run_id"),
             }
         )
 
     total = len(results)
     metric = lambda key: _rate([item[key] for item in results])
     output = {
+        "request_id": request_id,
         "total_tests": total,
         "pass_rate": _rate([item["passed"] for item in results]),
         "tool_call_success_rate": metric("tool_ok"),

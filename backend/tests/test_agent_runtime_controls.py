@@ -6,6 +6,9 @@ import pytest
 from backend.agent.contracts import AgentCommand, AgentResult
 from backend.agent.policy import BudgetPolicy, RetryPolicy, RuntimePolicy
 from backend.agent.runtime import AgentRuntime, BudgetExceeded, RunCancelled, RunTimedOut, RuntimeContext
+from backend.domain.errors import model_gateway_error
+from backend.agent.contracts import PublicError
+from backend.schemas import ApiError
 
 
 class ProviderError(Exception):
@@ -111,3 +114,19 @@ def test_cancellation_is_checked_immediately_after_retry_backoff():
 
     with pytest.raises(RunCancelled):
         asyncio.run(context.step("provider", lambda: (_ for _ in ()).throw(ConnectionError())))
+
+
+def test_final_provider_rate_limit_preserves_retry_after_for_public_response():
+    class RateLimitError(Exception):
+        status_code = 429
+        retry_after = 2.5
+
+    normalized = model_gateway_error(RateLimitError())
+
+    assert normalized.code == "MODEL_RATE_LIMITED"
+    assert normalized.retryable is True
+    assert normalized.retry_after_ms == 2500
+
+
+def test_api_uses_the_agent_public_error_contract():
+    assert ApiError is PublicError

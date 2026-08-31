@@ -33,6 +33,7 @@ def run_fitlife_agent(
     operation: AgentOperation = "chat",
     surface: str | None = None,
     context_date: str | None = None,
+    request_id: str | None = None,
 ) -> dict:
     repository = repository or get_fitness_repository()
     gateway = gateway or _resolve_gateway(user_id)
@@ -44,6 +45,7 @@ def run_fitlife_agent(
         context_date=context_date,
         initial_tool_results=dict(initial_tool_results or {}),
         initial_tool_calls=tuple(initial_tool_calls or ()),
+        request_id=request_id,
     )
     workflow = FitLifeWorkflow(repository, gateway, context_metadata=(preferences or UserPreferences()).model_dump())
     return DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
@@ -53,6 +55,7 @@ def run_contextual_coach_action(
     surface: str, action: str, date: str | None, question: str | None = None,
     user_id: str | None = None, *, repository: FitnessRepository | None = None,
     gateway: ModelGateway | None = None, preferences: UserPreferences | None = None,
+    request_id: str | None = None,
 ) -> dict:
     repository = repository or get_fitness_repository()
     results, calls = _build_contextual_tool_context(action, date, user_id, repository)
@@ -60,6 +63,7 @@ def run_contextual_coach_action(
         _coach_prompt(surface, action, date, question), user_id, repository=repository, gateway=gateway,
         initial_tool_results=results, initial_tool_calls=calls, preferences=preferences,
         operation="coach_action", surface=surface, context_date=date,
+        request_id=request_id,
     )
     result["trace"] = {**result.get("trace", {}), "surface": surface, "coach_action": action, "context_date": date}
     return result
@@ -68,6 +72,7 @@ def run_contextual_coach_action(
 def interpret_persisted_weekly_report(
     *, week: str, report: dict, user_id: str, repository: FitnessRepository | None = None,
     gateway: ModelGateway | None = None, preferences: UserPreferences | None = None,
+    request_id: str | None = None,
 ) -> dict:
     result = run_fitlife_agent(
         f"Interpret the persisted deterministic weekly report for ISO week {week}. Use the supplied weekly_report as the report of record; do not generate or substitute another week.",
@@ -75,6 +80,7 @@ def interpret_persisted_weekly_report(
         initial_tool_results={"report_week": week, "weekly_report": report},
         initial_tool_calls=["load_persisted_weekly_report"], preferences=preferences,
         operation="weekly_review", surface="review",
+        request_id=request_id,
     )
     result["trace"] = {**result.get("trace", {}), "surface": "review", "report_week": week}
     return result
@@ -83,6 +89,7 @@ def interpret_persisted_weekly_report(
 def interpret_persisted_plan(
     *, plan_id: str, plan: dict, user_id: str, repository: FitnessRepository | None = None,
     gateway: ModelGateway | None = None, preferences: UserPreferences | None = None,
+    request_id: str | None = None,
 ) -> dict:
     result = run_fitlife_agent(
         f"Review the persisted active fitness plan {plan_id} and recommend safe, useful adjustments. Use the supplied active_plan as the plan of record; do not generate, substitute, activate, or persist another plan.",
@@ -90,6 +97,7 @@ def interpret_persisted_plan(
         initial_tool_results={"active_plan_id": plan_id, "active_plan": plan},
         initial_tool_calls=["load_persisted_plan"], preferences=preferences,
         operation="plan_review", surface="plan",
+        request_id=request_id,
     )
     result["trace"] = {**result.get("trace", {}), "surface": "plan", "active_plan_id": plan_id}
     return result

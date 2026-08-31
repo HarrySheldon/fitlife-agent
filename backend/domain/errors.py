@@ -12,6 +12,9 @@ class ApplicationError(Exception):
         status_code: int,
         processing_mode: ProcessingMode | None = None,
         message_key: str | None = None,
+        action: str | None = None,
+        retryable: bool = False,
+        retry_after_ms: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -19,6 +22,9 @@ class ApplicationError(Exception):
         self.status_code = status_code
         self.processing_mode = processing_mode
         self.message_key = message_key or code
+        self.action = action
+        self.retryable = retryable
+        self.retry_after_ms = retry_after_ms
 
 
 def ai_not_configured_error() -> ApplicationError:
@@ -93,25 +99,34 @@ def model_gateway_error(error: Exception) -> ApplicationError:
         code = "MODEL_TIMEOUT"
         message = "The model did not respond before the request timed out."
         status_code = 504
+        retryable = True
     elif "authentication" in error_name or "permission" in error_name:
         code = "MODEL_AUTH_FAILED"
         message = "The model provider rejected the configured credentials."
         status_code = 502
+        retryable = False
     elif error_name == "notfounderror":
         code = "MODEL_NOT_FOUND"
         message = "The configured model could not be found."
         status_code = 422
+        retryable = False
     elif "ratelimit" in error_name:
         code = "MODEL_RATE_LIMITED"
         message = "The model provider rate limit was reached."
         status_code = 429
+        retryable = True
     else:
         code = "MODEL_PROTOCOL_ERROR"
         message = "The model provider returned an invalid or unsupported response."
         status_code = 502
+        retryable = False
+    retry_after = getattr(error, "retry_after", None)
+    retry_after_ms = int(float(retry_after) * 1000) if isinstance(retry_after, (int, float)) else None
     return ApplicationError(
         code=code,
         message=message,
         status_code=status_code,
         processing_mode="agent",
+        retryable=retryable,
+        retry_after_ms=retry_after_ms,
     )

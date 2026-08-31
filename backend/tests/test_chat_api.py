@@ -33,6 +33,8 @@ def test_chat_meal_analysis_returns_agent_metadata(monkeypatch):
     assert body["processing_mode"] == "agent"
     assert body["data"]["model"] == "test-model"
     assert body["data"]["request_id"]
+    assert body["data"]["request_id"] == response.headers["x-request-id"]
+    assert body["data"]["run_id"]
     assert "蛋白质" in body["data"]["answer_markdown"]
     assert "analyze_meals" in body["data"]["trace"]["tool_calls"]
 

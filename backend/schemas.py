@@ -13,6 +13,7 @@ from pydantic import (
 
 from backend.domain.user_preferences import AppLanguage, UnitSystem, validate_iana_timezone
 from backend.domain.profile_targets import SafetyCondition
+from backend.agent.contracts import PublicError
 
 
 T = TypeVar("T")
@@ -41,13 +42,7 @@ def _normalize_utc(value: datetime) -> datetime:
 UtcAwareDatetime = Annotated[AwareDatetime, AfterValidator(_normalize_utc)]
 
 
-class ApiError(BaseModel):
-    code: str
-    message: str
-    action: str | None = None
-    retryable: bool = False
-    retry_after_ms: int | None = None
-    request_id: str = ""
+ApiError = PublicError
 
 
 class ApiResponse(BaseModel, Generic[T]):
@@ -290,6 +285,7 @@ class CoachActionResponse(BaseModel):
     sources: list[dict] = Field(default_factory=list)
     model: str
     request_id: str
+    run_id: str
 
 
 class AgentEntryRequest(BaseModel):
@@ -325,6 +321,7 @@ class ChatResponse(BaseModel):
     sources: list[dict] = Field(default_factory=list)
     model: str
     request_id: str
+    run_id: str
 
 
 class WeeklyReport(BaseModel):

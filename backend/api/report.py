@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from backend.agent.graph import interpret_persisted_weekly_report
 from backend.application.use_cases.reports import WeeklyReports
 from backend.application.use_cases.generate_weekly_report import GenerateWeeklyReport
 from backend.api.dependencies import optional_current_user, require_current_user
 from backend.api.preference_context import preferences_for
-from backend.api.utils import ok
+from backend.api.utils import ok, request_id_for
 from backend.config import get_settings
 from backend.domain.account_clock import local_week_bounds
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
@@ -44,7 +44,7 @@ def generate_weekly_report(week: str, user: AuthenticatedUser = Depends(require_
 
 
 @router.post("/weekly/{week}/interpret")
-def interpret_weekly_report(week: str, user: AuthenticatedUser = Depends(require_current_user)):
+def interpret_weekly_report(week: str, request: Request, user: AuthenticatedUser = Depends(require_current_user)):
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         stored = _reports().get(user.user_id, week)
         result = interpret_persisted_weekly_report(
@@ -52,6 +52,7 @@ def interpret_weekly_report(week: str, user: AuthenticatedUser = Depends(require
             report=stored.report.model_dump(),
             user_id=user.user_id,
             preferences=preferences_for(user),
+            request_id=request_id_for(request),
         )
         response = CoachActionResponse(
             surface="review",
@@ -62,6 +63,7 @@ def interpret_weekly_report(week: str, user: AuthenticatedUser = Depends(require
             sources=result.get("sources", []),
             model=result["model"],
             request_id=result["request_id"],
+            run_id=result.get("run_id", ""),
         )
         return ok(response.model_dump(), processing_mode="agent")
 

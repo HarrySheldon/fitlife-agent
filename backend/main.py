@@ -19,6 +19,7 @@ from backend.i18n import (
 )
 from backend.infrastructure.startup import run_startup
 from backend.schemas import ApiError, ApiResponse
+from backend.agent.runtime import BudgetExceeded, RunCancelled, RunTimedOut, RuntimeControlError
 
 
 def _safe_language_for_request(request: Request) -> AppLanguage:
@@ -66,9 +67,23 @@ def create_app() -> FastAPI:
         )
         return JSONResponse(status_code=422, content=response.model_dump(exclude={"processing_mode"}), headers={"x-request-id": request.state.request_id})
 
+    @app.exception_handler(RuntimeControlError)
+    async def handle_runtime_control_error(request: Request, error: RuntimeControlError) -> JSONResponse:
+        status_code, action, retryable = {
+            BudgetExceeded: (429, "Reduce the request size or try again later.", False),
+            RunTimedOut: (504, "Try again later.", True),
+            RunCancelled: (409, "Start a new run if you still need the result.", False),
+        }.get(type(error), (500, "Try again later.", False))
+        code = error.code
+        message = translate_public_message(code, _safe_language_for_request(request))
+        response = ApiResponse(success=False, data=None, message=message, processing_mode="agent",
+            error=ApiError(code=code, message=message, action=action, retryable=retryable,
+                           request_id=request.state.request_id))
+        return JSONResponse(status_code=status_code, content=response.model_dump(), headers={"x-request-id": request.state.request_id})
+
     @app.exception_handler(Exception)
     async def handle_unknown_error(request: Request, _error: Exception) -> JSONResponse:
-        message = "The request could not be completed. Please try again."
+        message = translate_public_message("INTERNAL_ERROR", _safe_language_for_request(request))
         response = ApiResponse(success=False, data=None, message=message,
             error=ApiError(code="INTERNAL_ERROR", message=message, action="Try again later or contact support with the request ID.", request_id=request.state.request_id))
         return JSONResponse(status_code=500, content=response.model_dump(exclude={"processing_mode"}), headers={"x-request-id": request.state.request_id})

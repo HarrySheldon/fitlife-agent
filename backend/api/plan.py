@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from backend.agent.graph import interpret_persisted_plan
 from backend.agent.validator import validate_generated_plan
 from backend.api.dependencies import optional_current_user, require_current_user
 from backend.api.preference_context import preferences_for
-from backend.api.utils import ok
+from backend.api.utils import ok, request_id_for
 from backend.application.ports.model_gateway import ConfigurableModelGateway
 from backend.application.ports.plan_repository import StoredPlan
 from backend.application.use_cases.generate_plan import GeneratePlan
@@ -119,7 +119,7 @@ def create_adjustment_draft(
 
 
 @router.post("/{plan_id}/interpret")
-def interpret_plan(plan_id: str, user: AuthenticatedUser = Depends(require_current_user)):
+def interpret_plan(plan_id: str, request: Request, user: AuthenticatedUser = Depends(require_current_user)):
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         stored = _plans().get(user.user_id, plan_id)
         result = interpret_persisted_plan(
@@ -127,6 +127,7 @@ def interpret_plan(plan_id: str, user: AuthenticatedUser = Depends(require_curre
             plan=stored.plan.model_dump(mode="json"),
             user_id=user.user_id,
             preferences=preferences_for(user),
+            request_id=request_id_for(request),
         )
         response = CoachActionResponse(
             surface="plan",
@@ -137,6 +138,7 @@ def interpret_plan(plan_id: str, user: AuthenticatedUser = Depends(require_curre
             sources=result.get("sources", []),
             model=result["model"],
             request_id=result["request_id"],
+            run_id=result.get("run_id", ""),
         )
         return ok(response.model_dump(), processing_mode="agent")
 

@@ -20,6 +20,22 @@ REQUEST_LANGUAGE_STATE_KEY = "public_message_language"
 QUALITY_VALUE_PATTERN = re.compile(r"(?:0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)\Z")
 
 PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
+    "INTERNAL_ERROR": {
+        "en-US": "The request could not be completed. Please try again.",
+        "zh-CN": "请求未能完成，请稍后重试。",
+    },
+    "RUN_BUDGET_EXCEEDED": {
+        "en-US": "The Agent run reached its usage limit.",
+        "zh-CN": "Agent 运行已达到使用限额。",
+    },
+    "RUN_TIMED_OUT": {
+        "en-US": "The Agent run timed out.",
+        "zh-CN": "Agent 运行已超时。",
+    },
+    "RUN_CANCELLED": {
+        "en-US": "The Agent run was cancelled.",
+        "zh-CN": "Agent 运行已取消。",
+    },
     "ACCOUNT_EXPORT_FAILED": {
         "en-US": "Account data could not be exported. Please try again.",
         "zh-CN": "无法导出账户数据，请重试。",

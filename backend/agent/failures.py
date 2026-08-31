@@ -46,6 +46,8 @@ def classify_failure(error: Exception, *, stage: str, attempt: int) -> RuntimeFa
     code = str(getattr(error, "code", "") or "").lower()
     name = type(error).__name__.lower()
     retry_after = getattr(error, "retry_after", None)
+    if retry_after is None and getattr(error, "retry_after_ms", None) is not None:
+        retry_after = float(error.retry_after_ms) / 1000
     if isinstance(error, (ConnectionError, ConnectionResetError)) or "connection" in name:
         return _failure("MODEL_CONNECTION_FAILED", FailureCategory.TRANSIENT, True, error, stage, attempt, status, retry_after)
     if isinstance(error, TimeoutError):
