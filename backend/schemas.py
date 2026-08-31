@@ -42,7 +42,8 @@ def _normalize_utc(value: datetime) -> datetime:
 UtcAwareDatetime = Annotated[AwareDatetime, AfterValidator(_normalize_utc)]
 
 
-ApiError = PublicError
+class ApiError(PublicError):
+    """OpenAPI-compatible name backed by the canonical Agent public error fields."""
 
 
 class ApiResponse(BaseModel, Generic[T]):

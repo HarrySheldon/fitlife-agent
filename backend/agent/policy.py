@@ -24,7 +24,7 @@ class RetryPolicy:
 
 @dataclass(frozen=True)
 class BudgetPolicy:
-    max_input_chars: int = 20_000
+    max_input_chars: int = 8_000
     max_tokens: int = 32_000
     max_model_calls: int = 16
     max_tool_calls: int = 32

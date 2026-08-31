@@ -82,6 +82,7 @@ class PublicError(BaseModel):
     retryable: bool = False
     retry_after_ms: int | None = None
     request_id: str
+    run_id: str | None = None
 
 
 class AgentWorkflow(Protocol):

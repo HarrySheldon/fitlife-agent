@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import account, auth, calendar, chat, coach, dashboard, eval, exercise_catalog, food_catalog, health, meals, plan, profile, profile_targets, report, settings as settings_api, smart_entry, today, upload, workouts
+from backend.api import account, agent_runs, auth, calendar, chat, coach, dashboard, eval, exercise_catalog, food_catalog, health, meals, plan, profile, profile_targets, report, settings as settings_api, smart_entry, today, upload, workouts
 from backend.api.utils import application_error_response
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
@@ -78,7 +78,7 @@ def create_app() -> FastAPI:
         message = translate_public_message(code, _safe_language_for_request(request))
         response = ApiResponse(success=False, data=None, message=message, processing_mode="agent",
             error=ApiError(code=code, message=message, action=action, retryable=retryable,
-                           request_id=request.state.request_id))
+                           request_id=request.state.request_id, run_id=error.run_id or None))
         return JSONResponse(status_code=status_code, content=response.model_dump(), headers={"x-request-id": request.state.request_id})
 
     @app.exception_handler(Exception)
@@ -97,6 +97,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(agent_runs.router)
     app.include_router(account.router)
     app.include_router(settings_api.router)
     app.include_router(profile.router)

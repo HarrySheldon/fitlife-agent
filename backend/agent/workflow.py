@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 from collections.abc import Awaitable, Callable
 
 from backend.agent.contracts import AgentCommand, AgentResult
@@ -46,6 +47,7 @@ class FitLifeWorkflow:
             "context_metadata": deepcopy(self.context_metadata),
             "tool_calls": list(command.initial_tool_calls),
             "tool_results": dict(command.initial_tool_results),
+            "initial_tool_result_keys": tuple(command.initial_tool_results),
             "retrieved_docs": [],
         }
         await self._apply(context, "planner", state, self._planner)
@@ -71,7 +73,7 @@ class FitLifeWorkflow:
     async def _planner(self, context: RuntimeContext, state: AgentState) -> AgentState:
         route = await context.tool(
             "plan_route_model",
-            "never",
+            "safe",
             lambda: _invoke_model(lambda: self.gateway.plan_route(state["user_query"])),
         )
         return {"intent": route.intent, "tool_requests": route.model_dump(), "llm_used": True}
@@ -187,9 +189,18 @@ class FitLifeWorkflow:
         return {"tool_calls": calls, "tool_results": results, "validation_result": validation}
 
     async def _writer(self, context: RuntimeContext, state: AgentState) -> AgentState:
+        initial_keys = set(state.get("initial_tool_result_keys", ()))
+        context.consume_input(json.dumps({
+            "context_metadata": state.get("context_metadata", {}),
+            "profile": state.get("profile", {}),
+            "tool_requests": state.get("tool_requests", {}),
+            "additional_tool_results": {key: value for key, value in state.get("tool_results", {}).items() if key not in initial_keys},
+            "retrieved_docs": state.get("retrieved_docs", []),
+            "validation_result": state.get("validation_result", {}),
+        }, ensure_ascii=False, default=str))
         answer = await context.tool(
             "write_answer_model",
-            "never",
+            "safe",
             lambda: _invoke_model(lambda: self.gateway.write_answer(state)),
         )
         if not answer.strip():

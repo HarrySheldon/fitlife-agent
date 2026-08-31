@@ -56,6 +56,7 @@ def test_runtime_budget_failure_uses_whitelisted_public_error():
         "retryable": False,
         "retry_after_ms": None,
         "request_id": response.headers["x-request-id"],
+        "run_id": None,
     }
     assert "internal budget" not in response.text
 

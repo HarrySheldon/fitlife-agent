@@ -32,3 +32,13 @@ No test accesses the network, a real model, or paid tokens. Backoff and deadline
 - `backend.agent.contracts.PublicError` is the sole public-error model; `backend.schemas.ApiError` is a compatibility alias to that exact type.
 
 Review verification passed 87 targeted Agent, application and API tests with one existing Starlette deprecation warning.
+
+## Quality review fixes
+
+- Provider normalization now prioritizes status/code semantics and is covered through the real workflow wrapping path.
+- The canonical `PublicError` fields are inherited by the OpenAPI-compatible `ApiError` component.
+- Budget preflight safely serializes command context, and writer accounting adds generated context, retrieval and validation without recounting initial results.
+- Public run status and cancellation endpoints enforce run ownership and return run IDs on public failures.
+- The in-process run registry uses a lock and thread-safe cancellation events across FastAPI worker threads.
+
+Quality-review verification passed 93 targeted tests with one existing Starlette deprecation warning.

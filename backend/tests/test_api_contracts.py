@@ -31,6 +31,7 @@ def test_agent_without_model_uses_stable_error_contract():
                 "retryable": False,
                 "retry_after_ms": None,
                 "request_id": response.json()["error"]["request_id"],
+                "run_id": None,
         },
     }
 
@@ -52,5 +53,6 @@ def test_model_gateway_initialization_failure_is_normalized(monkeypatch):
         "retryable": False,
         "retry_after_ms": None,
         "request_id": response.json()["error"]["request_id"],
+        "run_id": None,
     }
     assert "configuration details" not in response.text

@@ -15,6 +15,7 @@ class ApplicationError(Exception):
         action: str | None = None,
         retryable: bool = False,
         retry_after_ms: int | None = None,
+        run_id: str | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -25,6 +26,7 @@ class ApplicationError(Exception):
         self.action = action
         self.retryable = retryable
         self.retry_after_ms = retry_after_ms
+        self.run_id = run_id
 
 
 def ai_not_configured_error() -> ApplicationError:
@@ -95,22 +97,24 @@ def account_delete_failed_error() -> ApplicationError:
 
 def model_gateway_error(error: Exception) -> ApplicationError:
     error_name = type(error).__name__.lower()
-    if isinstance(error, TimeoutError) or "timeout" in error_name:
+    provider_status = getattr(error, "status_code", None)
+    provider_code = str(getattr(error, "code", "") or "").lower()
+    if provider_status in (408, 504) or isinstance(error, TimeoutError) or "timeout" in error_name:
         code = "MODEL_TIMEOUT"
         message = "The model did not respond before the request timed out."
         status_code = 504
         retryable = True
-    elif "authentication" in error_name or "permission" in error_name:
+    elif provider_status in (401, 403) or "authentication" in error_name or "permission" in error_name:
         code = "MODEL_AUTH_FAILED"
         message = "The model provider rejected the configured credentials."
         status_code = 502
         retryable = False
-    elif error_name == "notfounderror":
+    elif provider_code == "model_not_found" or (provider_status == 404 and "model" in provider_code) or error_name == "notfounderror":
         code = "MODEL_NOT_FOUND"
         message = "The configured model could not be found."
         status_code = 422
         retryable = False
-    elif "ratelimit" in error_name:
+    elif provider_status == 429 or "ratelimit" in error_name:
         code = "MODEL_RATE_LIMITED"
         message = "The model provider rate limit was reached."
         status_code = 429

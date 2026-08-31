@@ -129,4 +129,5 @@ def test_final_provider_rate_limit_preserves_retry_after_for_public_response():
 
 
 def test_api_uses_the_agent_public_error_contract():
-    assert ApiError is PublicError
+    assert issubclass(ApiError, PublicError)
+    assert ApiError.model_fields.keys() == PublicError.model_fields.keys()

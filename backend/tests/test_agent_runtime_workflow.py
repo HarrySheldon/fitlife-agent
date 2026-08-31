@@ -161,14 +161,14 @@ def test_explicit_workflow_records_named_runtime_tools_and_replay_policies():
     asyncio.run(workflow.execute(AgentCommand("chat", "plan with meals and workouts", None), context))
 
     assert context.tool_invocations == [
-        ("plan_route_model", "never"),
+        ("plan_route_model", "safe"),
         ("load_profile", "safe"),
         ("analyze_meals", "safe"),
         ("analyze_workouts", "safe"),
         ("retrieve_knowledge", "safe"),
         ("generate_next_week_plan", "safe"),
         ("validate_plan", "safe"),
-        ("write_answer_model", "never"),
+        ("write_answer_model", "safe"),
     ]
     assert context.completed_tools == [name for name, _ in context.tool_invocations]
 

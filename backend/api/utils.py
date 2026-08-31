@@ -53,7 +53,8 @@ def application_error_response(error: ApplicationError, language: AppLanguage = 
         processing_mode=error.processing_mode,
         error=ApiError(code=error.code, message=message, action=getattr(error, "action", None),
                        retryable=getattr(error, "retryable", False),
-                       retry_after_ms=getattr(error, "retry_after_ms", None), request_id=request_id),
+                       retry_after_ms=getattr(error, "retry_after_ms", None), request_id=request_id,
+                       run_id=getattr(error, "run_id", None)),
     )
     return _dump_response(response)
 
