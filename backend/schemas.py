@@ -44,6 +44,10 @@ UtcAwareDatetime = Annotated[AwareDatetime, AfterValidator(_normalize_utc)]
 class ApiError(BaseModel):
     code: str
     message: str
+    action: str | None = None
+    retryable: bool = False
+    retry_after_ms: int | None = None
+    request_id: str = ""
 
 
 class ApiResponse(BaseModel, Generic[T]):

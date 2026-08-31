@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, Mapping, Protocol
+from pydantic import BaseModel
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -44,6 +45,40 @@ class AgentResult:
             "model": self.model,
             "request_id": self.request_id,
         }
+
+@dataclass(frozen=True)
+class AgentOutcome:
+    run_id: str
+    request_id: str
+    status: Literal["succeeded"]
+    result: AgentResult
+    def __getattr__(self, name: str): return getattr(self.result, name)
+    def to_dict(self) -> dict[str, object]: return self.result.to_dict()
+
+@dataclass(frozen=True)
+class AgentRunSnapshot:
+    run_id: str
+    request_id: str
+    user_id: str | None
+    operation: AgentOperation
+    status: Literal["accepted", "running", "succeeded", "failed", "cancelled", "timed_out"]
+    current_step: str | None = None
+    attempt: int = 0
+    public_error_code: str | None = None
+
+@dataclass(frozen=True)
+class CancelResult:
+    run_id: str
+    cancelled: bool
+    status: str
+
+class PublicError(BaseModel):
+    code: str
+    message: str
+    action: str | None = None
+    retryable: bool = False
+    retry_after_ms: int | None = None
+    request_id: str
 
 
 class AgentWorkflow(Protocol):

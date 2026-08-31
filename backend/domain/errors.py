@@ -45,7 +45,7 @@ def credential_store_unavailable_error(
 ) -> ApplicationError:
     return ApplicationError(
         code="CREDENTIAL_STORE_UNAVAILABLE",
-        message="Secure credential storage is unavailable. Configure SETTINGS_ENCRYPTION_KEY.",
+        message="Secure credential storage is temporarily unavailable.",
         status_code=503,
         processing_mode=processing_mode,
     )

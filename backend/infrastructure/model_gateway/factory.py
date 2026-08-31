@@ -59,7 +59,7 @@ def create_model_gateway(
             timeout=httpx.Timeout(30.0, connect=5.0),
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
         )
-        kwargs: dict[str, Any] = {"api_key": api_key, "http_client": http_client}
+        kwargs: dict[str, Any] = {"api_key": api_key, "http_client": http_client, "max_retries": 0}
         if base_url:
             kwargs["base_url"] = base_url
         client = OpenAI(**kwargs)

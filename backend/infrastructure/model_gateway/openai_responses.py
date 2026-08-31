@@ -106,7 +106,7 @@ def build_model_gateway(
         except ImportError:
             return None
 
-        kwargs: dict[str, str] = {"api_key": settings.openai_api_key}
+        kwargs: dict[str, Any] = {"api_key": settings.openai_api_key, "max_retries": 0}
         if settings.openai_base_url:
             kwargs["base_url"] = settings.openai_base_url
         client = OpenAI(**kwargs)

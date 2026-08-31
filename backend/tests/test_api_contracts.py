@@ -24,9 +24,13 @@ def test_agent_without_model_uses_stable_error_contract():
         "data": None,
         "message": "Configure and enable a model connection before using Agent features.",
         "processing_mode": "agent",
-        "error": {
-            "code": "AI_NOT_CONFIGURED",
-            "message": "Configure and enable a model connection before using Agent features.",
+            "error": {
+                "code": "AI_NOT_CONFIGURED",
+                "message": "Configure and enable a model connection before using Agent features.",
+                "action": None,
+                "retryable": False,
+                "retry_after_ms": None,
+                "request_id": response.json()["error"]["request_id"],
         },
     }
 
@@ -44,5 +48,9 @@ def test_model_gateway_initialization_failure_is_normalized(monkeypatch):
     assert response.json()["error"] == {
         "code": "MODEL_PROTOCOL_ERROR",
         "message": "The model provider returned an invalid or unsupported response.",
+        "action": None,
+        "retryable": False,
+        "retry_after_ms": None,
+        "request_id": response.json()["error"]["request_id"],
     }
     assert "configuration details" not in response.text

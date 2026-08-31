@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -37,11 +38,19 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="FitLife Agent API", version="0.1.0", lifespan=lifespan)
 
+    @app.middleware("http")
+    async def assign_request_id(request: Request, call_next):
+        request.state.request_id = uuid4().hex
+        response = await call_next(request)
+        response.headers["x-request-id"] = request.state.request_id
+        return response
+
     @app.exception_handler(ApplicationError)
     async def handle_application_error(request: Request, error: ApplicationError) -> JSONResponse:
         return JSONResponse(
             status_code=error.status_code,
-            content=application_error_response(error, _safe_language_for_request(request)),
+            content=application_error_response(error, _safe_language_for_request(request), request.state.request_id),
+            headers={"x-request-id": request.state.request_id},
         )
 
     @app.exception_handler(RequestValidationError)
@@ -53,9 +62,16 @@ def create_app() -> FastAPI:
             success=False,
             data=None,
             message=message,
-            error=ApiError(code="VALIDATION_ERROR", message=message),
+            error=ApiError(code="VALIDATION_ERROR", message=message, action="Check the request fields and try again.", request_id=request.state.request_id),
         )
-        return JSONResponse(status_code=422, content=response.model_dump(exclude={"processing_mode"}))
+        return JSONResponse(status_code=422, content=response.model_dump(exclude={"processing_mode"}), headers={"x-request-id": request.state.request_id})
+
+    @app.exception_handler(Exception)
+    async def handle_unknown_error(request: Request, _error: Exception) -> JSONResponse:
+        message = "The request could not be completed. Please try again."
+        response = ApiResponse(success=False, data=None, message=message,
+            error=ApiError(code="INTERNAL_ERROR", message=message, action="Try again later or contact support with the request ID.", request_id=request.state.request_id))
+        return JSONResponse(status_code=500, content=response.model_dump(exclude={"processing_mode"}), headers={"x-request-id": request.state.request_id})
 
     app.add_middleware(
         CORSMiddleware,

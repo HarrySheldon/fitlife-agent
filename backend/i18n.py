@@ -368,8 +368,8 @@ PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
         "zh-CN": "请先启用已保存的模型连接，再使用 Agent 功能。",
     },
     "CREDENTIAL_STORE_UNAVAILABLE": {
-        "en-US": "Secure credential storage is unavailable. Configure SETTINGS_ENCRYPTION_KEY.",
-        "zh-CN": "安全凭据存储不可用，请配置 SETTINGS_ENCRYPTION_KEY。",
+        "en-US": "Secure credential storage is temporarily unavailable.",
+        "zh-CN": "安全凭据存储暂时不可用。",
     },
     "INVALID_MODEL_ENDPOINT": {
         "en-US": "The custom model endpoint is not allowed by the server security policy.",

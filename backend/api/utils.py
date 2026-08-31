@@ -34,14 +34,15 @@ def fail(
     )
 
 
-def application_error_response(error: ApplicationError, language: AppLanguage = "en-US") -> dict:
+def application_error_response(error: ApplicationError, language: AppLanguage = "en-US", request_id: str = "") -> dict:
     message = translate_public_message(error.message_key, language, error.message)
     response = ApiResponse(
         success=False,
         data=None,
         message=message,
         processing_mode=error.processing_mode,
-        error=ApiError(code=error.code, message=message),
+        error=ApiError(code=error.code, message=message, action=getattr(error, "action", None),
+                       retryable=getattr(error, "retryable", False), request_id=request_id),
     )
     return _dump_response(response)
 
