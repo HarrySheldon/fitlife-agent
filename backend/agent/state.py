@@ -4,6 +4,7 @@ from typing import TypedDict
 
 
 class AgentState(TypedDict, total=False):
+    operation: str
     messages: list[dict]
     user_query: str
     current_user_id: str | None

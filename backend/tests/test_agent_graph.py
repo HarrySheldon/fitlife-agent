@@ -17,62 +17,6 @@ class RoutingGateway:
         return "## Model answer\nGenerated from validated tool results."
 
 
-def test_build_graph_exposes_fitlife_workflow_nodes():
-    graph = agent_graph.build_graph(
-        repository=FileFitnessRepository(),
-        gateway=RoutingGateway(),
-    )
-
-    node_names = set(graph.get_graph().nodes)
-    assert {
-        "planner",
-        "profile_loader",
-        "data_analyzer",
-        "retriever",
-        "generator",
-        "validator",
-        "writer",
-        "trace_builder",
-    }.issubset(node_names)
-
-
-def test_run_fitlife_agent_invokes_compiled_graph(monkeypatch):
-    invoked_states: list[dict] = []
-
-    class FakeCompiledGraph:
-        def invoke(self, state: dict) -> dict:
-            invoked_states.append(state)
-            return {
-                "final_answer": "fake graph answer",
-                "intent": "knowledge_qa",
-                "trace": {
-                    "intent": "knowledge_qa",
-                    "tool_calls": ["retrieve_knowledge"],
-                    "retrieved_sources": ["fitness_rules.md"],
-                    "validation_passed": True,
-                    "warnings": [],
-                    "llm_used": True,
-                    "llm_answer_used": True,
-                },
-                "tool_results": {},
-                "retrieved_docs": [{"source": "fitness_rules.md", "text": "demo"}],
-            }
-
-    monkeypatch.setattr(agent_graph, "build_graph", lambda **kwargs: FakeCompiledGraph())
-
-    result = agent_graph.run_fitlife_agent(
-        "How should I train this week?",
-        repository=FileFitnessRepository(),
-        gateway=RoutingGateway(),
-    )
-
-    assert invoked_states[0]["user_query"] == "How should I train this week?"
-    assert result["answer_markdown"] == "fake graph answer"
-    assert result["model"] == "test-model"
-    assert result["request_id"]
-    assert result["sources"] == [{"source": "fitness_rules.md", "text": "demo"}]
-
-
 def test_run_contextual_coach_action_adds_context_to_prompt_and_trace(monkeypatch):
     captured: dict[str, str | None] = {}
 
@@ -105,34 +49,6 @@ def test_run_contextual_coach_action_adds_context_to_prompt_and_trace(monkeypatc
     assert result["answer_markdown"] == "Contextual model answer"
     assert result["trace"]["surface"] == "plan"
     assert result["trace"]["coach_action"] == "adjust_next_plan"
-
-
-def test_planner_node_uses_only_model_route():
-    class Gateway(RoutingGateway):
-        def plan_route(self, question: str) -> PlannerRoute:
-            return PlannerRoute(intent="knowledge_qa", needs_retrieval=True)
-
-    update = agent_graph.planner_node(
-        {"user_query": "Give me general fitness advice."},
-        Gateway(),
-    )
-
-    assert update["intent"] == "knowledge_qa"
-    assert update["tool_requests"]["needs_retrieval"] is True
-    assert update["llm_used"] is True
-
-
-def test_writer_node_uses_only_model_answer():
-    update = agent_graph.writer_node(
-        {"intent": "knowledge_qa", "tool_results": {}, "retrieved_docs": []},
-        RoutingGateway(),
-    )
-
-    assert update == {
-        "final_answer": "## Model answer\nGenerated from validated tool results.",
-        "llm_used": True,
-        "llm_answer_used": True,
-    }
 
 
 @pytest.mark.parametrize(

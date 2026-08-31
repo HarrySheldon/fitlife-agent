@@ -13,7 +13,7 @@ def run_evaluation(limit: int | None = None) -> dict:
 
     results = []
     for case in cases:
-        response = run_fitlife_agent(case.question)
+        response = run_fitlife_agent(case.question, operation="evaluation")
         trace = response.get("trace", {})
         answer = response.get("answer_markdown", "")
         checks = _build_case_checks(case, trace, answer)

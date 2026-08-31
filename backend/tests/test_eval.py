@@ -10,7 +10,7 @@ def test_run_evaluation_returns_metrics_and_cases(monkeypatch):
     monkeypatch.setattr(
         evaluation,
         "run_fitlife_agent",
-        lambda question: {
+        lambda question, **kwargs: {
             "answer_markdown": "## Model answer",
             "trace": {
                 "tool_calls": [],
@@ -45,7 +45,7 @@ def test_run_evaluation_returns_structured_checks_and_failure_reasons(monkeypatc
         ),
     ]
 
-    def fake_agent(question: str) -> dict:
+    def fake_agent(question: str, **kwargs) -> dict:
         if question == "passing case":
             return {
                 "answer_markdown": "## Summary\nprotein target was reached",
@@ -107,7 +107,7 @@ def test_run_evaluation_returns_group_metrics_and_writes_artifacts(monkeypatch):
         ),
     ]
 
-    def fake_agent(question: str) -> dict:
+    def fake_agent(question: str, **kwargs) -> dict:
         return {
             "answer_markdown": "## Answer\nprotein replacement",
             "trace": {
