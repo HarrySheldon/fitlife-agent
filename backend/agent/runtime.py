@@ -88,11 +88,20 @@ class AgentRuntime:
                 "initial_tool_calls": command.initial_tool_calls}, ensure_ascii=False, default=str)
             context.consume_input(command_payload)
             result=replace((await workflow.execute(command,context)).with_request_id(),request_id=request_id,run_id=run_id)
-            with self._lock: self._runs[run_id]=replace(self._runs[run_id],status="succeeded",current_step=context.current_step,attempt=context.attempt)
+            with self._lock:
+                self._runs[run_id]=replace(self._runs[run_id],status="succeeded",current_step=context.current_step,attempt=context.attempt)
+                self._evict_completed()
             return AgentOutcome(run_id,request_id,"succeeded",result)
+        except asyncio.CancelledError:
+            error = RunCancelled("The run was cancelled.", run_id=run_id, request_id=request_id)
+            with self._lock:
+                self._runs[run_id]=replace(self._runs[run_id],status="cancelled",current_step=context.current_step,attempt=context.attempt,public_error_code=error.code)
+                self._evict_completed()
+            raise error from None
         except Exception as error:
             status="cancelled" if isinstance(error,RunCancelled) else "timed_out" if isinstance(error,RunTimedOut) else "failed"
             with self._lock: self._runs[run_id]=replace(self._runs[run_id],status=status,current_step=context.current_step,attempt=context.attempt,public_error_code=getattr(error,"code","INTERNAL_ERROR"))
+            with self._lock: self._evict_completed()
             try: error.run_id=run_id; error.request_id=request_id
             except Exception: pass
             raise
@@ -119,3 +128,8 @@ class AgentRuntime:
         thread=Thread(target=bridge,name="fitlife-agent-sync-bridge"); thread.start(); thread.join()
         if failure: raise failure[0]
         return result[0]
+
+    def _evict_completed(self):
+        terminal = [run_id for run_id, run in self._runs.items() if run.status not in ("accepted", "running")]
+        for run_id in terminal[:-self.policy.max_completed_runs] if self.policy.max_completed_runs else terminal:
+            self._runs.pop(run_id, None)

@@ -38,7 +38,9 @@ Review verification passed 87 targeted Agent, application and API tests with one
 - Provider normalization now prioritizes status/code semantics and is covered through the real workflow wrapping path.
 - The canonical `PublicError` fields are inherited by the OpenAPI-compatible `ApiError` component.
 - Budget preflight safely serializes command context, and writer accounting adds generated context, retrieval and validation without recounting initial results.
-- Public run status and cancellation endpoints enforce run ownership and return run IDs on public failures.
+- Python Runtime status and cancellation interfaces enforce run ownership; no HTTP run-control route is exposed during synchronous execution.
 - The in-process run registry uses a lock and thread-safe cancellation events across FastAPI worker threads.
 
 Quality-review verification passed 93 targeted tests with one existing Starlette deprecation warning.
+
+Follow-up review moved gateway/repository initialization inside the Runtime boundary, added run IDs to all public failures, normalized terminal Provider errors from status/code metadata, converted `asyncio.CancelledError` to a cancelled snapshot, bounded completed in-memory snapshots, and unified Writer payload construction/accounting with both OpenAI adapters. Follow-up verification passed 97 targeted tests.

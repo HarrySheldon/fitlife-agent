@@ -42,19 +42,22 @@ class RuntimeFailure:
 
 
 def classify_failure(error: Exception, *, stage: str, attempt: int) -> RuntimeFailure:
-    status = getattr(error, "status_code", None)
-    code = str(getattr(error, "code", "") or "").lower()
+    status = getattr(error, "provider_status", None) or getattr(error, "status_code", None)
+    code = str(getattr(error, "provider_code", None) or getattr(error, "code", "") or "").lower()
     name = type(error).__name__.lower()
     retry_after = getattr(error, "retry_after", None)
     if retry_after is None and getattr(error, "retry_after_ms", None) is not None:
         retry_after = float(error.retry_after_ms) / 1000
+    if code in ("model_auth_failed", "model_not_found") or getattr(error, "retryable", None) is False:
+        category = FailureCategory.AUTHENTICATION if "auth" in code else FailureCategory.INVALID_INPUT
+        return _failure(code.upper() or "MODEL_TERMINAL_ERROR", category, False, error, stage, attempt, status, retry_after)
     if isinstance(error, (ConnectionError, ConnectionResetError)) or "connection" in name:
         return _failure("MODEL_CONNECTION_FAILED", FailureCategory.TRANSIENT, True, error, stage, attempt, status, retry_after)
     if isinstance(error, TimeoutError):
         return _failure("MODEL_TIMEOUT", FailureCategory.TIMEOUT, True, error, stage, attempt, status, retry_after)
     if status in (401, 403):
         return _failure("MODEL_AUTH_FAILED", FailureCategory.AUTHENTICATION, False, error, stage, attempt, status, retry_after)
-    if "quota" in code or "billing" in code:
+    if "quota" in code or "billing" in code or code == "insufficient_quota":
         return _failure("MODEL_QUOTA_EXHAUSTED", FailureCategory.QUOTA, False, error, stage, attempt, status, retry_after)
     if "safety" in code or "content_filter" in code:
         return _failure("MODEL_SAFETY_REFUSAL", FailureCategory.SAFETY, False, error, stage, attempt, status, retry_after)

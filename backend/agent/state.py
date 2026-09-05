@@ -17,6 +17,7 @@ class AgentState(TypedDict, total=False):
     tool_requests: dict
     tool_calls: list[str]
     tool_results: dict
+    initial_tool_results_snapshot: dict
     retrieval_query: str
     retrieved_docs: list[dict]
     draft_answer: str

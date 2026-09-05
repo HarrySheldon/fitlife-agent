@@ -19,6 +19,7 @@ def test_agent_without_model_uses_stable_error_contract():
     response = client.post("/chat", json={"question": "Help me understand this week"})
 
     assert response.status_code == 409
+    assert response.json()["error"]["run_id"]
     assert response.json() == {
         "success": False,
         "data": None,
@@ -31,7 +32,7 @@ def test_agent_without_model_uses_stable_error_contract():
                 "retryable": False,
                 "retry_after_ms": None,
                 "request_id": response.json()["error"]["request_id"],
-                "run_id": None,
+                "run_id": response.json()["error"]["run_id"],
         },
     }
 
@@ -53,6 +54,6 @@ def test_model_gateway_initialization_failure_is_normalized(monkeypatch):
         "retryable": False,
         "retry_after_ms": None,
         "request_id": response.json()["error"]["request_id"],
-        "run_id": None,
+        "run_id": response.json()["error"]["run_id"],
     }
     assert "configuration details" not in response.text

@@ -13,8 +13,8 @@ from backend.infrastructure.model_gateway.openai_responses import (
     WRITER_INSTRUCTIONS,
     _model_ids,
     _probe_tool,
-    _writer_payload,
 )
+from backend.agent.model_payloads import writer_payload
 
 
 class OpenAIChatCompletionsAdapter:
@@ -43,7 +43,7 @@ class OpenAIChatCompletionsAdapter:
                 {"role": "system", "content": WRITER_INSTRUCTIONS},
                 {
                     "role": "user",
-                    "content": json.dumps(_writer_payload(state), ensure_ascii=False),
+                    "content": json.dumps(writer_payload(state), ensure_ascii=False),
                 },
             ],
         )

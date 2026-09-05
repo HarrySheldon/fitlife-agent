@@ -9,6 +9,7 @@ from backend.application.ports.structured_model_gateway import (
     StructuredOutput,
 )
 from backend.config import Settings, get_settings
+from backend.agent.model_payloads import writer_payload
 
 
 PLANNER_INSTRUCTIONS = """You are FitLife Coach Agent's planner.
@@ -43,7 +44,7 @@ class OpenAIResponsesAdapter:
         response = self.client.responses.create(
             model=self.model,
             instructions=WRITER_INSTRUCTIONS,
-            input=json.dumps(_writer_payload(state), ensure_ascii=False),
+            input=json.dumps(writer_payload(state), ensure_ascii=False),
         )
         text = str(getattr(response, "output_text", "")).strip()
         if not text:
@@ -124,16 +125,6 @@ def _extract_parsed_output(response: Any) -> Any | None:
     return None
 
 
-def _writer_payload(state: dict) -> dict:
-    return {
-        "user_query": state.get("user_query", ""),
-        "context_metadata": state.get("context_metadata", {}),
-        "intent": state.get("intent", ""),
-        "profile": state.get("profile", {}),
-        "tool_results": state.get("tool_results", {}),
-        "retrieved_docs": state.get("retrieved_docs", []),
-        "validation_result": state.get("validation_result", {}),
-    }
 
 
 def _model_ids(response: Any) -> list[str]:

@@ -35,8 +35,6 @@ def run_fitlife_agent(
     context_date: str | None = None,
     request_id: str | None = None,
 ) -> dict:
-    repository = repository or get_fitness_repository()
-    gateway = gateway or _resolve_gateway(user_id)
     command = AgentCommand(
         operation=operation,
         question=question,
@@ -47,8 +45,19 @@ def run_fitlife_agent(
         initial_tool_calls=tuple(initial_tool_calls or ()),
         request_id=request_id,
     )
-    workflow = FitLifeWorkflow(repository, gateway, context_metadata=(preferences or UserPreferences()).model_dump())
+    workflow = _LazyFitLifeWorkflow(repository, gateway, user_id, preferences or UserPreferences())
     return DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
+
+
+class _LazyFitLifeWorkflow:
+    def __init__(self, repository, gateway, user_id, preferences):
+        self.repository, self.gateway, self.user_id, self.preferences = repository, gateway, user_id, preferences
+
+    async def execute(self, command, context):
+        repository = self.repository or get_fitness_repository()
+        gateway = self.gateway or _resolve_gateway(self.user_id)
+        workflow = FitLifeWorkflow(repository, gateway, context_metadata=self.preferences.model_dump())
+        return await workflow.execute(command, context)
 
 
 def run_contextual_coach_action(

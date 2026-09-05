@@ -16,6 +16,8 @@ class ApplicationError(Exception):
         retryable: bool = False,
         retry_after_ms: int | None = None,
         run_id: str | None = None,
+        provider_status: int | None = None,
+        provider_code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -27,6 +29,8 @@ class ApplicationError(Exception):
         self.retryable = retryable
         self.retry_after_ms = retry_after_ms
         self.run_id = run_id
+        self.provider_status = provider_status
+        self.provider_code = provider_code
 
 
 def ai_not_configured_error() -> ApplicationError:
@@ -114,6 +118,11 @@ def model_gateway_error(error: Exception) -> ApplicationError:
         message = "The configured model could not be found."
         status_code = 422
         retryable = False
+    elif "quota" in provider_code or "billing" in provider_code:
+        code = "MODEL_QUOTA_EXHAUSTED"
+        message = "The model provider quota is unavailable."
+        status_code = 429
+        retryable = False
     elif provider_status == 429 or "ratelimit" in error_name:
         code = "MODEL_RATE_LIMITED"
         message = "The model provider rate limit was reached."
@@ -133,4 +142,6 @@ def model_gateway_error(error: Exception) -> ApplicationError:
         processing_mode="agent",
         retryable=retryable,
         retry_after_ms=retry_after_ms,
+        provider_status=provider_status,
+        provider_code=provider_code,
     )

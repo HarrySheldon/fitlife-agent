@@ -14,6 +14,7 @@ from backend.agent.contracts import AgentResult
 from backend.agent.workflow import FitLifeWorkflow
 from backend.agent.planner import PlannerRoute
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
+from backend.agent.model_payloads import incremental_writer_payload, serialized_payload, writer_payload
 
 
 class ProviderApiError(Exception):
@@ -85,22 +86,9 @@ def test_runtime_can_be_cancelled_and_queried_across_threads():
     assert failure[0].run_id == run_id
 
 
-def test_public_run_status_and_terminal_cancel_endpoints():
-    class Workflow:
-        async def execute(self, command, context):
-            return AgentResult("ok", "knowledge_qa", {}, {}, (), "model")
-    outcome = asyncio.run(DEFAULT_AGENT_RUNTIME.execute(AgentCommand("chat", "hello", None), Workflow()))
-    client = TestClient(app)
-
-    status = client.get(f"/agent/runs/{outcome.run_id}")
-    cancelled = client.post(f"/agent/runs/{outcome.run_id}/cancel")
-    missing = client.get("/agent/runs/missing")
-
-    assert status.status_code == 200
-    assert status.json()["data"]["status"] == "succeeded"
-    assert cancelled.json()["data"] == {"run_id": outcome.run_id, "cancelled": False, "status": "succeeded"}
-    assert missing.status_code == 404
-    assert missing.json()["error"]["run_id"] == "missing"
+def test_runtime_control_is_not_exposed_as_an_unusable_http_route():
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
+    assert not any(path.startswith("/agent/runs") for path in paths)
 
 
 def test_workflow_retries_wrapped_provider_429_by_status_semantics():
@@ -120,3 +108,49 @@ def test_workflow_retries_wrapped_provider_429_by_status_semantics():
 
     assert outcome.status == "succeeded"
     assert gateway.attempts == 3
+
+
+def test_wrapped_terminal_provider_errors_are_not_retried():
+    for status, code in [(401, ""), (429, "insufficient_quota"), (404, "model_not_found")]:
+        class Gateway:
+            model = "model"; attempts = 0
+            def plan_route(self, question):
+                self.attempts += 1; raise ProviderApiError(status, code)
+            def write_answer(self, state): return "never"
+        gateway = Gateway()
+        try: asyncio.run(AgentRuntime().execute(AgentCommand("chat", "hello", None), FitLifeWorkflow(FileFitnessRepository(), gateway)))
+        except Exception: pass
+        assert gateway.attempts == 1
+
+
+def test_asyncio_cancellation_becomes_cancelled_snapshot():
+    class Workflow:
+        async def execute(self, command, context): raise asyncio.CancelledError()
+    runtime = AgentRuntime()
+    try: asyncio.run(runtime.execute(AgentCommand("chat", "hello", None), Workflow()))
+    except Exception as error: run_id = error.run_id
+    assert asyncio.run(runtime.get_status(run_id, None)).status == "cancelled"
+    assert run_id not in runtime.active_run_ids
+
+
+def test_completed_snapshots_are_bounded_without_evicting_active():
+    class Workflow:
+        async def execute(self, command, context): return AgentResult("ok", "x", {}, {}, (), "m")
+    runtime = AgentRuntime(policy=RuntimePolicy(max_completed_runs=2))
+    ids = [asyncio.run(runtime.execute(AgentCommand("chat", str(i), None), Workflow())).run_id for i in range(3)]
+    try: asyncio.run(runtime.get_status(ids[0], None)); assert False
+    except KeyError: pass
+    assert asyncio.run(runtime.get_status(ids[-1], None)).status == "succeeded"
+
+
+def test_writer_budget_payload_matches_adapter_and_counts_replaced_initial_value():
+    initial = {"report": "small"}
+    state = {"user_query": "q", "context_metadata": {}, "intent": "x", "profile": {},
+             "tool_results": {"report": "x" * 10_000}, "retrieved_docs": [], "validation_result": {}}
+    incremental = incremental_writer_payload(state, initial)
+
+    assert writer_payload(state)["tool_results"]["report"] == "x" * 10_000
+    assert incremental["tool_results"]["report"] == "x" * 10_000
+    assert len(serialized_payload(incremental)) > 10_000
+    state["tool_results"] = initial
+    assert incremental_writer_payload(state, initial)["tool_results"] == {}

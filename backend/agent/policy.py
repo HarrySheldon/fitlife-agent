@@ -35,3 +35,4 @@ class RuntimePolicy:
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     budget: BudgetPolicy = field(default_factory=BudgetPolicy)
     deadline_seconds: float = 60.0
+    max_completed_runs: int = 1_000
