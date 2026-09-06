@@ -21,7 +21,7 @@ Interpreter: `D:\code\vibe-coding\fitlife-agent\.venv\Scripts\python.exe`
 
 Targeted Agent/API regression command used a worktree-local unique `--basetemp` directory and passed 58 tests. The final verification reruns the expanded controls plus the same Agent/API set and `git diff --check` before commit.
 
-No test accesses the network, a real model, or paid tokens. Backoff and deadline tests use injected deterministic collaborators and do not wait in real time.
+No test accesses the network, a real model, or paid tokens. Policy tests use injected deterministic collaborators; the active-wait regressions additionally use short real deadlines.
 
 ## Specification review fixes
 
@@ -44,3 +44,15 @@ Review verification passed 87 targeted Agent, application and API tests with one
 Quality-review verification passed 93 targeted tests with one existing Starlette deprecation warning.
 
 Follow-up review moved gateway/repository initialization inside the Runtime boundary, added run IDs to all public failures, normalized terminal Provider errors from status/code metadata, converted `asyncio.CancelledError` to a cancelled snapshot, bounded completed in-memory snapshots, and unified Writer payload construction/accounting with both OpenAI adapters. Follow-up verification passed 97 targeted tests.
+
+## Active-wait deadline correction
+
+- Workflow, step, tool, lazy gateway/repository initialization, worker admission and retry backoff share the remaining run deadline and cancellation signal.
+- Synchronous operations use at most 16 occupied daemon worker slots across runtimes. A timed-out caller returns without waiting for default-executor shutdown; an occupied slot is only released when its operation exits.
+- Context propagation carries the remaining timeout into Responses and Chat Completions calls. Calls outside a Runtime retain their transport defaults.
+- Late operation results do not append completed steps/tools or replace the terminal snapshot. External task cancellation also sets the shared cancellation signal.
+- Python cannot forcibly stop an already running synchronous function or undo its side effects. Async implementations must yield to the event loop and cooperate with cancellation; coroutine code that blocks the event loop or suppresses cancellation indefinitely requires process isolation for hard termination.
+- Added real-clock coverage for async hangs, synchronous timeout/cancel, late results, retry backoff timeout/cancel, worker saturation, lazy initialization, transport timeout propagation, and both synchronous entry paths. Existing injected clock/sleeper policy regressions remain covered.
+- Full backend regression initially reported **1011 passed, 17 failed** in 525 seconds: 16 legacy error dictionaries omitted the new PublicError fields, and report interpretation held a thread-owned lifecycle lock across Runtime worker calls. All 16 assertions now check the complete contract. Report and plan interpretation obtain stored snapshots/preferences under the lifecycle guard, release it during Agent execution, and recheck account validity before returning private output. Deterministic mutation guards remain intact.
+- After corrections, **153 targeted tests passed** in 95.81 seconds across Runtime controls/workflow/deadline/API errors, both model protocols, report/plan use cases, account deletion/export/security, localization and workout APIs. An additional plan-deletion race case was then added; the final plan/deadline run passed **31 tests**. These sets include all original full-suite failures. The full suite has not been rerun after these corrections; its first-run result above is retained rather than presented as a clean full run.
+- Both verification runs emitted only the existing Starlette TestClient/httpx deprecation warning. `git diff --check` passed before commit.

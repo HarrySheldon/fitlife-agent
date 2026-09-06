@@ -219,7 +219,11 @@ def test_plan_endpoints_keep_draft_and_activation_explicit(tmp_path, monkeypatch
     assert len(client.get("/plan").json()["data"]) == 1
 
 
-def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_path, monkeypatch):
+@pytest.mark.parametrize("delete_during_interpretation", [False, True])
+def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_path, monkeypatch, delete_during_interpretation):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(plan_api, "get_settings", lambda: SimpleNamespace(data_dir=tmp_path))
     service = Plans(
         FilePlanRepository(tmp_path),
         generate_deterministic=lambda user_id: VALID_PLAN,
@@ -233,6 +237,9 @@ def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_pa
 
     def interpret(**kwargs):
         captured.update(kwargs)
+        if delete_during_interpretation:
+            with user_lifecycle_guard(tmp_path, "user-a") as lifecycle:
+                lifecycle.mark_deleted()
         return {
             "answer_markdown": "Persisted plan interpretation",
             "intent": "plan_adjustment",
@@ -251,10 +258,14 @@ def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_pa
         user_id="user-a", display_name="User A"
     )
 
-    response = TestClient(app).post("/plan/plan-00000001/interpret")
-
-    assert response.status_code == 200
-    assert response.json()["data"]["answer_markdown"] == "Persisted plan interpretation"
+    if delete_during_interpretation:
+        with pytest.raises(ApplicationError) as raised:
+            TestClient(app).post("/plan/plan-00000001/interpret")
+        assert raised.value.code == "AUTH_TOKEN_INVALID"
+    else:
+        response = TestClient(app).post("/plan/plan-00000001/interpret")
+        assert response.status_code == 200
+        assert response.json()["data"]["answer_markdown"] == "Persisted plan interpretation"
     assert captured["plan_id"] == "plan-00000001"
     assert captured["plan"] == VALID_PLAN
     assert captured["user_id"] == "user-a"

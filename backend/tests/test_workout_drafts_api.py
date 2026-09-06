@@ -500,6 +500,11 @@ def test_workout_validation_errors_are_localized(client):
     assert response.json()["error"] == {
         "code": "WORKOUT_INTENSITY_REQUIRED",
         "message": "填写训练时长时请选择训练强度。",
+        "action": None,
+        "retryable": False,
+        "retry_after_ms": None,
+        "request_id": response.headers["x-request-id"],
+        "run_id": None,
     }
 
 

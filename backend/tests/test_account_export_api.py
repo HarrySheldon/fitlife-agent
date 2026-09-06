@@ -142,6 +142,11 @@ def test_account_export_failure_is_stable_and_localized(
     assert response.json()["error"] == {
         "code": "ACCOUNT_EXPORT_FAILED",
         "message": expected_message,
+        "action": None,
+        "retryable": False,
+        "retry_after_ms": None,
+        "request_id": response.headers["x-request-id"],
+        "run_id": None,
     }
     assert response.json()["message"] == expected_message
     assert "user_profile" not in response.text

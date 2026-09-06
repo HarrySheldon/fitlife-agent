@@ -174,6 +174,11 @@ def test_identity_failure_is_localized_and_can_retry_after_storage_is_missing(mo
     assert failed.json()["error"] == {
         "code": "ACCOUNT_DELETE_FAILED",
         "message": "无法删除账户，请重试。",
+        "action": None,
+        "retryable": False,
+        "retry_after_ms": None,
+        "request_id": failed.headers["x-request-id"],
+        "run_id": None,
     }
     assert "identity" not in failed.text
     assert not user_root.exists()

@@ -10,6 +10,7 @@ from backend.application.ports.structured_model_gateway import (
 )
 from backend.config import Settings, get_settings
 from backend.agent.model_payloads import writer_payload
+from backend.application.ports.model_call_context import model_timeout_options
 
 
 PLANNER_INSTRUCTIONS = """You are FitLife Coach Agent's planner.
@@ -34,6 +35,7 @@ class OpenAIResponsesAdapter:
             instructions=PLANNER_INSTRUCTIONS,
             input=question,
             text_format=PlannerRoute,
+            **model_timeout_options(),
         )
         parsed = _extract_parsed_output(response)
         if parsed is None:
@@ -45,6 +47,7 @@ class OpenAIResponsesAdapter:
             model=self.model,
             instructions=WRITER_INSTRUCTIONS,
             input=json.dumps(writer_payload(state), ensure_ascii=False),
+            **model_timeout_options(),
         )
         text = str(getattr(response, "output_text", "")).strip()
         if not text:
@@ -63,6 +66,7 @@ class OpenAIResponsesAdapter:
             instructions=instructions,
             input=input_text,
             text_format=response_model,
+            **model_timeout_options(),
         )
         parsed = _extract_parsed_output(response)
         if parsed is None:

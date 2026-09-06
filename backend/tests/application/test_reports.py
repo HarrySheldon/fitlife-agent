@@ -288,10 +288,13 @@ def test_report_api_lists_gets_and_explicitly_generates_only_authenticated_users
         )
         assert agent_started.wait(timeout=2)
         deletion_future = executor.submit(delete_user)
-        deletion_was_blocked = not deletion_entered.wait(timeout=0.2)
+        deletion_completed = deletion_entered.wait(timeout=1)
+        deletion_future.result(timeout=2)
         release_agent.set()
         guarded_response = response_future.result(timeout=2)
         deletion_future.result(timeout=2)
 
-    assert deletion_was_blocked
-    assert guarded_response.status_code == 200
+    assert deletion_completed
+    assert guarded_response.status_code == 401
+    assert guarded_response.json()["error"]["code"] == "AUTH_TOKEN_INVALID"
+    assert "Guarded interpretation" not in guarded_response.text

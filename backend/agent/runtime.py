@@ -7,13 +7,21 @@ import random as random_module
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from threading import Event, RLock, Thread
+from contextvars import copy_context
+from threading import BoundedSemaphore, Event, RLock, Thread
 from typing import Literal, TypeVar
 from uuid import uuid4
 from backend.agent.contracts import AgentCommand, AgentOutcome, AgentRunSnapshot, AgentWorkflow, CancelResult
 from backend.agent.failures import Disposition, classify_failure, decide_disposition
 from backend.agent.policy import RuntimePolicy
+from backend.application.ports.model_call_context import remaining_model_timeout
 T = TypeVar("T")
+_SYNC_SLOTS = BoundedSemaphore(16)
+
+
+def _consume_completion(task):
+    if not task.cancelled():
+        task.exception()
 
 class RuntimeControlError(Exception):
     code = "RUNTIME_ERROR"
@@ -38,10 +46,79 @@ class RuntimeContext:
     def raise_if_cancelled(self):
         if self.cancel_event.is_set(): raise RunCancelled("The run was cancelled.")
         if self.clock() >= self.deadline_at: raise RunTimedOut("The run deadline was exceeded.")
+    def remaining_seconds(self):
+        self.raise_if_cancelled()
+        return self.deadline_at - self.clock()
+    async def call(self, operation):
+        """Bound sync work without letting executor shutdown delay the caller.
+
+        Python cannot kill running threads. Slots remain occupied until work exits;
+        late results are discarded and never advance the workflow.
+        """
+        self.raise_if_cancelled()
+        token = remaining_model_timeout.set(self.remaining_seconds)
+        try:
+            if inspect.iscoroutinefunction(operation):
+                return await self.wait(operation())
+            slots = _SYNC_SLOTS
+            while not slots.acquire(blocking=False):
+                await self.wait(asyncio.sleep(0.005))
+            loop = asyncio.get_running_loop()
+            future = loop.create_future()
+            copied = copy_context()
+
+            def publish(value, error):
+                if future.done():
+                    if inspect.iscoroutine(value): value.close()
+                elif error is not None:
+                    future.set_exception(error)
+                else:
+                    future.set_result(value)
+
+            def worker():
+                value = error = None
+                try:
+                    copied.run(self.raise_if_cancelled)
+                    value = copied.run(operation)
+                except BaseException as caught:
+                    error = caught
+                finally:
+                    slots.release()
+                try:
+                    loop.call_soon_threadsafe(publish, value, error)
+                except RuntimeError:
+                    if inspect.iscoroutine(value): value.close()
+
+            try:
+                Thread(target=worker, name="fitlife-agent-operation", daemon=True).start()
+            except BaseException:
+                slots.release()
+                raise
+            value = await self.wait(future)
+            return await self.wait(value) if inspect.isawaitable(value) else value
+        finally:
+            remaining_model_timeout.reset(token)
     async def step(self, name, operation):
         self.current_step=name; result=await self._invoke(name, operation, "safe"); self.completed_steps.append(name); return result
     async def tool(self, name, replay: Literal["safe","never"], operation):
         result=await self._invoke(name, operation, replay, is_tool=True); self.completed_tools.append(name); return result
+    async def wait(self, awaitable):
+        task = asyncio.ensure_future(awaitable)
+        consumed = False
+        try:
+            while not task.done():
+                self.raise_if_cancelled()
+                await asyncio.wait({task}, timeout=min(0.005, max(0, self.deadline_at - self.clock())))
+            self.raise_if_cancelled()
+            consumed = True
+            return task.result()
+        finally:
+            if not task.done():
+                task.cancel()
+            elif not consumed and not task.cancelled() and task.exception() is None:
+                value = task.result()
+                if inspect.iscoroutine(value): value.close()
+            task.add_done_callback(_consume_completion)
     async def _invoke(self, name, operation, replay, is_tool=False):
         limit=self.policy.retry.max_attempts if replay == "safe" else 1
         for attempt in range(1, limit+1):
@@ -53,7 +130,7 @@ class RuntimeContext:
                     self.model_calls += 1
                     if self.model_calls > self.policy.budget.max_model_calls: raise BudgetExceeded("The model-call budget was exhausted.")
             try:
-                value=operation(); result=await value if inspect.isawaitable(value) else value; self.raise_if_cancelled(); return result
+                result=await self.call(operation); self.raise_if_cancelled(); return result
             except (RunCancelled, RunTimedOut, BudgetExceeded): raise
             except Exception as error:
                 failure=classify_failure(error, stage=name, attempt=attempt)
@@ -64,7 +141,7 @@ class RuntimeContext:
                 delay=self.policy.retry.delay_seconds(attempt, retry_after=failure.retry_after_seconds, random_value=self.random_value())
                 self.raise_if_cancelled()
                 if delay >= self.deadline_at-self.clock(): raise RunTimedOut("The run deadline was exceeded.") from None
-                await self.sleeper(delay); self.raise_if_cancelled()
+                await self.call(lambda: self.sleeper(delay)); self.raise_if_cancelled()
         raise AssertionError("unreachable")
 
 class AgentRuntime:
@@ -87,12 +164,14 @@ class AgentRuntime:
                 "context_date": command.context_date, "initial_tool_results": command.initial_tool_results,
                 "initial_tool_calls": command.initial_tool_calls}, ensure_ascii=False, default=str)
             context.consume_input(command_payload)
-            result=replace((await workflow.execute(command,context)).with_request_id(),request_id=request_id,run_id=run_id)
+            result=replace((await context.call(lambda: workflow.execute(command,context))).with_request_id(),request_id=request_id,run_id=run_id)
+            context.raise_if_cancelled()
             with self._lock:
                 self._runs[run_id]=replace(self._runs[run_id],status="succeeded",current_step=context.current_step,attempt=context.attempt)
                 self._evict_completed()
             return AgentOutcome(run_id,request_id,"succeeded",result)
         except asyncio.CancelledError:
+            event.set()
             error = RunCancelled("The run was cancelled.", run_id=run_id, request_id=request_id)
             with self._lock:
                 self._runs[run_id]=replace(self._runs[run_id],status="cancelled",current_step=context.current_step,attempt=context.attempt,public_error_code=error.code)

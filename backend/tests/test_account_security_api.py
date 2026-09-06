@@ -122,6 +122,11 @@ def test_wrong_current_password_is_localized_and_does_not_rotate_session(monkeyp
     assert response.json()["error"] == {
         "code": "ACCOUNT_CURRENT_PASSWORD_INVALID",
         "message": "当前密码不正确。",
+        "action": None,
+        "retryable": False,
+        "retry_after_ms": None,
+        "request_id": response.headers["x-request-id"],
+        "run_id": None,
     }
     assert client.get("/auth/me", headers=headers).status_code == 200
     assert client.post(
@@ -146,6 +151,11 @@ def test_same_password_has_clear_localized_error_without_rotating_session(monkey
     assert response.json()["error"] == {
         "code": "ACCOUNT_PASSWORD_UNCHANGED",
         "message": "新密码必须与当前密码不同。",
+        "action": None,
+        "retryable": False,
+        "retry_after_ms": None,
+        "request_id": response.headers["x-request-id"],
+        "run_id": None,
     }
     assert client.get("/auth/me", headers=headers).status_code == 200
 

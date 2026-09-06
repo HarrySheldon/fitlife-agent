@@ -40,6 +40,19 @@ def register(client: TestClient, language: str = "en-US") -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['data']['access_token']}"}
 
 
+def expected_public_error(response, code, message, *, action=None):
+    assert response.headers["x-request-id"]
+    return {
+        "code": code,
+        "message": message,
+        "action": action,
+        "retryable": False,
+        "retry_after_ms": None,
+        "request_id": response.headers["x-request-id"],
+        "run_id": None,
+    }
+
+
 @pytest.mark.parametrize(
     ("accept_language", "expected"),
     [
@@ -57,10 +70,7 @@ def test_unauthenticated_auth_error_uses_accept_language(monkeypatch, accept_lan
     )
 
     assert response.status_code == 401
-    assert response.json()["error"] == {
-        "code": "AUTH_INVALID_CREDENTIALS",
-        "message": expected,
-    }
+    assert response.json()["error"] == expected_public_error(response, "AUTH_INVALID_CREDENTIALS", expected)
     assert response.json()["message"] == expected
 
 
@@ -120,7 +130,9 @@ def test_validation_error_has_stable_code_and_localized_public_message(
     )
 
     assert response.status_code == 422
-    assert response.json()["error"] == {"code": "VALIDATION_ERROR", "message": expected}
+    assert response.json()["error"] == expected_public_error(
+        response, "VALIDATION_ERROR", expected, action="Check the request fields and try again.",
+    )
 
 
 def test_fixed_agent_error_uses_authenticated_account_language(monkeypatch):
@@ -180,10 +192,7 @@ def test_upload_messages_use_account_language_and_invalid_files_have_stable_code
     assert invalid.status_code == 422
     assert invalid.json()["message"] == invalid_message
     assert invalid.json()["processing_mode"] == "deterministic"
-    assert invalid.json()["error"] == {
-        "code": "INVALID_UPLOAD_FILE",
-        "message": invalid_message,
-    }
+    assert invalid.json()["error"] == expected_public_error(invalid, "INVALID_UPLOAD_FILE", invalid_message)
 
 
 @pytest.mark.parametrize(
@@ -223,7 +232,7 @@ def test_application_error_survives_preferences_read_failure(
         "data": None,
         "message": expected,
         "processing_mode": "agent",
-        "error": {"code": "AI_NOT_CONFIGURED", "message": expected},
+        "error": expected_public_error(response, "AI_NOT_CONFIGURED", expected),
     }
 
 
@@ -256,7 +265,9 @@ def test_validation_error_survives_preferences_read_failure(
         "success": False,
         "data": None,
         "message": expected,
-        "error": {"code": "VALIDATION_ERROR", "message": expected},
+        "error": expected_public_error(
+            response, "VALIDATION_ERROR", expected, action="Check the request fields and try again.",
+        ),
     }
 
 

@@ -54,8 +54,8 @@ class _LazyFitLifeWorkflow:
         self.repository, self.gateway, self.user_id, self.preferences = repository, gateway, user_id, preferences
 
     async def execute(self, command, context):
-        repository = self.repository or get_fitness_repository()
-        gateway = self.gateway or _resolve_gateway(self.user_id)
+        repository = self.repository or await context.call(get_fitness_repository)
+        gateway = self.gateway or await context.call(lambda: _resolve_gateway(self.user_id))
         workflow = FitLifeWorkflow(repository, gateway, context_metadata=self.preferences.model_dump())
         return await workflow.execute(command, context)
 

@@ -15,6 +15,7 @@ from backend.infrastructure.model_gateway.openai_responses import (
     _probe_tool,
 )
 from backend.agent.model_payloads import writer_payload
+from backend.application.ports.model_call_context import model_timeout_options
 
 
 class OpenAIChatCompletionsAdapter:
@@ -30,6 +31,7 @@ class OpenAIChatCompletionsAdapter:
                 {"role": "user", "content": question},
             ],
             response_format=PlannerRoute,
+            **model_timeout_options(),
         )
         parsed = response.choices[0].message.parsed
         if parsed is None:
@@ -46,6 +48,7 @@ class OpenAIChatCompletionsAdapter:
                     "content": json.dumps(writer_payload(state), ensure_ascii=False),
                 },
             ],
+            **model_timeout_options(),
         )
         text = str(response.choices[0].message.content or "").strip()
         if not text:
@@ -66,6 +69,7 @@ class OpenAIChatCompletionsAdapter:
                 {"role": "user", "content": input_text},
             ],
             response_format=response_model,
+            **model_timeout_options(),
         )
         parsed = response.choices[0].message.parsed
         if parsed is None:

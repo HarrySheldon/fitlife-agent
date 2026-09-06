@@ -47,13 +47,18 @@ def generate_weekly_report(week: str, user: AuthenticatedUser = Depends(require_
 def interpret_weekly_report(week: str, request: Request, user: AuthenticatedUser = Depends(require_current_user)):
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         stored = _reports().get(user.user_id, week)
-        result = interpret_persisted_weekly_report(
-            week=week,
-            report=stored.report.model_dump(),
-            user_id=user.user_id,
-            preferences=preferences_for(user),
-            request_id=request_id_for(request),
-        )
+        report_snapshot = stored.report.model_dump()
+        preferences = preferences_for(user)
+    # Runtime operations use worker threads; never carry a thread-owned lock
+    # across model execution. Recheck deletion before returning private output.
+    result = interpret_persisted_weekly_report(
+        week=week,
+        report=report_snapshot,
+        user_id=user.user_id,
+        preferences=preferences,
+        request_id=request_id_for(request),
+    )
+    with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         response = CoachActionResponse(
             surface="review",
             action="explain_weekly_report",

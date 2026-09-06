@@ -122,13 +122,17 @@ def create_adjustment_draft(
 def interpret_plan(plan_id: str, request: Request, user: AuthenticatedUser = Depends(require_current_user)):
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         stored = _plans().get(user.user_id, plan_id)
-        result = interpret_persisted_plan(
-            plan_id=stored.plan_id,
-            plan=stored.plan.model_dump(mode="json"),
-            user_id=user.user_id,
-            preferences=preferences_for(user),
-            request_id=request_id_for(request),
-        )
+        plan_snapshot = stored.plan.model_dump(mode="json")
+        preferences = preferences_for(user)
+    # Keep lifecycle locks on their owning thread, outside Runtime workers.
+    result = interpret_persisted_plan(
+        plan_id=stored.plan_id,
+        plan=plan_snapshot,
+        user_id=user.user_id,
+        preferences=preferences,
+        request_id=request_id_for(request),
+    )
+    with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         response = CoachActionResponse(
             surface="plan",
             action="adjust_next_plan",
