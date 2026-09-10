@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
 from backend.agent.graph import run_fitlife_agent
 from backend.tools.data_access import data_path, read_eval_cases
 
 
 def run_evaluation(limit: int | None = None, request_id: str | None = None) -> dict:
+    request_id = request_id or uuid4().hex
     cases = read_eval_cases()
     if limit is not None:
         cases = cases[:limit]
 
     results = []
     for case in cases:
-        response = run_fitlife_agent(case.question, operation="evaluation", request_id=request_id)
+        response = run_fitlife_agent(case.question, operation="evaluation", request_id=uuid4().hex)
         trace = response.get("trace", {})
         answer = response.get("answer_markdown", "")
         checks = _build_case_checks(case, trace, answer)
@@ -39,6 +41,7 @@ def run_evaluation(limit: int | None = None, request_id: str | None = None) -> d
                 "failure_reasons": [check["reason"] for check in checks if not check["passed"]],
                 "trace": trace,
                 "request_id": response.get("request_id"),
+                "batch_request_id": request_id,
                 "run_id": response.get("run_id"),
             }
         )

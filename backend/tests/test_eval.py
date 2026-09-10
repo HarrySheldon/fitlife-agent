@@ -1,9 +1,14 @@
 import json
+import pytest
 
 from backend import evaluation
 from backend.evaluation import run_evaluation
 from backend.schemas import EvalCase
-from backend.tools.data_access import data_path
+
+
+@pytest.fixture(autouse=True)
+def temporary_evaluation_output(tmp_path, monkeypatch):
+    monkeypatch.setattr(evaluation, "data_path", lambda filename: tmp_path / filename)
 
 
 def test_run_evaluation_returns_metrics_and_cases(monkeypatch):
@@ -130,9 +135,25 @@ def test_run_evaluation_returns_group_metrics_and_writes_artifacts(monkeypatch):
         "pass_rate": 1.0,
     }
 
-    json_artifact = data_path("eval_results.json")
-    markdown_artifact = data_path("eval_results.md")
+    json_artifact = evaluation.data_path("eval_results.json")
+    markdown_artifact = evaluation.data_path("eval_results.md")
 
     saved = json.loads(json_artifact.read_text(encoding="utf-8"))
     assert saved["group_metrics"] == result["group_metrics"]
     assert "# FitLife Agent Evaluation" in markdown_artifact.read_text(encoding="utf-8")
+
+
+def test_case_requests_are_unique_and_linked_to_the_batch(monkeypatch):
+    requests = []
+
+    def fake_agent(question, **kwargs):
+        requests.append(kwargs["request_id"])
+        return {"answer_markdown": "## Answer", "trace": {}, "request_id": kwargs["request_id"]}
+
+    monkeypatch.setattr(evaluation, "run_fitlife_agent", fake_agent)
+    result = run_evaluation(limit=3, request_id="batch-request")
+    assert len(requests) == len(set(requests)) == 3
+    assert all(request and request != "batch-request" for request in requests)
+    assert result["request_id"] == "batch-request"
+    assert [case["request_id"] for case in result["cases"]] == requests
+    assert all(case["batch_request_id"] == "batch-request" for case in result["cases"])

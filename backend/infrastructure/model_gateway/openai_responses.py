@@ -25,6 +25,8 @@ Do not provide medical diagnosis. If generating a personalized plan, include a s
 
 
 class OpenAIResponsesAdapter:
+    provider = "openai"
+
     def __init__(self, *, client: Any, model: str) -> None:
         self.client = client
         self.model = model

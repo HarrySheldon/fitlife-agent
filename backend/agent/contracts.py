@@ -68,6 +68,21 @@ class AgentRunSnapshot:
     current_step: str | None = None
     attempt: int = 0
     public_error_code: str | None = None
+    created_at: str = ""
+    started_at: str | None = None
+    deadline_at: str = ""
+    finished_at: str | None = None
+    policy_version: str = "default-v1"
+    policy_snapshot_json: str = "{}"
+    provider: str | None = None
+    model: str | None = None
+    input_chars: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    tool_calls: int = 0
+    internal_error_id: str | None = None
+    failure_stage: str | None = None
+    version: int = 1
 
 @dataclass(frozen=True)
 class CancelResult:

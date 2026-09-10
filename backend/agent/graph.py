@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date as date_type
 
 from backend.agent.contracts import AgentCommand, AgentOperation
-from backend.agent.runtime import AgentRuntime
+from backend.infrastructure.agent_runtime.factory import CurrentAgentRuntime
 from backend.agent.workflow import FitLifeWorkflow
 from backend.application.ports.fitness_repository import FitnessRepository
 from backend.application.ports.model_gateway import ModelGateway
@@ -18,7 +18,7 @@ from backend.infrastructure.repositories.cutover_fitness_repository import get_f
 from backend.tools.target_suggestions import suggest_targets
 from backend.tools.today_overview import build_today_overview_from_records
 
-DEFAULT_AGENT_RUNTIME = AgentRuntime()
+DEFAULT_AGENT_RUNTIME = CurrentAgentRuntime()
 
 
 def run_fitlife_agent(

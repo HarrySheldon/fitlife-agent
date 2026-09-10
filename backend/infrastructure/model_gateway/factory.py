@@ -65,8 +65,11 @@ def create_model_gateway(
         client = OpenAI(**kwargs)
 
     if connection.protocol == "chat_completions":
-        return OpenAIChatCompletionsAdapter(client=client, model=connection.model)
-    return OpenAIResponsesAdapter(client=client, model=connection.model)
+        gateway = OpenAIChatCompletionsAdapter(client=client, model=connection.model)
+    else:
+        gateway = OpenAIResponsesAdapter(client=client, model=connection.model)
+    gateway.provider = connection.provider
+    return gateway
 
 
 def resolve_user_model_gateway(

@@ -37,6 +37,7 @@ class FitLifeWorkflow:
         self.context_metadata = deepcopy(context_metadata or {})
 
     async def execute(self, command: AgentCommand, context: RuntimeContext) -> AgentResult:
+        context.set_model_metadata(provider=getattr(self.gateway, "provider", None), model=self.gateway.model)
         state: AgentState = {
             "operation": command.operation,
             "messages": [{"role": "user", "content": command.question}],
@@ -198,6 +199,7 @@ class FitLifeWorkflow:
         )
         if not answer.strip():
             raise model_gateway_error(ValueError("Model returned a blank answer"))
+        context.consume_output(answer)
         return {"final_answer": answer, "llm_used": True, "llm_answer_used": True}
 
     def _project(self, state: AgentState) -> AgentResult:

@@ -138,8 +138,9 @@ def test_completed_snapshots_are_bounded_without_evicting_active():
         async def execute(self, command, context): return AgentResult("ok", "x", {}, {}, (), "m")
     runtime = AgentRuntime(policy=RuntimePolicy(max_completed_runs=2))
     ids = [asyncio.run(runtime.execute(AgentCommand("chat", str(i), None), Workflow())).run_id for i in range(3)]
-    try: asyncio.run(runtime.get_status(ids[0], None)); assert False
-    except KeyError: pass
+    # The bounded process cache is not the authoritative history repository.
+    assert len(runtime._runs) == 2
+    assert asyncio.run(runtime.get_status(ids[0], None)).status == "succeeded"
     assert asyncio.run(runtime.get_status(ids[-1], None)).status == "succeeded"
 
 
