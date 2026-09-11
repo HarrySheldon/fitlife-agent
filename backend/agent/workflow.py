@@ -4,6 +4,7 @@ from copy import deepcopy
 from collections.abc import Awaitable, Callable
 
 from backend.agent.contracts import AgentCommand, AgentResult
+from backend.agent.checkpoints import restore_planner_state
 from backend.agent.generator import generate_plan
 from backend.agent.runtime import RuntimeContext
 from backend.agent.state import AgentState
@@ -18,6 +19,28 @@ from backend.tools.report_generator import generate_weekly_report
 from backend.tools.workout_analyzer import analyze_workouts
 
 Retriever = Callable[[str, int], list[dict]]
+
+
+def rebuild_state_after_planner(command: AgentCommand, checkpoint: dict, *, context_metadata=None) -> AgentState:
+    """Rebuild from the original command; deterministic data must be reloaded.
+
+    Only planner output is restored. Future input_guard and safety_reviewer
+    remain mandatory when wiring this boundary into an execution path.
+    """
+    return {
+        "operation": command.operation,
+        "messages": [{"role": "user", "content": command.question}],
+        "user_query": command.question,
+        "current_user_id": command.user_id,
+        "surface": command.surface,
+        "context_date": command.context_date,
+        "context_metadata": deepcopy(context_metadata or {}),
+        "tool_calls": list(command.initial_tool_calls),
+        "tool_results": deepcopy(dict(command.initial_tool_results)),
+        "initial_tool_results_snapshot": deepcopy(dict(command.initial_tool_results)),
+        "retrieved_docs": [],
+        **restore_planner_state(checkpoint),
+    }
 
 
 class FitLifeWorkflow:
@@ -52,6 +75,12 @@ class FitLifeWorkflow:
             "retrieved_docs": [],
         }
         await self._apply(context, "planner", state, self._planner)
+        if context.checkpoint_store is not None:
+            context.checkpoint("planner", {
+                "schema_version": 1,
+                "next_step": "profile_loader",
+                "route": state["tool_requests"],
+            })
         await self._apply(context, "profile_loader", state, self._profile_loader)
         await self._apply(context, "data_analyzer", state, self._data_analyzer)
         if _route(state).get("needs_retrieval"):

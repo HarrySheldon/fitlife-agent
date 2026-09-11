@@ -8,6 +8,7 @@ class MemoryRunRepository:
     def __init__(self):
         self._runs = {}
         self._events = {}
+        self._checkpoints = {}
         self.lock = RLock()
 
     def create(self, run):
@@ -47,7 +48,7 @@ class MemoryRunRepository:
 class MemoryCheckpointStore:
     def __init__(self, repository):
         self.repository = repository
-        self._items = {}
+        self._items = repository._checkpoints
 
     def save(self, run_id, user_id, name, state):
         state = safe_checkpoint(state)
@@ -58,10 +59,10 @@ class MemoryCheckpointStore:
             previous = self._items.get(key)
             item = Checkpoint(run_id, name, state, previous.version + 1 if previous else 1)
             self._items[key] = item
-            return replace(item, state=dict(item.state))
+            return replace(item, state=safe_checkpoint(item.state))
 
     def get(self, run_id, user_id, name):
         with self.repository.lock:
             self.repository.get(run_id, user_id)
             item = self._items[(run_id, name)]
-            return replace(item, state=dict(item.state))
+            return replace(item, state=safe_checkpoint(item.state))

@@ -108,6 +108,10 @@ class CheckpointStore(Protocol):
 
 
 def safe_checkpoint(state):
+    if "schema_version" in state:
+        from backend.agent.checkpoints import restore_planner_state
+        restored = restore_planner_state(state)
+        return {"schema_version": 1, "next_step": "profile_loader", "route": restored["tool_requests"]}
     # Health data and model content intentionally have no representation here.
     if set(state) - {"completed", "attempt"} or ("completed" in state and type(state["completed"]) is not bool) or ("attempt" in state and (type(state["attempt"]) is not int or state["attempt"] < 0)):
         raise ValueError("Only minimal step completion metadata can be checkpointed")

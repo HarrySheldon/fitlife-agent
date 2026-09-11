@@ -1,4 +1,4 @@
-"""Minimal completion metadata, never an automatic replay mechanism."""
+"""Validated recovery state, never an automatic replay mechanism."""
 import json
 
 from backend.agent.persistence import Checkpoint, InvalidTransition, TERMINAL_STATUSES, safe_checkpoint
@@ -31,4 +31,4 @@ class SQLiteCheckpointStore:
             row = connection.execute("SELECT state_json, version FROM agent_checkpoints WHERE run_id=? AND name=?", (run_id, name)).fetchone()
             if row is None:
                 raise KeyError(name)
-        return Checkpoint(run_id, name, json.loads(row[0]), row[1])
+        return Checkpoint(run_id, name, safe_checkpoint(json.loads(row[0])), row[1])
