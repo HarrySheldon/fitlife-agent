@@ -20,6 +20,18 @@ REQUEST_LANGUAGE_STATE_KEY = "public_message_language"
 QUALITY_VALUE_PATTERN = re.compile(r"(?:0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)\Z")
 
 PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
+    "CONFIGURATION_INVALID": {
+        "en-US": "The requested Agent configuration is invalid.",
+        "zh-CN": "请求的 Agent 配置无效。",
+    },
+    "AGENT_RATE_LIMITED": {
+        "en-US": "Too many Agent requests. Please wait and try again.",
+        "zh-CN": "Agent 请求过于频繁，请稍后重试。",
+    },
+    "SAFETY_REFUSAL": {
+        "en-US": "This request needs qualified professional support. For immediate danger, contact local emergency services.",
+        "zh-CN": "此请求需要合格专业人员支持。如有紧急危险，请立即联系当地急救服务。",
+    },
     "INTERNAL_ERROR": {
         "en-US": "The request could not be completed. Please try again.",
         "zh-CN": "请求未能完成，请稍后重试。",

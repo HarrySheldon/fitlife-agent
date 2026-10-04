@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from datetime import date as date_type
+from dataclasses import replace
+import json
 
 from backend.agent.contracts import AgentCommand, AgentOperation
 from backend.infrastructure.agent_runtime.factory import CurrentAgentRuntime
@@ -50,11 +52,16 @@ def run_fitlife_agent(
 
 
 class _LazyFitLifeWorkflow:
-    def __init__(self, repository, gateway, user_id, preferences):
+    def __init__(self, repository, gateway, user_id, preferences, context_loader=None):
         self.repository, self.gateway, self.user_id, self.preferences = repository, gateway, user_id, preferences
+        self.context_loader = context_loader
 
     async def execute(self, command, context):
         repository = self.repository or await context.call(get_fitness_repository)
+        if self.context_loader is not None:
+            results, calls = await context.step("context_loader", lambda: self.context_loader(repository))
+            context.consume_context(json.dumps(results, ensure_ascii=False, default=str))
+            command = replace(command, initial_tool_results=results, initial_tool_calls=tuple(calls))
         gateway = self.gateway or await context.call(lambda: _resolve_gateway(self.user_id))
         workflow = FitLifeWorkflow(repository, gateway, context_metadata=self.preferences.model_dump())
         return await workflow.execute(command, context)
@@ -66,14 +73,15 @@ def run_contextual_coach_action(
     gateway: ModelGateway | None = None, preferences: UserPreferences | None = None,
     request_id: str | None = None,
 ) -> dict:
-    repository = repository or get_fitness_repository()
-    results, calls = _build_contextual_tool_context(action, date, user_id, repository)
-    result = run_fitlife_agent(
-        _coach_prompt(surface, action, date, question), user_id, repository=repository, gateway=gateway,
-        initial_tool_results=results, initial_tool_calls=calls, preferences=preferences,
-        operation="coach_action", surface=surface, context_date=date,
-        request_id=request_id,
+    command = AgentCommand(
+        operation="coach_action", question=_coach_prompt(surface, action, date, question),
+        user_id=user_id, surface=surface, context_date=date, request_id=request_id,
     )
+    workflow = _LazyFitLifeWorkflow(
+        repository, gateway, user_id, preferences or UserPreferences(),
+        context_loader=lambda loaded_repository: _build_contextual_tool_context(action, date, user_id, loaded_repository),
+    )
+    result = DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
     result["trace"] = {**result.get("trace", {}), "surface": surface, "coach_action": action, "context_date": date}
     return result
 

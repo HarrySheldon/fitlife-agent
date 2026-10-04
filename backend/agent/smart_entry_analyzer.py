@@ -10,6 +10,7 @@ from backend.application.ports.structured_model_gateway import (
     StructuredModelResult,
 )
 from backend.domain.smart_entry import ResolvedCandidate
+from backend.agent.structured_workflow import run_structured_agent
 
 
 PROMPT_VERSION = "smart-entry-analysis-v1"
@@ -80,6 +81,9 @@ def analyze_smart_entry(
     *,
     locale: str,
     weight_kg: float | None,
+    user_id: str | None = None,
+    request_id: str | None = None,
+    gateway_resolver=None,
 ) -> StructuredModelResult:
     unresolved = tuple(candidate for candidate in candidates if candidate.issues)
     payload = {
@@ -109,7 +113,11 @@ def analyze_smart_entry(
             for candidate in unresolved
         ],
     }
-    return gateway.parse_structured(
+    return run_structured_agent(
+        operation="smart_entry",
+        question="\n".join(candidate.raw_text for candidate in unresolved),
+        user_id=user_id, request_id=request_id,
+        gateway_resolver=gateway_resolver or (lambda: gateway),
         instructions=SMART_ENTRY_ANALYSIS_INSTRUCTIONS,
         input_text=json.dumps(
             payload,

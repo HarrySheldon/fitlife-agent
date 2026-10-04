@@ -5,7 +5,7 @@ from datetime import date
 import re
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Request
 
 from backend.api.dependencies import require_current_user
 from backend.api.preference_context import preferences_for
@@ -17,7 +17,7 @@ from backend.api.smart_entry_schemas import (
     SmartEntryDraftMutationRequest,
     SmartEntryDraftResponse,
 )
-from backend.api.utils import ok
+from backend.api.utils import ok, request_id_for
 from backend.application.ports.smart_entry_repository import (
     SmartEntryDraftPayload,
 )
@@ -144,6 +144,7 @@ def delete_draft(
 )
 def analyze_draft(
     draft_id: str,
+    http_request: Request,
     if_match: str | None = Header(default=None, alias="If-Match"),
     user: AuthenticatedUser = Depends(require_current_user),
     service: SmartEntryService = Depends(get_smart_entry_service),
@@ -155,6 +156,7 @@ def analyze_draft(
         expected_version=_version(if_match),
         locale=preferences.language,
         weight_kg=_weight(user.user_id),
+        request_id=request_id_for(http_request),
     )
     return ok(asdict(draft), processing_mode="agent")
 

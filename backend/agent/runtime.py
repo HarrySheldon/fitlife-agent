@@ -20,6 +20,11 @@ from backend.agent.persistence import ERROR_CODES, TERMINAL_STATUSES, utc_now
 from backend.agent.telemetry import SafeTelemetryContext
 from backend.infrastructure.agent_runtime.memory_run_repository import MemoryCheckpointStore, MemoryRunRepository
 from backend.application.ports.model_call_context import remaining_model_timeout
+from backend.configuration.resolver import ConfigurationResolver
+from backend.configuration.models import EffectiveRunConfig, RunPolicySnapshot
+from backend.infrastructure.agent_runtime.rate_limiter import ProcessRateLimiter
+from backend.agent.safety import check_input, review_output, SafetyRefusal, SAFETY_RULE_VERSION
+from backend.domain.errors import ApplicationError
 T = TypeVar("T")
 _SYNC_SLOTS = BoundedSemaphore(16)
 
@@ -98,6 +103,12 @@ class RuntimeContext:
         self.tokens += self.token_estimator(text)
         if self.input_chars > self.policy.budget.max_input_chars or self.tokens + self.output_tokens > self.policy.budget.max_tokens:
             raise BudgetExceeded("The run input budget was exhausted.")
+    def consume_context(self, text):
+        """Model context consumes tokens; the character ceiling is for the question."""
+        self.raise_if_cancelled()
+        self.tokens += self.token_estimator(text)
+        if self.tokens + self.output_tokens > self.policy.budget.max_tokens:
+            raise BudgetExceeded("The run token budget was exhausted.")
     def raise_if_cancelled(self):
         if self.cancel_event.is_set():
             raise RunCancelled("The run was cancelled.")
@@ -160,7 +171,11 @@ class RuntimeContext:
     async def step(self, name, operation):
         self.current_step = name
         async with self.telemetry.span("fitlife.agent.step", {"step": name}):
-            result = await self._invoke(name, operation, "safe")
+            if name in {"safety_reviewer", "output_guard"}:
+                async with self.telemetry.span("fitlife.safety.review", {"step": name}):
+                    result = await self._invoke(name, operation, "safe")
+            else:
+                result = await self._invoke(name, operation, "safe")
         self.completed_steps.append(name)
         return result
     async def tool(self, name, replay: Literal["safe","never"], operation):
@@ -236,8 +251,10 @@ class RuntimeContext:
 
 class AgentRuntime:
     def __init__(self, *, policy=None, clock=time.monotonic, sleeper=_sleep, random_value=random_module.random, token_estimator=None,
-                 repository=None, checkpoint_store=None, telemetry=None):
+                 repository=None, checkpoint_store=None, telemetry=None, resolver=None, limiter=None):
         self.policy = policy or RuntimePolicy()
+        self.resolver = resolver or ConfigurationResolver(environment=asdict(self.policy))
+        self.limiter = limiter or ProcessRateLimiter(clock=clock)
         self.clock = clock
         self.sleeper = sleeper
         self.random_value = random_value
@@ -263,32 +280,69 @@ class AgentRuntime:
         with self._lock:
             self._cancellations[run_id] = event
         now = datetime.now(timezone.utc)
-        context=RuntimeContext(policy=self.policy,clock=self.clock,sleeper=self.sleeper,random_value=self.random_value,token_estimator=self.token_estimator,cancel_event=event,deadline_at=self.clock()+self.policy.deadline_seconds,
+        config_error = None
+        try:
+            config = self.resolver.resolve(command.operation, command.user_id, getattr(command, "request_overrides", None))
+        except Exception as error:
+            config = EffectiveRunConfig()
+            config_error = ApplicationError(code="CONFIGURATION_INVALID", message="The requested Agent configuration is invalid.",
+                                            status_code=422, processing_mode="agent") if isinstance(error, ValueError) else error
+        policy = config.policy
+        lease = None
+        context=RuntimeContext(policy=policy,clock=self.clock,sleeper=self.sleeper,random_value=self.random_value,token_estimator=self.token_estimator,cancel_event=event,deadline_at=self.clock()+policy.deadline_seconds,
                                record=lambda kind, ctx, payload=None: self._record(run_id, kind, ctx, payload),
                                telemetry=self.telemetry, checkpoint_store=self.checkpoint_store, run_id=run_id, user_id=command.user_id)
+        context.effective_config = config
+        span.set_attributes({"policy_version": f"policy-{config.revision}"})
         try:
             with self._lock:
                 self._runs[run_id] = self.repository.create(AgentRunSnapshot(
                     run_id, request_id, command.user_id, command.operation, "accepted",
-                    created_at=now.isoformat(), deadline_at=(now + timedelta(seconds=self.policy.deadline_seconds)).isoformat(),
-                    policy_snapshot_json=json.dumps(asdict(self.policy), sort_keys=True)))
+                    created_at=now.isoformat(), deadline_at=(now + timedelta(seconds=policy.deadline_seconds)).isoformat(),
+                    policy_version=f"policy-{config.revision}",
+                    policy_snapshot_json=RunPolicySnapshot(revision=config.revision, policy=policy).model_dump_json()))
                 self._runs[run_id] = self.repository.update(replace(self._runs[run_id], status="running", started_at=utc_now()), "RUN_STARTED")
-            command_payload = json.dumps({"question": command.question, "surface": command.surface,
+            if config_error:
+                raise config_error
+            lease = self.limiter.acquire(command.user_id, policy.rate_limit)
+            def guard():
+                try:
+                    decision = check_input(command.question)
+                except SafetyRefusal as error:
+                    self._safety_event(context, error.decision)
+                    raise
+                self._safety_event(context, decision)
+            await context.step("input_guard", guard)
+            context.consume_input(command.question)
+            command_payload = json.dumps({"surface": command.surface,
                 "context_date": command.context_date, "initial_tool_results": command.initial_tool_results,
                 "initial_tool_calls": command.initial_tool_calls}, ensure_ascii=False, default=str)
-            context.consume_input(command_payload)
+            context.consume_context(command_payload)
             result=replace((await context.call(lambda: workflow.execute(command,context))).with_request_id(),request_id=request_id,run_id=run_id)
+            def review():
+                try:
+                    answer, decision = review_output(command.question, result.answer_markdown)
+                except SafetyRefusal as error:
+                    self._safety_event(context, error.decision)
+                    raise
+                self._safety_event(context, decision)
+                # Rewrites cannot carry an unchecked auxiliary model payload.
+                return replace(result, answer_markdown=answer,
+                               tool_results={} if decision.outcome != "allow" else result.tool_results,
+                               sources=() if decision.outcome != "allow" else result.sources)
+            result = await context.step("output_guard", review)
+            result = await context.step("public_result_projector", lambda: result)
             context.raise_if_cancelled()
             with self._lock:
                 self._finish(run_id, "succeeded", context)
-                self._evict_completed()
+                self._evict_completed(policy.max_completed_runs)
             return AgentOutcome(run_id,request_id,"succeeded",result)
         except asyncio.CancelledError:
             event.set()
             error = RunCancelled("The run was cancelled.", run_id=run_id, request_id=request_id)
             with self._lock:
                 self._finish(run_id, "cancelled", context, error)
-                self._evict_completed()
+                self._evict_completed(policy.max_completed_runs)
             raise error from None
         except Exception as error:
             status="cancelled" if isinstance(error,RunCancelled) else "timed_out" if isinstance(error,RunTimedOut) else "failed"
@@ -296,7 +350,7 @@ class AgentRuntime:
                 if run_id in self._runs:
                     self._finish(run_id, status, context, error)
             with self._lock:
-                self._evict_completed()
+                self._evict_completed(policy.max_completed_runs)
             try:
                 error.run_id = run_id
                 error.request_id = request_id
@@ -304,6 +358,8 @@ class AgentRuntime:
                 pass
             raise
         finally:
+            if lease is not None:
+                lease.release()
             span.set_attributes({"input_tokens": context.tokens, "output_tokens": context.output_tokens,
                                  "tool_calls": context.tool_calls, "model_calls": context.model_calls,
                                  "retry_count": context.retry_count})
@@ -314,6 +370,10 @@ class AgentRuntime:
                 if run is not None and run.status not in TERMINAL_STATUSES:
                     # Storage failure cannot leave an executable process entry.
                     self._runs.pop(run_id, None)
+    @staticmethod
+    def _safety_event(context, decision):
+        context.record("SAFETY_DECIDED", context, {"outcome": decision.outcome,
+                       "risk_category": decision.risk_category, "rule_version": SAFETY_RULE_VERSION})
     async def get_status(self,run_id,user_id):
         return self.repository.get(run_id, user_id)
     async def cancel(self,run_id,user_id):
@@ -380,7 +440,7 @@ class AgentRuntime:
             raise failure[0]
         return result[0]
 
-    def _evict_completed(self):
+    def _evict_completed(self, max_completed_runs):
         terminal = [run_id for run_id, run in self._runs.items() if run.status not in ("accepted", "running")]
-        for run_id in terminal[:-self.policy.max_completed_runs] if self.policy.max_completed_runs else terminal:
+        for run_id in terminal[:-max_completed_runs] if max_completed_runs else terminal:
             self._runs.pop(run_id, None)

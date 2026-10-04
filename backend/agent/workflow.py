@@ -7,6 +7,7 @@ from backend.agent.contracts import AgentCommand, AgentResult
 from backend.agent.checkpoints import restore_planner_state
 from backend.agent.generator import generate_plan
 from backend.agent.runtime import RuntimeContext
+from backend.agent.safety import check_input, review_output, SafetyRefusal, SAFETY_RULE_VERSION
 from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
 from backend.agent.model_payloads import incremental_writer_payload, serialized_payload
@@ -53,13 +54,16 @@ class FitLifeWorkflow:
         *,
         retriever: Retriever = retrieve_knowledge,
         context_metadata: dict | None = None,
+        safety_reviewer=None,
     ) -> None:
         self.repository = repository
         self.gateway = gateway
         self.retriever = retriever
         self.context_metadata = deepcopy(context_metadata or {})
+        self.safety_reviewer = safety_reviewer
 
     async def execute(self, command: AgentCommand, context: RuntimeContext) -> AgentResult:
+        check_input(command.question)
         context.set_model_metadata(provider=getattr(self.gateway, "provider", None), model=self.gateway.model)
         state: AgentState = {
             "operation": command.operation,
@@ -88,8 +92,19 @@ class FitLifeWorkflow:
         await self._apply(context, "deterministic_generator", state, self._generator)
         await self._apply(context, "deterministic_validator", state, self._validator)
         await self._apply(context, "writer", state, self._writer)
-        # Phase 4 inserts input_guard before planner and safety_reviewer after writer.
+        await self._apply(context, "safety_reviewer", state, self._review)
         return await context.step("result_projector", lambda: self._project(state))
+
+    async def _review(self, context, state):
+        try:
+            answer, decision = review_output(state["user_query"], state["final_answer"], reviewer=self.safety_reviewer)
+        except SafetyRefusal as error:
+            context.record("SAFETY_DECIDED", context, {"outcome": error.decision.outcome,
+                           "risk_category": error.decision.risk_category, "rule_version": SAFETY_RULE_VERSION})
+            raise
+        context.record("SAFETY_DECIDED", context, {"outcome": decision.outcome,
+                       "risk_category": decision.risk_category, "rule_version": SAFETY_RULE_VERSION})
+        return {"final_answer": answer}
 
     async def _apply(
         self,
@@ -220,7 +235,7 @@ class FitLifeWorkflow:
 
     async def _writer(self, context: RuntimeContext, state: AgentState) -> AgentState:
         initial_results = state.get("initial_tool_results_snapshot", {})
-        context.consume_input(serialized_payload(incremental_writer_payload(state, initial_results)))
+        context.consume_context(serialized_payload(incremental_writer_payload(state, initial_results)))
         answer = await context.tool(
             "write_answer_model",
             "safe",

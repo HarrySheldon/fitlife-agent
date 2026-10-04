@@ -5,6 +5,8 @@ import json
 from fastapi import APIRouter, Depends, Request
 
 from backend.agent.graph import interpret_persisted_plan
+from backend.agent.structured_workflow import run_structured_agent
+from backend.agent.runtime import RuntimeControlError
 from backend.agent.validator import validate_generated_plan
 from backend.api.dependencies import optional_current_user, require_current_user
 from backend.api.preference_context import preferences_for
@@ -35,34 +37,42 @@ def generate_adjusted_plan(
     instructions: str,
     *,
     gateway: ConfigurableModelGateway | None = None,
+    request_id: str | None = None,
 ) -> dict:
-    gateway = gateway or resolve_user_model_gateway(user_id)
     context = {
         "active_plan_id": active.plan_id,
         "active_plan": active.plan.model_dump(mode="json"),
         "adjustment_instructions": instructions,
     }
     try:
-        result = gateway.parse_structured(
+        result = run_structured_agent(
+            operation="plan_adjustment", question=instructions, user_id=user_id,
+            request_id=request_id,
+            gateway_resolver=lambda: gateway or resolve_user_model_gateway(user_id),
             instructions=_ADJUSTMENT_INSTRUCTIONS,
             input_text=json.dumps(context, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
             response_model=GeneratedPlan,
         )
-    except ApplicationError:
+    except (ApplicationError, RuntimeControlError):
         raise
     except Exception as error:
-        raise model_gateway_error(error) from None
+        normalized = model_gateway_error(error)
+        normalized.run_id = getattr(error, "run_id", None)
+        normalized.request_id = getattr(error, "request_id", None)
+        raise normalized from None
     generated = result.output.model_dump()
     generated["trace"] = {
         **generated.get("trace", {}),
         "agent_model": result.model,
         "agent_usage": result.usage,
         "based_on_plan_id": active.plan_id,
+        "run_id": result.run_id,
+        "request_id": result.request_id,
     }
     return generated
 
 
-def _plans() -> Plans:
+def _plans(request_id: str | None = None) -> Plans:
     fitness = get_fitness_repository()
 
     def deterministic(user_id: str) -> dict:
@@ -70,7 +80,10 @@ def _plans() -> Plans:
 
     def adjusted(user_id: str, active: StoredPlan, instructions: str) -> dict:
         with user_lifecycle_guard(get_settings().data_dir, user_id):
-            return generate_adjusted_plan(user_id, active, instructions)
+            snapshot = active.model_copy(deep=True)
+        result = generate_adjusted_plan(user_id, snapshot, instructions, request_id=request_id)
+        with user_lifecycle_guard(get_settings().data_dir, user_id):
+            return result
 
     return Plans(
         FilePlanRepository(get_settings().data_dir),
@@ -112,9 +125,10 @@ def generate_plan(user: AuthenticatedUser | None = Depends(optional_current_user
 def create_adjustment_draft(
     plan_id: str,
     request: PlanAdjustmentDraftRequest,
+    http_request: Request,
     user: AuthenticatedUser = Depends(require_current_user),
 ):
-    draft = _plans().adjustment_draft(user.user_id, plan_id, request.instructions)
+    draft = _plans(request_id_for(http_request)).adjustment_draft(user.user_id, plan_id, request.instructions)
     return ok(draft.model_dump(mode="json"), processing_mode="agent")
 
 

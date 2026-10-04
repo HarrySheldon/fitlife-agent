@@ -48,6 +48,10 @@ def classify_failure(error: Exception, *, stage: str, attempt: int) -> RuntimeFa
     retry_after = getattr(error, "retry_after", None)
     if retry_after is None and getattr(error, "retry_after_ms", None) is not None:
         retry_after = float(error.retry_after_ms) / 1000
+    if code == "safety_refusal":
+        return _failure("SAFETY_REFUSAL", FailureCategory.SAFETY, False, error, stage, attempt, status, retry_after)
+    if code == "agent_rate_limited":
+        return _failure("AGENT_RATE_LIMITED", FailureCategory.QUOTA, False, error, stage, attempt, status, retry_after)
     if code in ("model_auth_failed", "model_not_found") or getattr(error, "retryable", None) is False:
         category = FailureCategory.AUTHENTICATION if "auth" in code else FailureCategory.INVALID_INPUT
         return _failure(code.upper() or "MODEL_TERMINAL_ERROR", category, False, error, stage, attempt, status, retry_after)

@@ -33,6 +33,7 @@ from backend.application.ports.structured_model_gateway import (
     StructuredModelGateway,
 )
 from backend.domain.errors import ApplicationError, model_gateway_error
+from backend.agent.runtime import RuntimeControlError
 from backend.domain.meals import (
     FoodDefinition,
     MealDomainError,
@@ -239,6 +240,7 @@ class SmartEntryService:
         expected_version: int,
         locale: str,
         weight_kg: float | None,
+        request_id: str | None = None,
     ) -> SmartEntryDraft:
         draft = self.get_draft(user_id, draft_id)
         if draft is None:
@@ -262,13 +264,21 @@ class SmartEntryService:
             raise error
 
         gateway: StructuredModelGateway | None = None
-        try:
+
+        def resolve_gateway():
+            nonlocal gateway
             gateway = self._gateway_resolver(user_id)
+            return gateway
+
+        try:
             result = analyze_smart_entry(
                 gateway,
                 draft.payload.candidates,
                 locale=locale,
                 weight_kg=weight_kg,
+                user_id=user_id,
+                request_id=request_id,
+                gateway_resolver=resolve_gateway,
             )
             output = SmartEntryAnalysisResponse.model_validate(result.output)
             payload = replace(
@@ -278,6 +288,8 @@ class SmartEntryService:
                     output,
                 ),
             )
+        except RuntimeControlError:
+            raise
         except ApplicationError as error:
             self._mark_analysis_failed(
                 user_id,
@@ -288,6 +300,8 @@ class SmartEntryService:
             raise
         except Exception as error:
             normalized = model_gateway_error(error)
+            normalized.run_id = getattr(error, "run_id", None)
+            normalized.request_id = getattr(error, "request_id", None)
             self._mark_analysis_failed(
                 user_id,
                 draft,
@@ -305,7 +319,7 @@ class SmartEntryService:
                     payload=payload,
                     prompt_version=PROMPT_VERSION,
                     model=result.model,
-                    metadata={"usage": result.usage},
+                    metadata={"usage": result.usage, "run_id": result.run_id, "request_id": result.request_id},
                 )
             except SmartEntryRepositoryError as error:
                 raise _agent_repository_error(error) from None

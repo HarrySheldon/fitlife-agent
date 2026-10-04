@@ -8,7 +8,7 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from backend.agent.runtime import RuntimeContext
 
-AgentOperation = Literal["chat", "coach_action", "plan_review", "weekly_review", "evaluation"]
+AgentOperation = Literal["chat", "coach_action", "plan_review", "weekly_review", "evaluation", "plan_adjustment", "smart_entry"]
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class AgentCommand:
     initial_tool_results: Mapping[str, object] = field(default_factory=dict)
     initial_tool_calls: tuple[str, ...] = ()
     request_id: str | None = None
+    request_overrides: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)

@@ -359,18 +359,30 @@ class PlanActivationRequest(BaseModel):
 
 
 class EvalCase(BaseModel):
-    question: str
+    model_config = ConfigDict(extra="forbid", strict=True)
+    question: str = Field(min_length=1)
     expected_tool: str | None = None
     expected_retrieval_doc: str | None = None
-    expected_answer_format: str = "markdown"
+    expected_answer_format: Literal["markdown", "text"] = "markdown"
     expected_keywords: list[str] = Field(default_factory=list)
 
 
 class EvalRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     limit: int | None = Field(default=None, ge=1, le=100)
+    execution_mode: Literal["mock", "live"] = "live"
 
 
 class EvalResult(BaseModel):
+    run_id: str
+    execution_mode: Literal["mock", "live"]
+    provider: str | None
+    model: str | None
+    prompt_version: str
+    policy_version: str
+    dataset_hash: str
+    started_at: str
+    finished_at: str
     total_tests: int
     pass_rate: float
     tool_call_success_rate: float

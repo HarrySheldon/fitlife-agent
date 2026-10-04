@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,7 @@ BACKEND_ROOT = Path(__file__).resolve().parent
 class Settings(BaseSettings):
     app_env: str = "demo"
     llm_enabled: bool = False
+    agent_runtime_policy: dict[str, object] = Field(default_factory=dict)
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_model: str = "gpt-5.5"
