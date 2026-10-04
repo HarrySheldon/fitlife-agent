@@ -91,6 +91,7 @@ TransformOperation = Literal[
     "constant",
     "enum_map",
     "opencc_t2s",
+    "opencc_tw2sp",
     "lower",
 ]
 

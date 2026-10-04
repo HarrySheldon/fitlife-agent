@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "version": "1.0.0",
+  "source_name": "free-exercise-db",
+  "locale": "zh-CN",
+  "approved_latin": ["EZ", "T", "TRX"],
+  "muscles": {
+    "abdominals": "腹肌",
+    "abductors": "髋外展肌群",
+    "adductors": "髋内收肌群",
+    "biceps": "肱二头肌",
+    "calves": "小腿肌群",
+    "chest": "胸肌",
+    "forearms": "前臂肌群",
+    "glutes": "臀肌",
+    "hamstrings": "腘绳肌",
+    "lats": "背阔肌",
+    "lower back": "下背部肌群",
+    "middle back": "中背部肌群",
+    "neck": "颈部肌群",
+    "quadriceps": "股四头肌",
+    "shoulders": "肩部肌群",
+    "traps": "斜方肌",
+    "triceps": "肱三头肌"
+  },
+  "equipment": {
+    "bands": "弹力带",
+    "barbell": "杠铃",
+    "body only": "徒手",
+    "cable": "拉力器",
+    "dumbbell": "哑铃",
+    "e-z curl bar": "EZ 杠",
+    "exercise ball": "健身球",
+    "kettlebells": "壶铃",
+    "machine": "器械",
+    "medicine ball": "药球",
+    "other": "其他"
+  },
+  "levels": {
+    "beginner": "初级",
+    "expert": "高级",
+    "intermediate": "中级"
+  },
+  "mechanics": {
+    "compound": "复合动作",
+    "isolation": "孤立动作"
+  },
+  "forces": {
+    "pull": "拉",
+    "push": "推",
+    "static": "静力"
+  },
+  "categories": {
+    "cardio": "有氧训练",
+    "olympic weightlifting": "奥林匹克举重",
+    "plyometrics": "增强式训练",
+    "powerlifting": "力量举",
+    "strength": "力量训练",
+    "strongman": "大力士训练"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "version": "1.0.0",
+  "source_name": "free-exercise-db",
+  "locale": "zh-CN",
+  "approved_latin": ["EZ", "T", "TRX"],
+  "muscles": {
+    "quadriceps": "股四头肌",
+    "chest": "胸肌"
+  },
+  "equipment": {
+    "barbell": "杠铃",
+    "body only": "徒手",
+    "e-z curl bar": "EZ 杠"
+  },
+  "levels": {
+    "beginner": "初级",
+    "intermediate": "中级"
+  },
+  "mechanics": {
+    "compound": "复合动作"
+  },
+  "forces": {
+    "push": "推",
+    "pull": "拉"
+  },
+  "categories": {
+    "strength": "力量训练"
+  }
+}

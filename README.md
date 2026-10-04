@@ -87,6 +87,34 @@ Daily targets are calculated deterministically from the saved body profile, acti
 
 The deterministic catalog receiver accepts local `.csv` and `.json` files. It does not download data, accept URLs, expose an upload API, invoke an Agent, or execute code from mapping profiles.
 
+### Mainland catalog localization
+
+Mainland Chinese catalog text is built from three reviewed, versioned assets committed with the application:
+
+- `backend/data/catalog/localizations/tfda-foods.zh-CN.v1.json` contains food terminology rules and sparse record-specific overrides;
+- `backend/data/catalog/localizations/free-exercise-db.zh-CN.v2.json` contains the complete stable-ID exercise name, alias, and instruction overlay;
+- `backend/data/catalog/localizations/exercise-taxonomy.zh-CN.v1.json` contains the shared exercise muscle, equipment, level, mechanic, force, and category terminology.
+
+Regenerate both bundled catalogs deterministically from the repository root. The committed legacy-term asset is explicit so previously supported Taiwan and English searches remain reproducible:
+
+```powershell
+.venv\Scripts\python.exe scripts\build_localized_catalogs.py `
+  --foods backend\data\catalog\foods.zh-CN.v1.json `
+  --food-localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
+  --exercises backend\data\catalog\exercises.zh-CN.v1.json `
+  --exercise-localization backend\data\catalog\localizations\free-exercise-db.zh-CN.v2.json `
+  --exercise-taxonomy backend\data\catalog\localizations\exercise-taxonomy.zh-CN.v1.json `
+  --legacy-search-terms backend\data\catalog\legacy-search-terms.v1.json `
+  --food-output backend\data\catalog\foods.zh-CN.v1.json `
+  --exercise-output backend\data\catalog\exercises.zh-CN.v1.json
+```
+
+The build reconstructs both source snapshots, validates localization coverage and all catalog records, then publishes the pair only after both validation reports have zero blocking issues. A validation failure exits without replacing either bundled catalog. Receiver validation and import runs also write `catalog-import-report.json` and `catalog-import-report.txt` with fingerprints, record counts, mapping versions, coded issues, and the transaction result.
+
+Localization changes display text, not identity: source-derived stable IDs remain unchanged, and confirmed meal and workout snapshots retain their historical names. Old Taiwan spellings and English source names stay indexed as aliases, including `白飯`, `白饭`, `米飯`, `Cooked rice`, and `Barbell Full Squat`.
+
+Traditional-to-Simplified baseline conversion uses [OpenCC](https://github.com/BYVoid/OpenCC), copyright its contributors and distributed under the Apache License 2.0. Project-owned glossary and stable-ID overlays provide the reviewed Mainland terminology beyond that baseline. Catalog localization is an offline build/import concern. Application startup and runtime load only committed catalog data and never invoke an Agent, model, or translation service.
+
 Approved public sources:
 
 - Taiwan FDA Food Nutrient Database: <https://data.fda.gov.tw/opendata/exportDataList.do?method=ExportData&InfoId=20&logType=2>
@@ -105,6 +133,7 @@ Validate and write JSON/text reports plus a normalized audit snapshot:
 ```powershell
 python -m backend.tools.catalog_receiver validate D:\data\20_2.csv `
   --mapping backend\data\catalog\mappings\tfda-foods.v1.json `
+  --localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
   --output-dir .tmp\catalog-validation\foods
 ```
 
@@ -113,6 +142,7 @@ Import one validated source into SQLite:
 ```powershell
 python -m backend.tools.catalog_receiver import D:\data\20_2.csv `
   --mapping backend\data\catalog\mappings\tfda-foods.v1.json `
+  --localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
   --database backend\data\fitlife.sqlite3 `
   --output-dir .tmp\catalog-import\foods
 ```
@@ -122,8 +152,11 @@ Validate both approved files before the first database write, then import each s
 ```powershell
 python scripts\import_initial_catalogs.py `
   --foods D:\data\20_2.csv `
+  --food-localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
   --exercises D:\data\exercises.json `
-  --exercise-aliases backend\data\catalog\enrichments\free-exercise-db.zh-CN.v1.json
+  --exercise-localization backend\data\catalog\localizations\free-exercise-db.zh-CN.v2.json `
+  --exercise-taxonomy backend\data\catalog\localizations\exercise-taxonomy.zh-CN.v1.json `
+  --database backend\data\fitlife.sqlite3
 ```
 
 Each run can produce `catalog-import-report.json`, `catalog-import-report.txt`, and a normalized food or exercise JSON snapshot. Reports persist only the input basename, fingerprint, counts, mapping version, issues, and transaction result, never the absolute source path.

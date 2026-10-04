@@ -27,8 +27,10 @@ def build_parser() -> argparse.ArgumentParser:
         description="Validate and import the approved initial food and exercise catalogs."
     )
     parser.add_argument("--foods", type=Path, required=True)
+    parser.add_argument("--food-localization", type=Path, required=True)
     parser.add_argument("--exercises", type=Path, required=True)
-    parser.add_argument("--exercise-aliases", type=Path, required=True)
+    parser.add_argument("--exercise-localization", type=Path, required=True)
+    parser.add_argument("--exercise-taxonomy", type=Path, required=True)
     parser.add_argument("--database", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / ".tmp" / "catalog-import")
     return parser
@@ -43,12 +45,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         food_validation = validator.validate(
             args.foods,
             mapping=food_mapping,
+            localization_paths=(args.food_localization,),
             output_dir=args.output_dir / "foods",
         )
         exercise_validation = validator.validate(
             args.exercises,
             mapping=exercise_mapping,
-            enrichment_path=args.exercise_aliases,
+            localization_paths=(args.exercise_localization,),
+            taxonomy_path=args.exercise_taxonomy,
             output_dir=args.output_dir / "exercises",
         )
         validation_summary = {
@@ -66,12 +70,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         food_import = importer.import_catalog(
             args.foods,
             mapping=food_mapping,
+            localization_paths=(args.food_localization,),
             output_dir=args.output_dir / "foods",
         )
         exercise_import = importer.import_catalog(
             args.exercises,
             mapping=exercise_mapping,
-            enrichment_path=args.exercise_aliases,
+            localization_paths=(args.exercise_localization,),
+            taxonomy_path=args.exercise_taxonomy,
             output_dir=args.output_dir / "exercises",
         )
         print(

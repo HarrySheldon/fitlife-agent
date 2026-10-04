@@ -18,5 +18,6 @@ backend/data/*.sqlite3-shm
 backend/data/*.sqlite3-wal
 backend/data/users.json
 backend/data/users/
+backend/data/catalog/.catalog-localization.publish.lock
 .tmp/
 pytest-cache-files-*/

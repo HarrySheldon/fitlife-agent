@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from backend.catalog_receiver.localization import LOCALIZATION_MISSING
 from backend.catalog_receiver.models import ReceiverError
 from backend.catalog_receiver.service import CatalogReceiver
 from backend.catalog_receiver.sinks import SQLiteCatalogSink
@@ -30,6 +31,14 @@ def build_parser() -> argparse.ArgumentParser:
         _source_arguments(command_parser)
         command_parser.add_argument("--mapping", type=Path, required=True)
         command_parser.add_argument("--enrichment", type=Path)
+        command_parser.add_argument(
+            "--localization",
+            dest="localizations",
+            action="append",
+            type=Path,
+            default=[],
+        )
+        command_parser.add_argument("--taxonomy", type=Path)
         command_parser.add_argument("--output-dir", type=Path)
         if command == "import":
             command_parser.add_argument("--database", type=Path, required=True)
@@ -55,12 +64,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             _print_json(inspection.model_dump(mode="json"))
             return 0
 
+        if not args.localizations:
+            raise ReceiverError(
+                LOCALIZATION_MISSING,
+                "At least one localization asset is required.",
+                exit_code=4,
+            )
+
         receiver = CatalogReceiver()
         if args.command == "import":
             preflight = receiver.validate(
                 args.source,
                 mapping=args.mapping,
                 enrichment_path=args.enrichment,
+                localization_paths=args.localizations,
+                taxonomy_path=args.taxonomy,
                 output_dir=args.output_dir,
                 json_size_limit=args.json_size_limit,
                 csv_delimiter=args.csv_delimiter,
@@ -75,6 +93,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.source,
                 mapping=args.mapping,
                 enrichment_path=args.enrichment,
+                localization_paths=args.localizations,
+                taxonomy_path=args.taxonomy,
                 output_dir=args.output_dir,
                 json_size_limit=args.json_size_limit,
                 csv_delimiter=args.csv_delimiter,
@@ -84,6 +104,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.source,
                 mapping=args.mapping,
                 enrichment_path=args.enrichment,
+                localization_paths=args.localizations,
+                taxonomy_path=args.taxonomy,
                 output_dir=args.output_dir,
                 json_size_limit=args.json_size_limit,
                 csv_delimiter=args.csv_delimiter,

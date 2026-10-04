@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "version": "1.3.1",
+  "source_name": "Taiwan FDA Food Nutrient Database",
+  "locale": "zh-CN",
+  "glossary": [
+    {"source": "红马铃薯(粉红珍珠马铃薯)", "target": "红土豆(粉红珍珠土豆)", "match_mode": "exact", "priority": 10},
+    {"source": "小马铃薯(珍珠马铃薯)", "target": "小土豆(珍珠土豆)", "match_mode": "exact", "priority": 20},
+    {"source": "白饭", "target": "米饭", "match_mode": "exact", "priority": 30},
+    {"source": "鲔鱼", "target": "金枪鱼", "match_mode": "contains", "priority": 40},
+    {"source": "马铃薯", "target": "土豆", "match_mode": "contains", "priority": 50},
+    {"source": "青花菜", "target": "西兰花", "match_mode": "prefix", "priority": 60},
+    {"source": "青花菜", "target": "西兰花", "match_mode": "suffix", "priority": 70},
+    {"source": "奇异果", "target": "猕猴桃", "match_mode": "suffix", "priority": 80},
+    {"source": "凤梨", "target": "菠萝", "match_mode": "prefix", "priority": 90},
+    {"source": "凤梨", "target": "菠萝", "match_mode": "suffix", "priority": 100}
+  ],
+  "entries": {
+    "A0550601": {
+      "name_zh_cn": "米饭",
+      "aliases": ["米飯"],
+      "review_note": "保留通用繁体写法，确保简繁搜索命中同一条米饭记录。"
+    },
+    "D1200201": {
+      "name_zh_cn": "凤梨释迦",
+      "aliases": [],
+      "review_note": "凤梨释迦是番荔枝杂交种，改为菠萝释迦会误示其为菠萝制品。"
+    }
+  }
+}

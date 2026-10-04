@@ -24,6 +24,22 @@ ISSUE_MESSAGES: dict[str, tuple[str, str | None]] = {
     "ENRICHMENT_ENGLISH_FALLBACK": ("No reviewed Chinese enrichment exists; the English name is used.", None),
     "ENRICHMENT_ORPHAN": ("An enrichment identity does not exist upstream.", "Remove the orphan or correct its upstream ID."),
     "FOOD_GROUP_EXCLUDED_INCOMPLETE_NUTRITION": ("The food was excluded because one or more required nutrients are blank.", None),
+    "LOCALIZATION_OVERRIDE_REVIEW_NOTE_MISSING": (
+        "A record-specific food localization override lacks a review note.",
+        "Add a non-empty review note explaining the override.",
+    ),
+    "LOCALIZATION_MISSING": (
+        "A compatible exercise lacks complete Simplified Chinese localization.",
+        "Add its stable source ID to the exercise overlay and complete every referenced taxonomy value.",
+    ),
+    "LOCALIZATION_INSTRUCTION_COUNT_MISMATCH": (
+        "Localized exercise instructions do not match the upstream instruction count.",
+        "Provide one localized instruction for each upstream instruction, in the same order.",
+    ),
+    "LOCALIZATION_COVERAGE_INSUFFICIENT": (
+        "Exercise localization coverage is below the mapping profile requirement.",
+        "Provide a complete localization bundle or use a legacy profile with zero required coverage.",
+    ),
     "NO_RECORDS_ACCEPTED": ("No complete canonical records were accepted.", "Correct the mapping or source data before importing."),
 }
 

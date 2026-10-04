@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from pathlib import Path
 from time import perf_counter
-from typing import Protocol
+from typing import Protocol, Sequence
 
 from backend.catalog_receiver.inspector import inspect_structure
+from backend.catalog_receiver.localization import (
+    LocalizationBundle,
+    resolve_localization_bundle,
+    validate_localization_coverage,
+)
 from backend.catalog_receiver.mapping import load_mapping_profile
 from backend.catalog_receiver.models import (
     CanonicalRecord,
     CatalogKind,
     MappingProfile,
+    ProjectionResult,
     ReceiverError,
     ReceiverIssue,
     ReceiverResult,
@@ -54,6 +60,8 @@ class CatalogReceiver:
         *,
         mapping: str | Path | MappingProfile,
         enrichment_path: str | Path | None = None,
+        localization_paths: Sequence[str | Path] = (),
+        taxonomy_path: str | Path | None = None,
         output_dir: str | Path | None = None,
         json_size_limit: int = 100_000_000,
         csv_delimiter: str | None = None,
@@ -62,6 +70,8 @@ class CatalogReceiver:
             path,
             mapping=mapping,
             enrichment_path=enrichment_path,
+            localization_paths=localization_paths,
+            taxonomy_path=taxonomy_path,
             output_dir=output_dir,
             json_size_limit=json_size_limit,
             csv_delimiter=csv_delimiter,
@@ -74,6 +84,8 @@ class CatalogReceiver:
         *,
         mapping: str | Path | MappingProfile,
         enrichment_path: str | Path | None = None,
+        localization_paths: Sequence[str | Path] = (),
+        taxonomy_path: str | Path | None = None,
         output_dir: str | Path | None = None,
         json_size_limit: int = 100_000_000,
         csv_delimiter: str | None = None,
@@ -88,6 +100,8 @@ class CatalogReceiver:
             path,
             mapping=mapping,
             enrichment_path=enrichment_path,
+            localization_paths=localization_paths,
+            taxonomy_path=taxonomy_path,
             output_dir=output_dir,
             json_size_limit=json_size_limit,
             csv_delimiter=csv_delimiter,
@@ -100,6 +114,8 @@ class CatalogReceiver:
         *,
         mapping: str | Path | MappingProfile,
         enrichment_path: str | Path | None,
+        localization_paths: Sequence[str | Path],
+        taxonomy_path: str | Path | None,
         output_dir: str | Path | None,
         json_size_limit: int,
         csv_delimiter: str | None,
@@ -107,13 +123,47 @@ class CatalogReceiver:
     ) -> ReceiverResult:
         started = perf_counter()
         profile = mapping if isinstance(mapping, MappingProfile) else load_mapping_profile(mapping)
+        localization_bundle = _load_run_localization(
+            profile,
+            localization_paths=localization_paths,
+            taxonomy_path=taxonomy_path,
+        )
         source = read_source(
             path,
             json_size_limit=json_size_limit,
             csv_delimiter=csv_delimiter,
         )
-        projection = project_source(source, profile, enrichment_path=enrichment_path)
+        if localization_bundle is None:
+            projection = project_source(
+                source,
+                profile,
+                enrichment_path=enrichment_path,
+            )
+        else:
+            projection = project_source(
+                source,
+                profile,
+                enrichment_path=enrichment_path,
+                localization_bundle=localization_bundle,
+            )
         validation_issues = validate_records(projection.records)
+        if localization_bundle is not None:
+            coverage_issues = validate_localization_coverage(
+                localization_bundle,
+                _projected_source_ids(projection),
+            )
+            existing_issues = {
+                (issue.code, issue.record)
+                for issue in projection.issues
+            }
+            validation_issues = (
+                *validation_issues,
+                *(
+                    issue
+                    for issue in coverage_issues
+                    if (issue.code, issue.record) not in existing_issues
+                ),
+            )
         if not projection.records:
             validation_issues = (
                 *validation_issues,
@@ -159,3 +209,31 @@ class CatalogReceiver:
         if output_dir is not None:
             write_run_artifacts(output_dir, report, projection.records)
         return result
+
+
+def _load_run_localization(
+    profile: MappingProfile,
+    *,
+    localization_paths: Sequence[str | Path],
+    taxonomy_path: str | Path | None,
+) -> LocalizationBundle | None:
+    paths = tuple(localization_paths)
+    if not paths:
+        return None
+    return resolve_localization_bundle(
+        catalog_kind=profile.catalog_kind,
+        source_name=profile.source_name,
+        localization_paths=paths,
+        taxonomy_path=taxonomy_path,
+    )
+
+
+def _projected_source_ids(projection: ProjectionResult) -> set[str]:
+    source_ids = {record.source_record_id for record in projection.records}
+    source_ids.update(
+        issue.record
+        for issue in projection.issues
+        if isinstance(issue.record, str)
+        and issue.code != "EXERCISE_CATEGORY_EXCLUDED"
+    )
+    return source_ids

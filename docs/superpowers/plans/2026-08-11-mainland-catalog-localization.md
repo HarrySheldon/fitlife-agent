@@ -4,7 +4,7 @@
 
 **Goal:** Replace English and Taiwan-region public catalog display text with reviewed Mainland Chinese text while preserving stable IDs, source provenance, aliases, transactional imports, and historical snapshots.
 
-**Architecture:** Add a deterministic localization loader between source projection and canonical record construction. Food names use OpenCC `tw2sp`, a versioned domain glossary, and ID-specific overrides; exercises require a complete ID-keyed static translation overlay plus a shared taxonomy dictionary. The existing seed payloads, SQLite tables, import ledger, FTS index, API contracts, and React components remain the runtime path.
+**Architecture:** Add a deterministic localization loader between source projection and canonical record construction. Every food name receives the OpenCC `tw2sp` baseline, versioned structured glossary rules apply broadly, and the food entry map remains a sparse set of ID-specific contextual or collision overrides plus review metadata. Foods do not require exact ID coverage. Exercises require a complete ID-keyed static translation overlay plus a shared taxonomy dictionary. The existing seed payloads, SQLite tables, import ledger, FTS index, API contracts, and React components remain the runtime path.
 
 **Tech Stack:** Python 3.12, Pydantic 2, OpenCC, FastAPI, SQLite/FTS5, pytest, React/TypeScript/Vitest, Docker Compose.
 
@@ -14,7 +14,7 @@
 
 **Create**
 
-- `backend/catalog_receiver/localization.py`: strict localization models, JSON loading, ID coverage, collision, residual-Latin, taxonomy, and alias validation.
+- `backend/catalog_receiver/localization.py`: strict localization models, JSON loading, sparse food override validation, exact exercise ID coverage, collision, residual-Latin, taxonomy, and alias validation.
 - `backend/data/catalog/localizations/tfda-foods.zh-CN.v1.json`: Mainland food glossary and ID-specific reviewed overrides.
 - `backend/data/catalog/localizations/free-exercise-db.zh-CN.v2.json`: complete 750-ID exercise names, aliases, and translated instructions.
 - `backend/data/catalog/localizations/exercise-taxonomy.zh-CN.v1.json`: shared muscle, equipment, level, mechanic, force, and category terms plus approved abbreviations.
@@ -44,7 +44,7 @@
 - `backend/tests/catalog_receiver/test_service.py`: assert localization failures block imports.
 - `backend/tests/catalog_receiver/test_cli.py`: cover localization arguments and coded failures.
 - `backend/tests/catalog_receiver/test_initial_import_script.py`: cover validate-both-before-write with all localization assets.
-- `backend/tests/catalog_receiver/test_real_data_acceptance.py`: assert complete production coverage and no unapproved Latin text.
+- `backend/tests/catalog_receiver/test_real_data_acceptance.py`: audit all production food names through baseline, glossary, and sparse overrides; assert complete exercise coverage and no unapproved Latin text.
 - `backend/tests/infrastructure/test_food_catalog_seed.py`: assert reimport updates names without changing IDs.
 - `backend/tests/infrastructure/test_exercise_catalog_seed.py`: assert translated provenance and alias indexing.
 - `backend/tests/test_food_catalog_api.py`: assert Mainland display name and Taiwan/English alias search.
@@ -64,7 +64,7 @@
 
 - [ ] **Step 1: Write failing loader contract tests**
 
-Cover valid food and exercise assets, duplicate JSON keys, wrong source name, missing IDs, orphan IDs, instruction-count mismatch, duplicate canonical names, canonical-name aliases, and unapproved Latin text. Use explicit assertions such as:
+Cover valid food and exercise assets, duplicate JSON keys, wrong source name, sparse food entries, food orphan IDs, exercise missing/orphan IDs, instruction-count mismatch, duplicate canonical names, canonical-name aliases, and unapproved Latin text. Use explicit assertions such as:
 
 ```python
 bundle = load_localization_bundle(
@@ -132,7 +132,7 @@ git commit -m "feat: define catalog localization contracts"
 
 - [ ] **Step 1: Write failing food conversion and precedence tests**
 
-Assert `apply_transform("白飯", TransformSpec(operation="opencc_tw2sp")) == "米饭"`. Add projector cases proving the precedence `record override > glossary > tw2sp`, and verify `白飯`, `白饭`, `米飯`, and `Cooked rice` remain aliases while `米饭` is canonical.
+Assert `apply_transform("白飯", TransformSpec(operation="opencc_tw2sp")) == "白饭"`, matching the installed generic OpenCC converter. Separately assert that the food projector plus the versioned localization asset applies `白饭 -> 米饭`. Add projector cases proving the precedence `record override > glossary > tw2sp`, and verify `白飯`, `白饭`, `米飯`, and `Cooked rice` remain aliases while `米饭` is canonical. This documents the approved separation between generic OpenCC conversion and project-owned food terminology; it is not a relaxation of the canonical-name requirement.
 
 - [ ] **Step 2: Run the food tests and confirm the missing transform fails**
 
@@ -142,7 +142,7 @@ Expected: failure because `opencc_tw2sp` and food localization are not implement
 
 - [ ] **Step 3: Add the transform and localize grouped food records**
 
-Add `opencc_tw2sp` to `TransformOperation`, create `OpenCC("tw2sp")`, and update the TFDA profile to `profile_version: 2.0.0`. In `_project_foods`, apply the localization entry by stable source ID after nutrient validation, merge upstream names into aliases, and record this provenance:
+Add `opencc_tw2sp` to `TransformOperation`, create `OpenCC("tw2sp")`, and update the TFDA profile to `profile_version: 2.0.0`. In `_project_foods`, apply `tw2sp` to every food, select at most one structured glossary rule without cascading, then apply a reviewed sparse localization entry by stable source ID only when present. Merge upstream names into aliases and record this provenance:
 
 ```python
 "localization": {
@@ -155,7 +155,7 @@ Add `opencc_tw2sp` to `TransformOperation`, create `OpenCC("tw2sp")`, and update
 
 - [ ] **Step 4: Author the food glossary and reviewed ID overrides**
 
-Populate the versioned asset with Mainland terms including `白饭 -> 米饭`, `鲔鱼 -> 金枪鱼`, `马铃薯 -> 土豆`, `青花菜 -> 西兰花`, `奇异果 -> 猕猴桃`, and `凤梨 -> 菠萝`. Add ID-specific overrides only when the phrase rule would change meaning or create a collision. Every override must include a non-empty `review_note`.
+Populate the versioned asset with Mainland terms including `白饭 -> 米饭`, `鲔鱼 -> 金枪鱼`, `马铃薯 -> 土豆`, `青花菜 -> 西兰花`, `奇异果 -> 猕猴桃`, and `凤梨 -> 菠萝`. Structured rules carry explicit unique integer priorities so equal-specificity selection never depends on JSON order. Add ID-specific entries only when the phrase rule would change meaning or create a collision. Every sparse override must include a non-empty `review_note`; do not add one entry per food.
 
 - [ ] **Step 5: Run focused food tests**
 
@@ -312,7 +312,7 @@ Expected: failures because localization arguments and the build script do not ex
 
 - [ ] **Step 3: Thread localization assets through the receiver service**
 
-Load each asset once per `_run`, pass the immutable bundle to `project_source`, append coverage issues before `build_report`, and block the sink whenever any localization issue has severity `error`.
+Load each asset once per `_run`, pass the immutable bundle to `project_source`, append coverage issues before `build_report`, and block the sink whenever any localization issue has severity `error`. Coverage validation rejects orphan IDs for both catalogs but requires exact source-ID equality only for exercises; an unlisted food falls back to glossary and `tw2sp`.
 
 - [ ] **Step 4: Implement atomic bundled-catalog output**
 

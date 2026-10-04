@@ -59,13 +59,13 @@ _VISIBLE = """
     exercise.active = 1
     AND (exercise.owner_user_id IS NULL OR exercise.owner_user_id = ?)
 """
-_ORDER = """
+_ORDER_BY = """
     ORDER BY rank_group,
         CASE WHEN usage.exercise_id IS NOT NULL THEN usage.last_used_at END DESC,
         usage.use_count DESC,
         lower(exercise.name), exercise.name, exercise.id
-    LIMIT ?
 """
+_ORDER = f"{_ORDER_BY} LIMIT ?"
 
 
 class SQLiteExerciseCatalogRepository:
@@ -99,10 +99,17 @@ class SQLiteExerciseCatalogRepository:
                           WHERE catalog_kind = 'exercise'
                             AND catalog_search MATCH ?
                       )
-                    {_ORDER}
+                    {_ORDER_BY}
                     """,
-                    (user_id, user_id, user_id, match, limit),
+                    (
+                        user_id,
+                        user_id,
+                        user_id,
+                        match,
+                    ),
                 ).fetchall()
+                rows = sorted(rows, key=lambda row: _exact_match_rank(row, query))
+                rows = rows[:limit]
             else:
                 rows = connection.execute(
                     f"{_SELECT} WHERE {_VISIBLE} {_ORDER}",
@@ -332,6 +339,20 @@ def _item(row: sqlite3.Row) -> ExerciseCatalogItem:
         last_used_at=row["last_used_at"],
         rank_group=row["rank_group"],
     )
+
+
+def _exact_match_rank(row: sqlite3.Row, query: str) -> int:
+    normalized_query = _normalized_search_term(query)
+    if _normalized_search_term(row["name"]) == normalized_query:
+        return 0
+    aliases = filter(None, row["stored_aliases"].split(chr(31)))
+    if any(_normalized_search_term(alias) == normalized_query for alias in aliases):
+        return 1
+    return 2
+
+
+def _normalized_search_term(value: str) -> str:
+    return unicodedata.normalize("NFKC", value).strip().casefold()
 
 
 def _timestamp(value: datetime) -> str:

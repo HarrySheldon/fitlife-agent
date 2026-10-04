@@ -1,38 +1,285 @@
+import json
 from pathlib import Path
 
-from backend.tools.catalog_receiver import main
+from backend.tools.catalog_receiver import build_parser, main
 
 
 ROOT = Path(__file__).parent
 FOOD_PROFILE = Path(__file__).parents[2] / "data/catalog/mappings/tfda-foods.v1.json"
+EXERCISE_LOCALIZATION = ROOT / "fixtures/exercise-localization.zh-CN.json"
 
 
-def test_inspect_and_validate_commands_emit_json(capsys) -> None:
+def _food_localization(tmp_path: Path, *, include_orphan: bool = False) -> Path:
+    entries = {
+        "A001": {
+            "name_zh_cn": "米饭",
+            "aliases": ["白飯", "Cooked rice"],
+            "review_note": "Approved fixture override.",
+        }
+    }
+    if include_orphan:
+        entries["A999"] = {
+            "name_zh_cn": "孤立食品",
+            "review_note": "Intentional orphan fixture.",
+        }
+    path = tmp_path / "food-localization.zh-CN.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "version": "1.0.0",
+                "source_name": "Taiwan FDA Food Nutrient Database",
+                "locale": "zh-CN",
+                "glossary": [],
+                "entries": entries,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_validate_parser_accepts_repeatable_localizations_and_optional_taxonomy() -> None:
+    args = build_parser().parse_args(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            "food.zh-CN.json",
+            "--localization",
+            "shared.zh-CN.json",
+            "--taxonomy",
+            "taxonomy.zh-CN.json",
+        ]
+    )
+
+    assert args.localizations == [Path("food.zh-CN.json"), Path("shared.zh-CN.json")]
+    assert args.taxonomy == Path("taxonomy.zh-CN.json")
+
+
+def test_validate_resolves_matching_asset_from_repeated_localizations(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(EXERCISE_LOCALIZATION),
+            "--localization",
+            str(_food_localization(tmp_path)),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    normalized = json.loads(
+        (output_dir / "normalized-foods.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 0
+    assert normalized["foods"][0]["name"] == "米饭"
+
+
+def test_validate_rejects_localizations_without_a_matching_asset(capsys) -> None:
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(EXERCISE_LOCALIZATION),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_MISSING" in capsys.readouterr().err
+
+
+def test_validate_rejects_duplicate_matching_localizations(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    localization = _food_localization(tmp_path)
+
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(localization),
+            "--localization",
+            str(localization),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_INVALID" in capsys.readouterr().err
+
+
+def test_validate_rejects_ambiguous_matching_localizations(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    first = _food_localization(tmp_path)
+    second = tmp_path / "second-food-localization.zh-CN.json"
+    second.write_bytes(first.read_bytes())
+
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(first),
+            "--localization",
+            str(second),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_INVALID" in capsys.readouterr().err
+
+
+def test_food_validation_rejects_any_supplied_taxonomy_path(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    localization = _food_localization(tmp_path)
+
+    for taxonomy in (tmp_path / "missing-taxonomy.json", Path("https://[")):
+        assert main(
+            [
+                "validate",
+                str(ROOT / "fixtures/tfda-foods.csv"),
+                "--mapping",
+                str(FOOD_PROFILE),
+                "--localization",
+                str(localization),
+                "--taxonomy",
+                str(taxonomy),
+            ]
+        ) == 4
+
+    errors = capsys.readouterr().err
+    assert errors.count("LOCALIZATION_INVALID") == 2
+    assert errors.count("food localization does not accept an exercise taxonomy") == 2
+
+
+def test_validate_without_localization_returns_data_error(capsys) -> None:
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_MISSING" in capsys.readouterr().err
+
+
+def test_food_localization_orphan_is_reported_and_blocks_output(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    output_dir = tmp_path / "output"
+
+    exit_code = main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(_food_localization(tmp_path, include_orphan=True)),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 4
+    assert "LOCALIZATION_ORPHAN" in capsys.readouterr().out
+    assert not (output_dir / "normalized-foods.json").exists()
+
+
+def test_inspect_and_validate_commands_emit_json(
+    tmp_path: Path,
+    capsys,
+) -> None:
     source = ROOT / "fixtures/tfda-foods.csv"
+    localization = _food_localization(tmp_path)
+    output_dir = tmp_path / "output"
 
     inspect_exit = main(["inspect", str(source), "--catalog-kind", "food"])
-    validate_exit = main(["validate", str(source), "--mapping", str(FOOD_PROFILE)])
+    validate_exit = main(
+        [
+            "validate",
+            str(source),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(localization),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
 
     output = capsys.readouterr().out
+    normalized = json.loads(
+        (output_dir / "normalized-foods.json").read_text(encoding="utf-8")
+    )
     assert inspect_exit == 0
     assert validate_exit == 0
     assert '"mapping_candidates"' in output
     assert '"accepted_count": 1' in output
+    assert normalized["foods"][0]["name"] == "米饭"
+    assert normalized["foods"][0]["provenance"]["localization"]["upstream_name"] == "白飯"
 
 
 def test_physical_mapping_and_data_errors_have_stable_exit_codes(tmp_path: Path, capsys) -> None:
+    localization = _food_localization(tmp_path)
     unsupported = tmp_path / "foods.xlsx"
     unsupported.write_text("data", encoding="utf-8")
     assert main(["inspect", str(unsupported)]) == 2
 
     bad_mapping = tmp_path / "mapping.json"
     bad_mapping.write_text("{}", encoding="utf-8")
-    assert main(["validate", str(ROOT / "fixtures/tfda-foods.csv"), "--mapping", str(bad_mapping)]) == 3
+    assert main(
+        [
+            "validate",
+            str(ROOT / "fixtures/tfda-foods.csv"),
+            "--mapping",
+            str(bad_mapping),
+            "--localization",
+            str(localization),
+        ]
+    ) == 3
 
     bad_food = tmp_path / "foods.csv"
     text = (ROOT / "fixtures/tfda-foods.csv").read_text(encoding="utf-8")
     bad_food.write_text(text.replace("總碳水化合物,g,28.2", "總碳水化合物,mg,unknown"), encoding="utf-8")
-    assert main(["validate", str(bad_food), "--mapping", str(FOOD_PROFILE)]) == 4
+    assert main(
+        [
+            "validate",
+            str(bad_food),
+            "--mapping",
+            str(FOOD_PROFILE),
+            "--localization",
+            str(localization),
+        ]
+    ) == 4
     captured = capsys.readouterr()
     assert "SOURCE_EXTENSION_UNSUPPORTED" in captured.err
     assert "MAPPING_PROFILE_INVALID" in captured.err
@@ -42,8 +289,10 @@ def test_physical_mapping_and_data_errors_have_stable_exit_codes(tmp_path: Path,
 def test_import_command_creates_database_and_skips_second_run(tmp_path: Path, capsys) -> None:
     source = ROOT / "fixtures/tfda-foods.csv"
     database = tmp_path / "catalog.sqlite3"
+    localization = _food_localization(tmp_path)
     args = [
-        "import", str(source), "--mapping", str(FOOD_PROFILE), "--database", str(database)
+        "import", str(source), "--mapping", str(FOOD_PROFILE),
+        "--localization", str(localization), "--database", str(database)
     ]
 
     assert main(args) == 0
@@ -63,6 +312,7 @@ def test_import_validation_failure_does_not_create_database(tmp_path: Path) -> N
         encoding="utf-8",
     )
     database = tmp_path / "must-not-exist.sqlite3"
+    localization = _food_localization(tmp_path)
 
     exit_code = main(
         [
@@ -70,6 +320,8 @@ def test_import_validation_failure_does_not_create_database(tmp_path: Path) -> N
             str(source),
             "--mapping",
             str(FOOD_PROFILE),
+            "--localization",
+            str(localization),
             "--database",
             str(database),
         ]

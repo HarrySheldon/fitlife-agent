@@ -37,6 +37,30 @@ def _register(client: TestClient, username: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def test_mainland_rice_display_preserves_legacy_search_aliases(client):
+    headers = _register(client, "catalog-mainland-rice")
+    records = []
+
+    for query in ("米饭", "白饭", "米飯", "Cooked rice"):
+        response = client.get(
+            "/api/v1/catalog/foods/search",
+            params={"q": query},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        matches = [
+            item for item in response.json()["data"]
+            if item["source_record_id"] == "A0550601"
+        ]
+        assert len(matches) == 1, query.encode("unicode_escape").decode("ascii")
+        records.append(matches[0])
+
+    assert {record["id"] for record in records} == {records[0]["id"]}
+    assert {record["name"] for record in records} == {"米饭"}
+    assert {record["source"] for record in records} == {"public"}
+
+
 def test_catalog_search_custom_food_favorite_and_owner_isolation(client):
     first = _register(client, "catalog-owner")
     second = _register(client, "catalog-other")
