@@ -120,3 +120,22 @@ def test_compose_health_contract_uses_configurable_ports_and_dependency():
     assert "/health/ready" in compose
     assert "condition: service_healthy" in compose
     assert "./backend/data:/app/backend/data" in compose
+
+
+def test_backend_build_uses_configurable_pip_network_settings():
+    compose = Path("docker-compose.yml").read_text(encoding="utf-8")
+    dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}" in compose
+    assert "PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-120}" in compose
+    assert "PIP_RETRIES: ${PIP_RETRIES:-5}" in compose
+    assert "ARG PIP_INDEX_URL=https://pypi.org/simple" in dockerfile
+    assert "ARG PIP_DEFAULT_TIMEOUT=120" in dockerfile
+    assert "ARG PIP_RETRIES=5" in dockerfile
+    assert '--index-url "$PIP_INDEX_URL"' in dockerfile
+    assert '--timeout "$PIP_DEFAULT_TIMEOUT"' in dockerfile
+    assert '--retries "$PIP_RETRIES"' in dockerfile
+    assert "PIP_INDEX_URL=https://pypi.org/simple" in env_example
+    assert "PIP_DEFAULT_TIMEOUT=120" in env_example
+    assert "PIP_RETRIES=5" in env_example

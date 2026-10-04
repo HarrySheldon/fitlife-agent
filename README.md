@@ -201,6 +201,14 @@ Docker frontend: `http://127.0.0.1:3000`
 
 Docker backend: `http://127.0.0.1:8000`
 
+Docker builds use the official Python package index by default, with a 120-second timeout and five retries. In regions where PyPI downloads are unreliable, set a trusted HTTPS mirror in the untracked `.env` file before running the launcher:
+
+```env
+PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+PIP_DEFAULT_TIMEOUT=120
+PIP_RETRIES=5
+```
+
 Set `FRONTEND_PORT` in `.env` to override the default host port when needed. Add every resulting browser origin to `BACKEND_CORS_ORIGINS`, including the matching `localhost` and/or `127.0.0.1` form used to open the app.
 Set `BACKEND_PORT` to override backend host port `8000`; when changing it, set both `VITE_API_BASE_URL` and `VITE_API_V1_BASE_URL` to the same public host port before rebuilding the frontend. Compose waits for backend `/health/ready` before starting the frontend and exposes health checks for both services.
 
