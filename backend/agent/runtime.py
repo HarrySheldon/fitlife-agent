@@ -420,6 +420,8 @@ class AgentRuntime:
         except Exception as storage_error:
             storage_error.run_id = run_id
             storage_error.request_id = run.request_id
+            if error is not None:
+                storage_error.finalization_error = error
             raise
     def execute_sync(self,command,workflow):
         try:

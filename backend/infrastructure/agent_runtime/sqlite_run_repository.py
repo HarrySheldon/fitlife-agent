@@ -17,6 +17,7 @@ class SQLiteRunRepository:
             version = connection.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, 1):
                 raise RuntimeError("Unsupported runtime database schema")
+            self._migrate_legacy_run_key(connection)
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS agent_runs (
                     id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE,
@@ -57,6 +58,26 @@ class SQLiteRunRepository:
         connection.execute("INSERT INTO agent_run_events VALUES (?, ?, ?, ?, ?, ?, ?)",
                            (event.run_id, event.seq, event.event_type, event.step, event.attempt,
                             event.occurred_at, json.dumps(dict(event.payload), allow_nan=False)))
+
+    @staticmethod
+    def _migrate_legacy_run_key(connection) -> None:
+        """Rename a legacy ``run_id`` primary key to ``id``.
+
+        ``user_version`` alone cannot detect this: both the legacy and the
+        current layout wrote version 1, so a pre-existing database silently kept
+        its old column and every later read failed with "no such column: id".
+        The rename preserves rows, and ``ALTER TABLE ... RENAME COLUMN`` is
+        supported from SQLite 3.25.
+        """
+        table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_runs'"
+        ).fetchone()
+        if table is None:
+            return
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(agent_runs)")}
+        if "id" in columns or "run_id" not in columns:
+            return
+        connection.execute("ALTER TABLE agent_runs RENAME COLUMN run_id TO id")
 
     def create(self, run):
         if run.status != "accepted" or run.version != 1:
