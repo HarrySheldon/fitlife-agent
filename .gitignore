@@ -21,4 +21,7 @@ backend/data/users.json
 backend/data/users/
 backend/data/catalog/.catalog-localization.publish.lock
 .tmp/
+.pytest-*/
+pytest-*/
+backend/pytest-*/
 pytest-cache-files-*/

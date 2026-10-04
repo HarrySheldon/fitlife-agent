@@ -27,6 +27,14 @@ docker compose down
 
 Set host ports and matching browser origins through the existing launcher/Compose configuration. If changing the backend port, rebuild the frontend with matching API base URLs.
 
+Docker builds use the official Python package index by default, with a 120-second timeout and five retries. In regions where PyPI downloads are unreliable, set a trusted HTTPS mirror in the untracked `.env` file before running the launcher:
+
+```env
+PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+PIP_DEFAULT_TIMEOUT=120
+PIP_RETRIES=5
+```
+
 ## Run without Docker
 
 Use an existing project virtual environment, or create one before installing dependencies:
