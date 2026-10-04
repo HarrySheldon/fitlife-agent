@@ -31,7 +31,9 @@ def test_execution_records_live_steps_and_terminal_state(repository):
     assert run.input_chars > 0 and run.input_tokens > 0
     assert "private question" not in repr(run)
     assert [event.event_type for event in repository.events(run.run_id, "user")] == [
-        "RUN_ACCEPTED", "RUN_STARTED", "STEP_STARTED", "STEP_SUCCEEDED", "RUN_SUCCEEDED"]
+        "RUN_ACCEPTED", "RUN_STARTED", "STEP_STARTED", "SAFETY_DECIDED", "STEP_SUCCEEDED",
+        "STEP_STARTED", "STEP_SUCCEEDED", "STEP_STARTED", "SAFETY_DECIDED", "STEP_SUCCEEDED",
+        "STEP_STARTED", "STEP_SUCCEEDED", "RUN_SUCCEEDED"]
 
 
 @pytest.fixture(params=["memory", "sqlite"])
@@ -160,7 +162,7 @@ def test_real_factory_uses_current_settings_and_sqlite(tmp_path, monkeypatch, is
     reopened = SQLiteRunRepository(tmp_path / "agent_runtime.sqlite3")
     run = reopened.get(result.run_id, "u")
     assert (run.provider, run.model, run.output_tokens) == ("mock", "test-model", 1)
-    assert len(reopened.events(result.run_id, "u")) == 5
+    assert len(reopened.events(result.run_id, "u")) == 13
     assert not (tmp_path / "fitlife.sqlite3").exists()
     monkeypatch.setattr(factory, "get_settings", lambda: Settings(data_dir=tmp_path / "next"))
     assert production_factory() is not runtime
@@ -186,7 +188,7 @@ def test_runtime_telemetry_has_tool_model_and_retry_parentage(repository):
     outcome = runtime.execute_sync(AgentCommand("chat", "private question", "u"), Workflow())
     spans = telemetry.spans
     run = spans[0]
-    step = next(span for span in spans if span.name == "fitlife.agent.step")
+    step = next(span for span in spans if span.name == "fitlife.agent.step" and span.attributes.get("step") == "planner")
     tool = next(span for span in spans if span.name == "fitlife.agent.tool")
     assert step.parent_id == run.span_id and tool.parent_id == step.span_id
     assert all(span.parent_id == tool.span_id for span in spans if span.name in {"fitlife.ai.request", "fitlife.agent.retry_wait"})
@@ -205,9 +207,11 @@ def test_late_worker_cannot_change_terminal_snapshot(repository):
     from backend.agent.policy import RuntimePolicy
     from backend.agent.runtime import RunTimedOut
     release, done = Event(), Event()
+    now = [0.0]
     class Workflow:
         async def execute(self, command, context):
             def blocked():
+                now[0] = 0.04
                 release.wait(2)
                 try:
                     context.checkpoint("planner", {"completed": True})
@@ -219,7 +223,7 @@ def test_late_worker_cannot_change_terminal_snapshot(repository):
                     done.set()
                 return "late"
             await context.step("planner", blocked)
-    runtime = AgentRuntime(repository=repository, policy=RuntimePolicy(deadline_seconds=0.03))
+    runtime = AgentRuntime(repository=repository, policy=RuntimePolicy(deadline_seconds=0.03), clock=lambda: now[0])
     with pytest.raises(RunTimedOut) as raised:
         runtime.execute_sync(AgentCommand("chat", "q", "u"), Workflow())
     before = repository.get(raised.value.run_id, "u")

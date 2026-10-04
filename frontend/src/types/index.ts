@@ -446,8 +446,8 @@ export interface EvalGroupMetrics {
 export interface EvalCheck {
   name: string
   passed: boolean
-  expected: unknown
-  observed: unknown
+  expected?: unknown
+  observed?: unknown
   reason: string
 }
 
@@ -463,5 +463,5 @@ export interface EvalCaseResult {
   validator_ok: boolean
   checks: EvalCheck[]
   failure_reasons: string[]
-  trace: Record<string, unknown>
+  trace?: Record<string, unknown>
 }

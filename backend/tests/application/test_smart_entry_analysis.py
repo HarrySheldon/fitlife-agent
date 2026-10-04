@@ -174,7 +174,9 @@ def test_service_merges_agent_estimates_without_formal_writes():
         "SMART_ENTRY_AGENT_ESTIMATE_ACCEPTANCE_REQUIRED",
     )
     assert call["expected_version"] == 3
-    assert call["metadata"] == {"usage": {"total_tokens": 80}}
+    assert call["metadata"]["usage"] == {"total_tokens": 80}
+    assert len(call["metadata"]["run_id"]) == 32
+    assert len(call["metadata"]["request_id"]) == 32
 
 
 def test_service_preserves_draft_and_marks_normalized_model_failure():
@@ -200,6 +202,8 @@ def test_service_preserves_draft_and_marks_normalized_model_failure():
         )
 
     assert raised.value.code == "MODEL_TIMEOUT"
+    assert len(raised.value.run_id) == 32
+    assert len(raised.value.request_id) == 32
     repository.mark_agent_failed.assert_called_once_with(
         "user-1",
         "draft-1",

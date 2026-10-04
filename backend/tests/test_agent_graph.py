@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from types import SimpleNamespace
 
 from backend.agent import graph as agent_graph
 from backend.agent.planner import PlannerRoute, plan_route
@@ -32,7 +33,11 @@ def test_run_contextual_coach_action_adds_context_to_prompt_and_trace(monkeypatc
             "request_id": "request-1",
         }
 
-    monkeypatch.setattr(agent_graph, "run_fitlife_agent", fake_run)
+    class CapturingRuntime:
+        def execute_sync(self, command, workflow):
+            return SimpleNamespace(to_dict=lambda: fake_run(command.question, command.user_id))
+
+    monkeypatch.setattr(agent_graph, "DEFAULT_AGENT_RUNTIME", CapturingRuntime())
 
     result = agent_graph.run_contextual_coach_action(
         surface="plan",
@@ -49,6 +54,24 @@ def test_run_contextual_coach_action_adds_context_to_prompt_and_trace(monkeypatc
     assert result["answer_markdown"] == "Contextual model answer"
     assert result["trace"]["surface"] == "plan"
     assert result["trace"]["coach_action"] == "adjust_next_plan"
+
+
+def test_context_loader_failure_has_persisted_run_identity(monkeypatch):
+    from backend.agent.runtime import AgentRuntime
+    runtime = AgentRuntime()
+    monkeypatch.setattr(agent_graph, "DEFAULT_AGENT_RUNTIME", runtime)
+    def broken_context(*args):
+        raise ValueError("private context failure")
+    monkeypatch.setattr(agent_graph, "_build_contextual_tool_context", broken_context)
+    with pytest.raises(ValueError) as caught:
+        agent_graph.run_contextual_coach_action(
+            surface="today", action="explain_today", date=None,
+            repository=object(), gateway=RoutingGateway(), user_id="owner",
+        )
+    run = runtime.repository.get(caught.value.run_id, "owner")
+    assert run.status == "failed"
+    assert run.failure_stage == "context_loader"
+    assert run.request_id == caught.value.request_id
 
 
 @pytest.mark.parametrize(

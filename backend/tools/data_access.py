@@ -147,9 +147,9 @@ def write_data_bytes(filename: str, content: bytes, user_id: str | None = None) 
 
 def read_eval_cases() -> list[EvalCase]:
     path = data_path("eval_questions.json")
-    if not path.exists():
-        return []
     raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError("Evaluation dataset must be a JSON array")
     return [EvalCase.model_validate(item) for item in raw]
 
 

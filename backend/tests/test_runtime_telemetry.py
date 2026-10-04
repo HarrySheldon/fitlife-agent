@@ -112,3 +112,15 @@ def test_final_usage_can_be_recorded_without_sending_private_attributes():
 
     asyncio.run(run())
     assert adapter.spans[0].attributes == {"input_tokens": 5, "output_tokens": 2}
+
+
+def test_safety_step_records_dedicated_content_free_child_span():
+    from backend.agent.runtime import RuntimeContext
+    adapter = InMemoryTelemetryContext()
+    context = RuntimeContext(telemetry=adapter)
+    asyncio.run(context.step("safety_reviewer", lambda: "private draft"))
+    review = next(span for span in adapter.spans if span.name == "fitlife.safety.review")
+    step = next(span for span in adapter.spans if span.name == "fitlife.agent.step")
+    assert review.parent_id == step.span_id
+    assert review.outcome == "succeeded"
+    assert "private draft" not in repr(adapter.spans)

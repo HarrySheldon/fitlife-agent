@@ -192,7 +192,7 @@ def test_plan_endpoints_keep_draft_and_activation_explicit(tmp_path, monkeypatch
         new_id=lambda: "plan-00000001",
         new_draft_id=iter(["draft-0000000000000001", "draft-0000000000000002"]).__next__,
     )
-    monkeypatch.setattr(plan_api, "_plans", lambda: service)
+    monkeypatch.setattr(plan_api, "_plans", lambda request_id=None: service)
     app = FastAPI()
     app.include_router(plan_api.router)
     app.dependency_overrides[require_current_user] = lambda: AuthenticatedUser(

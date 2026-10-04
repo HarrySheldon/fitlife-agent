@@ -52,7 +52,7 @@ def test_large_initial_tool_result_is_rejected_before_workflow_execution():
     runtime = AgentRuntime(policy=RuntimePolicy(budget=BudgetPolicy(
         max_input_chars=8_000, max_tokens=32_000, max_model_calls=16, max_tool_calls=32
     )))
-    command = AgentCommand("chat", "short", None, initial_tool_results={"payload": "x" * 10_000})
+    command = AgentCommand("chat", "short", None, initial_tool_results={"payload": "x" * 130_000})
 
     try:
         asyncio.run(runtime.execute(command, Workflow()))

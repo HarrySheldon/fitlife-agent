@@ -4,6 +4,10 @@
 **Date:** 2026-07-01  
 **Scope:** Project naming, domain vocabulary, and MVP agent implementation shape following OpenAI agent-building guidance.
 
+For the implemented execution, persistence, safety and evaluation contracts, see
+[Agent Runtime](AGENT_RUNTIME.md). The build-order discussion below is historical
+MVP context, not a replacement for the current runtime guide.
+
 ## 1. OpenAI Guidance Applied
 
 OpenAI's agent guidance frames an agent as a system where a model uses instructions, context, and tools to accomplish a goal, with guardrails, handoffs, traces, and evaluations added as the workflow becomes more complex. FitLife Agent should follow that model, but stay intentionally small for the MVP.
@@ -17,7 +21,7 @@ Official references:
 - [OpenAI Agents SDK: Tracing](https://openai.github.io/openai-agents-python/tracing/)
 - [OpenAI practical guide to building agents](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf)
 
-The local implementation may still use LangGraph because the project is designed to show graph orchestration. The OpenAI guidance is used as the product and engineering standard: clear agent contract, focused tools, guardrails, traceability, and evaluation.
+The local implementation uses explicit Python workflows through a shared runtime, with clear contracts, focused tools, guardrails, traceability and evaluation.
 
 ## 2. Naming Decisions
 
@@ -43,12 +47,12 @@ This agent is not a generic chatbot. It is a task-oriented assistant that can:
 
 ### Why Single Agent First
 
-OpenAI's agent guidance encourages keeping agents focused and adding orchestration only when the task requires it. For this project, a single top-level agent with explicit graph nodes is the right MVP shape:
+For this project, a single top-level agent with explicit workflow steps keeps responsibilities focused:
 
 - it is easier to explain in README and interviews;
 - it keeps evaluation simple because one trace shows the whole route;
 - it avoids pretending every internal step is an independent autonomous agent;
-- it still demonstrates orchestration through LangGraph nodes and conditional routing.
+- it demonstrates orchestration through typed Python steps and conditional routing.
 
 Split into multiple agents only after the MVP works and the split is justified by different instructions, tool sets, or responsibility boundaries.
 
@@ -217,7 +221,7 @@ Do not hide business rules only in a prompt. Any rule that must be reliable belo
 1. Build deterministic tools and tests before the agent.
 2. Build retrieval with source metadata before generative answers.
 3. Build planner fallback rules before depending on an LLM key.
-4. Build the LangGraph route with trace output.
+4. Build the explicit Python workflow with runtime events and trace output.
 5. Add generation and validation.
 6. Add evaluation cases that lock down expected routes.
 
@@ -250,7 +254,7 @@ The future split should preserve the same terms from `UBIQUITOUS_LANGUAGE.md`.
 
 - The app is **FitLife Agent**.
 - The MVP has one top-level **FitLife Coach Agent**.
-- LangGraph nodes are not separate agents.
+- Internal workflow steps are not separate agents.
 - Tools are deterministic functions with structured outputs.
 - RAG returns cited **Knowledge Chunks**.
 - Validation checks one generated output before it reaches the user.

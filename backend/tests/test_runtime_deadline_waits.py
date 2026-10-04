@@ -135,7 +135,7 @@ def test_sync_cancellation_discards_late_result():
         assert time.monotonic() - started < 0.2
         release.set()
         await asyncio.sleep(0.02)
-        assert contexts[0].completed_steps == []
+        assert contexts[0].completed_steps == ["input_guard"]
         assert (await runtime.get_status(run_id, "u")).status == "cancelled"
 
     try:

@@ -1,396 +1,93 @@
 # FitLife Agent
 
-FitLife Agent is an open-source Agentic RAG product for personal fitness and diet management. It combines versioned profiles and targets, local catalogs, meal/workout records and drafts in SQLite, verified legacy CSV cutover, deterministic Python analysis tools, a LangGraph Agent workflow, FastAPI APIs, and a React + Vite frontend.
+FitLife Agent is a local-first fitness and nutrition application built with FastAPI, React and an explicit Python Agent runtime. Record meals and workouts, review trends, create validated plan drafts, and ask a contextual Coach for general lifestyle guidance.
 
-The project is designed as a resume-ready AI Agent engineering internship portfolio project and a locally deliverable product. Its main loop is record-driven: register or log in, maintain meal and workout records from Today, review history and weekly trends, generate the next plan, and ask the contextual Coach for analysis without leaving the active workspace.
+## Start on Windows
 
-## What It Demonstrates
+From the repository root, with Docker Desktop installed:
 
-- Agent workflow design with a focused **FitLife Coach Agent**
-- RAG over curated Markdown fitness and nutrition documents
-- Tool calling with deterministic Python analyzers
-- Per-user OpenAI or OpenAI-compatible model connections with explicit Responses or Chat Completions adapters
-- Demo user management with username, email, or phone login, bearer-token sessions, and per-user local data files
-- Authenticated, append-only profile, overall-goal, and daily-target versions in SQLite
-- Deterministic four-target nutrition calculation with preview and explicit user confirmation
-- Local, source-aware food search with private custom foods and atomic multi-item meal confirmation
-- Required first-run onboarding and separately editable Profile sections
-- FastAPI backend with typed Pydantic schemas
-- Today-first React + Vite + TypeScript frontend with contextual Coach actions
-- Structured plan validation and Evaluation v2 reporting
-- Docker Compose deployment path
-
-## Architecture
-
-```mermaid
-flowchart LR
-  UI["React + Vite Frontend"] --> API["FastAPI API"]
-  API --> APP["Application Use Cases"]
-  APP --> DOMAIN["Deterministic Domain Tools"]
-  APP --> PROFILE_REPO["Versioned Profile Target Repository"]
-  APP --> MEAL_REPO["Catalog And Meal Repository"]
-  APP --> RECORD_REPO["Legacy Workout And Import Repository"]
-  AGENT["FitLife Coach Agent"] --> APP
-  AGENT --> MODEL["ModelGateway"]
-  PROFILE_REPO --> SQLITE["SQLite"]
-  MEAL_REPO --> SQLITE
-  RECORD_REPO --> ROUTER["Per-user cutover router"]
-  ROUTER --> SQLITE
-  ROUTER --> FILES["Compatibility JSON / CSV"]
-  MODEL --> OPENAI["OpenAI Responses API"]
-  DOMAIN --> KB["Markdown Knowledge Base"]
-```
-
-The backend is a layered monolith. API handlers map transport concerns, application use cases coordinate work, deterministic domain tools calculate and validate facts, and infrastructure adapters implement persistence and model access.
-
-## Agent Workflow
-
-The MVP uses one top-level **FitLife Coach Agent**. Internal graph steps are nodes, not separate agents:
-
-1. Planner classifies the user's intent.
-2. Profile Loader reads the local user profile.
-3. Data Analyzer calls meal or workout tools when required.
-4. Retriever searches knowledge chunks when rules or substitutions are needed.
-5. Plan Generator drafts next-week diet and workout plans.
-6. Validator checks safety, preferences, allergies, rest days, and structure.
-7. Report Writer returns concise Markdown plus trace metadata.
-
-See [docs/AGENT_TERMINOLOGY_AND_DESIGN.md](docs/AGENT_TERMINOLOGY_AND_DESIGN.md) and [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for the project vocabulary and Agent contract.
-
-## Data Formats
-
-The legacy `meals.csv` import and compatibility path requires:
-
-```text
-date,meal,food,amount,calories,protein,carbs,fat
-```
-
-`workouts.csv` requires:
-
-```text
-date,type,exercise,muscle_group,sets,reps,weight,duration_min
-```
-
-`user_profile.json` remains a compatibility projection for legacy features. The authenticated setup workflow stores append-only body-profile, overall-goal, and four-target versions in SQLite. The four daily targets are calories, carbohydrates, protein, and fat.
-
-The unauthenticated demo path reads `backend/data/*.csv` and `backend/data/user_profile.json`. Startup creates a read-only, checksummed ZIP of each registered user's old meal/workout CSV files and migrates them transactionally. Only a user with a completed migration ledger switches to SQLite; failed users remain file-backed and completed users never silently fall back when retained CSV files drift. Registration accepts username, email, or phone identifiers without external email/SMS verification.
-
-### Records database
-
-The backend creates `backend/data/fitlife.sqlite3` at startup and applies checksummed schema migrations. Set `SQLITE_DATABASE_PATH` only when the database must live elsewhere. Authenticated profile, goal, targets, catalogs, drafts, confirmed meals, workout sessions and completed legacy cutovers use this SQLite model. Retained CSV files and their ZIP backups must not be deleted; they are recovery evidence, not the active source after cutover. See [docs/data-sources.md](docs/data-sources.md).
-
-Bundled food facts are seeded locally from audited USDA FoodData Central records. Runtime search never calls an external food API. Confirmed meal items snapshot quantities, four nutrient values, source metadata, and provenance so later catalog changes cannot rewrite history. Draft confirmation uses optimistic versions, an idempotency key, and one SQLite transaction. Today, Logbook, reports, plans and Agent context read the per-user cutover repository, so completed users see SQLite-backed meal and workout records while incomplete users retain the compatibility source.
-
-Daily targets are calculated deterministically from the saved body profile, activity level, and overall goal. Profile or goal changes create a recalculation preview only. A target version is written only after the user explicitly confirms the preview; the Agent does not write overall goals or confirmed targets.
-
-## Catalog Data Receiver
-
-The deterministic catalog receiver accepts local `.csv` and `.json` files. It does not download data, accept URLs, expose an upload API, invoke an Agent, or execute code from mapping profiles.
-
-### Mainland catalog localization
-
-Mainland Chinese catalog text is built from three reviewed, versioned assets committed with the application:
-
-- `backend/data/catalog/localizations/tfda-foods.zh-CN.v1.json` contains food terminology rules and sparse record-specific overrides;
-- `backend/data/catalog/localizations/free-exercise-db.zh-CN.v2.json` contains the complete stable-ID exercise name, alias, and instruction overlay;
-- `backend/data/catalog/localizations/exercise-taxonomy.zh-CN.v1.json` contains the shared exercise muscle, equipment, level, mechanic, force, and category terminology.
-
-Regenerate both bundled catalogs deterministically from the repository root. The committed legacy-term asset is explicit so previously supported Taiwan and English searches remain reproducible:
-
-```powershell
-.venv\Scripts\python.exe scripts\build_localized_catalogs.py `
-  --foods backend\data\catalog\foods.zh-CN.v1.json `
-  --food-localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
-  --exercises backend\data\catalog\exercises.zh-CN.v1.json `
-  --exercise-localization backend\data\catalog\localizations\free-exercise-db.zh-CN.v2.json `
-  --exercise-taxonomy backend\data\catalog\localizations\exercise-taxonomy.zh-CN.v1.json `
-  --legacy-search-terms backend\data\catalog\legacy-search-terms.v1.json `
-  --food-output backend\data\catalog\foods.zh-CN.v1.json `
-  --exercise-output backend\data\catalog\exercises.zh-CN.v1.json
-```
-
-The build reconstructs both source snapshots, validates localization coverage and all catalog records, then publishes the pair only after both validation reports have zero blocking issues. A validation failure exits without replacing either bundled catalog. Receiver validation and import runs also write `catalog-import-report.json` and `catalog-import-report.txt` with fingerprints, record counts, mapping versions, coded issues, and the transaction result.
-
-Localization changes display text, not identity: source-derived stable IDs remain unchanged, and confirmed meal and workout snapshots retain their historical names. Old Taiwan spellings and English source names stay indexed as aliases, including `白飯`, `白饭`, `米飯`, `Cooked rice`, and `Barbell Full Squat`.
-
-Traditional-to-Simplified baseline conversion uses [OpenCC](https://github.com/BYVoid/OpenCC), copyright its contributors and distributed under the Apache License 2.0. Project-owned glossary and stable-ID overlays provide the reviewed Mainland terminology beyond that baseline. Catalog localization is an offline build/import concern. Application startup and runtime load only committed catalog data and never invoke an Agent, model, or translation service.
-
-Approved public sources:
-
-- Taiwan FDA Food Nutrient Database: <https://data.fda.gov.tw/opendata/exportDataList.do?method=ExportData&InfoId=20&logType=2>
-- free-exercise-db combined JSON: <https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json>
-
-The Taiwan FDA link currently returns a ZIP archive. Extract `20_2.csv` before using the receiver; ZIP input is intentionally rejected.
-
-Inspect an unfamiliar file without writing reports or SQLite rows:
-
-```powershell
-python -m backend.tools.catalog_receiver inspect D:\data\20_2.csv --catalog-kind food
-```
-
-Validate and write JSON/text reports plus a normalized audit snapshot:
-
-```powershell
-python -m backend.tools.catalog_receiver validate D:\data\20_2.csv `
-  --mapping backend\data\catalog\mappings\tfda-foods.v1.json `
-  --localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
-  --output-dir .tmp\catalog-validation\foods
-```
-
-Import one validated source into SQLite:
-
-```powershell
-python -m backend.tools.catalog_receiver import D:\data\20_2.csv `
-  --mapping backend\data\catalog\mappings\tfda-foods.v1.json `
-  --localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
-  --database backend\data\fitlife.sqlite3 `
-  --output-dir .tmp\catalog-import\foods
-```
-
-Validate both approved files before the first database write, then import each source independently:
-
-```powershell
-python scripts\import_initial_catalogs.py `
-  --foods D:\data\20_2.csv `
-  --food-localization backend\data\catalog\localizations\tfda-foods.zh-CN.v1.json `
-  --exercises D:\data\exercises.json `
-  --exercise-localization backend\data\catalog\localizations\free-exercise-db.zh-CN.v2.json `
-  --exercise-taxonomy backend\data\catalog\localizations\exercise-taxonomy.zh-CN.v1.json `
-  --database backend\data\fitlife.sqlite3
-```
-
-Each run can produce `catalog-import-report.json`, `catalog-import-report.txt`, and a normalized food or exercise JSON snapshot. Reports persist only the input basename, fingerprint, counts, mapping version, issues, and transaction result, never the absolute source path.
-
-CLI exits are `0` for success, `2` for file/physical format errors, `3` for mapping errors, `4` for data validation errors, and `5` for database errors. The current bundled Taiwan snapshot contains 2,128 complete foods; 53 upstream foods with blank protein or fat were explicitly excluded and reported instead of being guessed as zero. The bundled exercise snapshot contains 750 compatible records; all 123 stretching records were explicitly excluded.
-
-## One-Command Startup
-
-From the repository root, run:
-
-```powershell
+~~~powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
-```
+~~~
 
-The launcher performs the complete local startup flow:
+The launcher creates an ignored local configuration when needed, preserves the deployment encryption key, starts the Compose services and waits for readiness.
 
-- verifies that `.env` is ignored and not tracked by Git;
-- creates `.env` from `.env.example` when it does not exist;
-- generates one persistent Fernet deployment key without printing it;
-- preserves an existing valid key and rejects an invalid key instead of replacing it;
-- starts Docker Desktop when the engine is unavailable at its standard Windows location;
-- builds and starts both Compose services;
-- waits for backend readiness and a successful frontend response;
-- prints the frontend, backend, and health-check URLs.
+- Frontend: http://127.0.0.1:3000
+- Backend: http://127.0.0.1:8000
+- Readiness: http://127.0.0.1:8000/health/ready
+- API documentation: http://127.0.0.1:8000/docs
 
-The default addresses are:
+Useful commands:
 
-- Frontend: `http://127.0.0.1:3000`
-- Backend: `http://127.0.0.1:8000`
-- Readiness: `http://127.0.0.1:8000/health/ready`
-
-The command is safe to run again. It reuses the existing encryption key and lets Docker Compose reconcile the running containers. It never creates or prints a user model API key; authenticated users enter their own provider credentials under **Settings > Model connection**.
-
-Useful operational commands:
-
-```powershell
+~~~powershell
 docker compose ps
 docker compose logs --tail 100
 docker compose down
-```
+~~~
 
-This launcher is intended for local Windows development. The key is excluded from Git and Docker build contexts, but a user with local Docker administrator access can inspect container environment variables. Use Docker Secrets or an external secret manager for a production server.
+Set host ports and matching browser origins through the existing launcher/Compose configuration. If changing the backend port, rebuild the frontend with matching API base URLs.
 
-## Local Setup
+## Run without Docker
 
-Use this manual flow only when running services outside Docker:
+Use an existing project virtual environment, or create one before installing dependencies:
 
-```bash
-python scripts/generate_sample_data.py
+~~~powershell
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m uvicorn backend.main:app --reload
-```
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m uvicorn backend.main:app --reload
+~~~
 
 In another terminal:
 
-```bash
-cd frontend
+~~~powershell
+Set-Location frontend
 npm install
 npm run dev
-```
+~~~
 
-Backend: `http://127.0.0.1:8000`  
-Frontend: `http://127.0.0.1:5173`
+The development frontend is at http://127.0.0.1:5173. Do not regenerate sample data over an existing installation.
 
-## Docker
+## Configure a model
 
-The one-command launcher above is the recommended Windows path. To run Compose directly without environment bootstrap or readiness output:
+Deterministic records, calculations and plan validation work without a model. For Agent features, sign in and open **Settings > Model connection** to configure and enable your own provider connection.
 
-```bash
-docker compose up --build
-```
+API keys are encrypted at rest. Keep the deployment's SETTINGS_ENCRYPTION_KEY stable and backed up securely; losing or rotating it without migration makes saved credentials unreadable. Never commit .env or print user API keys. The Windows launcher manages the deployment key; manual installations must set it before saving credentials.
 
-Docker frontend: `http://127.0.0.1:3000`
+Authenticated requests use only the signed-in user's enabled connection, with no fallback to a deployment key. The unauthenticated demo path can use the deployment's explicitly enabled model settings. Connection checks occur only when requested. Custom endpoints must satisfy the endpoint security policy.
 
-Docker backend: `http://127.0.0.1:8000`
+## Product entry points
 
-Set `FRONTEND_PORT` in `.env` to override the default host port when needed. Add every resulting browser origin to `BACKEND_CORS_ORIGINS`, including the matching `localhost` and/or `127.0.0.1` form used to open the app.
-Set `BACKEND_PORT` to override backend host port `8000`; when changing it, set both `VITE_API_BASE_URL` and `VITE_API_V1_BASE_URL` to the same public host port before rebuilding the frontend. Compose waits for backend `/health/ready` before starting the frontend and exposes health checks for both services.
+1. Register or sign in, then complete onboarding and explicitly confirm nutrition targets.
+2. Use **Today** to draft meals, workouts or smart entries. Formal records require confirmation.
+3. Use **Logbook** for dated records and optional CSV import.
+4. Use **Review** for weekly trends and persisted reports.
+5. Use **Plan** to generate, inspect and explicitly activate validated drafts.
+6. Use the contextual **Coach** or **Chat** for analysis. Model suggestions do not directly write formal records.
+7. Use **Profile** and **Settings** for personal preferences and account/model settings.
 
-Create a verified release backup with:
+The developer **Evaluation** page is separate from ordinary product navigation. Explicit offline Mock and provider-backed Live evaluation, their limits and report formats are documented in the [Agent Runtime guide](docs/AGENT_RUNTIME.md#evaluation).
 
-```powershell
+## Data and backups
+
+Business records use SQLite with per-user legacy cutover support; retained legacy CSVs and verified backups are recovery evidence, not files to delete casually. Runtime history is stored separately from business records.
+
+Create a verified business database backup with:
+
+~~~powershell
 .venv\Scripts\python.exe scripts\backup_sqlite.py --output backups\fitlife.sqlite3
-```
+~~~
 
-## Secure Model Configuration
+Also retain the deployment key and other user files required by your recovery procedure. See [data sources and storage](docs/data-sources.md).
 
-Deterministic features are available without a model. Each authenticated user configures one model connection from **Settings > Model connection**. API keys are encrypted at rest and are never returned by the API.
+## Maintainer documentation
 
-The one-command launcher creates and persists the deployment Fernet key automatically. When starting the services manually instead, generate a key once:
+- [Agent Runtime interfaces, configuration, safety, evaluation and tests](docs/AGENT_RUNTIME.md)
+- [Domain terminology](UBIQUITOUS_LANGUAGE.md)
+- [Data sources and provenance](docs/data-sources.md)
+- [Catalog receiver design and commands](docs/superpowers/specs/2026-08-09-catalog-data-receiver-design.md)
+- [Catalog localization and reproducible builds](docs/superpowers/specs/2026-08-11-mainland-catalog-localization-design.md)
+- [Runtime refactor verification checkpoints](docs/superpowers/plans/agent-runtime-progress.md)
 
-```powershell
-.venv\Scripts\python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
+## Safety
 
-Copy `.env.example` to `.env` and set the generated value:
-
-```env
-SETTINGS_ENCRYPTION_KEY=<generated-fernet-key>
-```
-
-Do not commit `.env` or reuse the example as a real key. Losing or rotating this value without migration makes existing encrypted user API keys unreadable. When it is missing, deterministic features continue, saving a new API key fails with `CREDENTIAL_STORE_UNAVAILABLE`, and authenticated Agent requests cannot use stored credentials.
-
-The deployment-level variables remain available only for the unauthenticated demo path:
-
-```env
-LLM_ENABLED=false
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
-OPENAI_MODEL=
-EMBEDDING_MODEL=
-```
-
-An authenticated Agent request uses only that user's enabled encrypted connection and never falls back to `OPENAI_API_KEY`. Saving does not contact the provider. Model listing and connection testing run only after the user explicitly selects those actions. Custom endpoints are restricted to HTTPS public addresses and are revalidated before requests. API responses, logs, traces, and exports must not contain API key plaintext or ciphertext. Provider failures return stable errors such as `MODEL_TIMEOUT` or `MODEL_PROTOCOL_ERROR`; the system never presents a deterministic template as a successful Agent answer.
-
-## Execution Boundaries
-
-- Deterministic: profile and record persistence, Today and Dashboard calculations, calendar summaries, CSV import, weekly report generation, plan generation, and plan validation.
-- Agent: Chat, contextual Coach interpretation, and Evaluation runs.
-- Deterministic API responses include `processing_mode: deterministic`.
-- Agent API responses include `processing_mode: agent`, `model`, and `request_id`.
-- Agent failures do not alter or hide deterministic results.
-
-The endpoint `/calendar/agent-entry` retains its current compatibility name, but its parser is deterministic and its response is marked accordingly. A future smart-input Agent flow must create a draft and require deterministic validation plus user confirmation before persistence.
-
-## Product Flow
-
-1. Start the backend and frontend.
-2. Register or log in with a local username, email, or phone identifier.
-3. Complete the required onboarding flow with body profile, overall goal, activity level, and an explicitly confirmed four-target nutrition plan.
-4. Open Today and choose the dedicated meal, workout, or smart-entry route. Each task builds a draft and writes a formal record only after explicit confirmation.
-5. Use the contextual Coach to explain daily progress, suggest the next meal, or adjust today's training.
-6. Open Logbook for the calendar overview, `/logbook/:date` for a dated detail, or `/logbook/import` for optional CSV import.
-7. Open Review for trends and `/review/week/:week` to load or explicitly generate a persisted weekly report, then ask the Coach to interpret that saved report.
-8. Open Plan for current/history overview, `/plan/new` to generate and confirm a validated draft, or `/plan/:planId` to inspect and explicitly activate an adjusted draft.
-9. Open Profile for a read-only summary and `/profile/edit` for isolated personalization edits.
-10. Use `/evaluation` separately when testing Agent quality; it is intentionally outside ordinary product navigation.
-
-## Sample Questions
-
-- 我这周蛋白质吃够了吗？
-- 帮我总结这周饮食问题。
-- 这周我的训练量相比上周有提升吗？
-- 我不想吃鸡胸肉，有什么替代？
-- 我想减脂，下周怎么安排训练？
-
-## Evaluation
-
-Run:
-
-```bash
-python scripts/run_eval.py --limit 5
-```
-
-Evaluation executes the real Agent path and therefore requires an enabled model connection.
-
-Evaluation v2 reports:
-
-- aggregate rates: pass rate, tool-call success, retrieval hit, structured output success, keyword coverage, validator pass;
-- per-case checks: expected tool, retrieval source, keywords, answer format, validator status;
-- failure reasons for each failed case;
-- grouped metrics by expected tool and retrieval requirement.
-
-Artifacts are written to:
-
-- `backend/data/eval_results.json`
-- `backend/data/eval_results.md`
-
-The frontend Evaluation page calls `POST /eval/run` and renders the same aggregate metrics, group metrics, and failed-case details.
-
-## Phase 2 Verification
-
-The versioned profile and daily-target workflow was verified on 2026-07-24:
-
-- Backend: `550 passed` in `168.12s`; one known Starlette/httpx warning remains.
-- Frontend: `113 passed` across `18` files.
-- Production build: succeeded with `2448` modules transformed; the existing chunk-size warning above `500 kB` remains.
-- Docker: `docker compose config --quiet`, rebuild, startup, restart, and health recovery passed. Containers ran on backend port `8000` and frontend port `3000`.
-- Desktop acceptance: a fresh account completed fat-loss onboarding and confirmed `2172 kcal`, `291 g` carbohydrates, `126 g` protein, and `56 g` fat; Profile history showed the saved version.
-- Mobile acceptance at `390x844`: a fresh account completed muscle-gain onboarding and confirmed `2811 kcal`, `451 g` carbohydrates, `126 g` protein, and `56 g` fat; Profile showed the saved values, each onboarding step had no horizontal overflow, and the console had no errors.
-- Compatibility: authenticated setup returned `setup_complete: true`, and the legacy CSV-backed dashboard summary still responded after confirmation.
-- Final review: lifecycle-guarded writes, narrow training-personalization updates, stable effective-time conflicts, latest-target compatibility projection, coded safety conditions, and accurately scoped legacy-record export messaging were regression tested.
-
-The first Docker build exposed a frontend `node_modules` junction conflict in the build context. Commit `457fa8e` added `frontend/.dockerignore`; the subsequent Compose build and startup passed.
-
-## Phase 3 Verification
-
-The local food catalog and meal-draft workflow was verified on 2026-07-25:
-
-- Backend: `650 passed` in `76.65s`; one known Starlette/httpx warning remains.
-- Frontend: `123 passed` across `21` files. One initial full-suite run hit the existing `5s` Profile test timeout; the focused test and a fresh complete run passed.
-- Production build: succeeded with `2454` modules transformed in `49.59s`; the existing chunk-size warning above `500 kB` remains.
-- Docker: Compose configuration, rebuild, startup, backend health, and frontend Nginx response passed on ports `8000` and `3000`.
-- Desktop acceptance: searched the audited rice and oats records, added quantities, created a complete private custom food, and atomically confirmed one three-item meal. The page had no horizontal overflow and the console had no warnings or errors.
-- Mobile acceptance at `390x844`: searched banana and milk, added quantities, created a complete private custom food, and confirmed a second three-item meal. The task page and Today had no horizontal overflow and the console had no warnings or errors.
-- Idempotency proof: after reload, SQLite contained exactly two meals in positions `1` and `2`, each with exactly three immutable item snapshots; no duplicate was created.
-- Final review: authentication scope, FTS query construction, private-food visibility, optimistic locking, transaction rollback, idempotency fingerprints, historical snapshots, account deletion, and the unchanged export boundary were reviewed with no Critical or Important findings.
-
-## Phase 4 Verification
-
-The workout-session and SQLite Today workflow was verified on 2026-08-02:
-
-- Backend: 772 tests passed; frontend: 157 tests passed across 28 files.
-- TypeScript and Vite production build succeeded with 2466 modules transformed; the existing chunk-size warning remains.
-- Docker rebuilt on isolated ports 19000/14000; both containers were healthy and readiness reported schema 3 with no failed catalog imports or legacy migrations.
-- Desktop acceptance searched local strength and cardio catalogs, confirmed one mixed workout, and showed the 45-minute, 516 kcal estimated session exactly once in Today after reload.
-- Mobile acceptance at `390x844` had no overflow or console errors. The exercise search icon and placeholder retain a measured 10 px gap after the final CSS correction.
-
-## Phase 5 Verification
-
-The deterministic smart-entry and explicit Agent-analysis workflow was verified on 2026-08-02:
-
-- Python 3.12.13 Docker tests passed private-catalog isolation, inactive-item exclusion, and smart-entry resolution, 8/8.
-- A mixed Chinese entry resolved oats, squat, and running locally; an explicit Agent action estimated only the unknown food, and confirmation stayed disabled until the estimate was accepted.
-- After confirmation, Today showed 799 kcal, 116 g carbohydrate, 49 g protein, 17 g fat, two meals, and one workout. Reload preserved the same counts.
-- The lost-response hook test reuses its persisted idempotency key after refresh, while the repository replay test proves one formal aggregate and one idempotency record.
-- With no model configured, deterministic candidates and editable form values remained available and the Agent action returned a recoverable configuration error.
-- Desktop and `390x844` candidate editing had no horizontal overflow or console errors.
-
-## Verification Report
-
-See [docs/FINAL_VERIFICATION_REPORT.md](docs/FINAL_VERIFICATION_REPORT.md) for the latest verified command outputs, known warnings, and scope boundaries.
-
-## Safety Note
-
-FitLife Agent provides general lifestyle management suggestions only. It does not provide medical diagnosis, treatment, injury rehabilitation, or disease-specific diet guidance.
-
-## Resume Bullets
-
-- Built a LangGraph-based FitLife Coach Agent with deterministic tool calling, vector RAG, plan validation, and FastAPI endpoints for fitness and nutrition workflows.
-- Implemented local-first Evaluation v2 with structured per-case graders, failure reasons, grouped metrics, and JSON/Markdown artifacts.
-- Designed a Today-first React + Vite + TypeScript product with contextual Agent actions, calendar-based records, weekly review, validated plan generation, profile personalization, CSV import, and a separate developer evaluation surface.
-
-## Chinese Resume Description
-
-基于 LangGraph + FastAPI + React 构建 FitLife Agent 个人健身饮食规划智能体，整合用户饮食记录、训练记录和营养知识库，通过 RAG 检索饮食训练规则，并调用 Python 工具完成热量、宏量营养素、训练频率和训练容量分析。系统支持用户画像管理、自然语言问答、周报生成、饮食训练计划生成、计划校验和可视化 Dashboard。前端采用 React + Vite + TypeScript + Tailwind CSS 实现多页面交互界面，后端提供统一 FastAPI 接口，并通过自建评测集验证工具调用成功率、检索命中率和计划校验通过率。
+FitLife provides general lifestyle information, not medical diagnosis, treatment, rehabilitation or disease-specific diet advice. Safety screening is a conservative rule-based baseline, not a clinically validated classifier. Urgent symptoms or immediate danger need appropriate professional or emergency help.

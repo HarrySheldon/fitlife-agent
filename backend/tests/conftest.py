@@ -3,6 +3,13 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def temporary_evaluation_output(tmp_path, monkeypatch):
+    from backend import evaluation
+
+    monkeypatch.setattr(evaluation, "data_path", lambda filename: tmp_path / filename)
+
+
+@pytest.fixture(autouse=True)
 def isolated_agent_runtime(monkeypatch):
     from backend.agent.runtime import AgentRuntime
     from backend.infrastructure.agent_runtime import factory

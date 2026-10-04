@@ -95,6 +95,7 @@ def test_explicit_workflow_runs_steps_in_order_and_skips_unrequested_retrieval()
         "deterministic_generator",
         "deterministic_validator",
         "writer",
+        "safety_reviewer",
         "result_projector",
     ]
 
