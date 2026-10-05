@@ -15,10 +15,17 @@ from pydantic import BaseModel, ConfigDict
 MIN_SEVERITY = 0
 MAX_SEVERITY = 6
 
-Action = Literal["allow", "disclose", "mask", "refuse", "escalate", "rewrite"]
+Action = Literal["allow", "annotate", "disclose", "mask", "refuse", "escalate", "rewrite"]
 ACTIONS: frozenset[str] = frozenset(
-    {"allow", "disclose", "mask", "refuse", "escalate", "rewrite"}
+    {"allow", "annotate", "disclose", "mask", "refuse", "escalate", "rewrite"}
 )
+
+# Actions that ship the draft (possibly modified) rather than withholding it.
+SHIPPING_ACTIONS: frozenset[str] = frozenset({"allow", "annotate", "disclose", "mask"})
+
+# `mask` rewrites matched spans, so it is only meaningful where there is a draft to
+# rewrite. A policy that asks for it on the input side is a configuration error.
+OUTPUT_ONLY_ACTIONS: frozenset[str] = frozenset({"mask"})
 
 # Cue classes are part of the algorithm: the engine defines what each class means,
 # a pack only supplies its phrases. Two members carry hardcoded precedence —

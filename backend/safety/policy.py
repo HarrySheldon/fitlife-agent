@@ -7,7 +7,7 @@ without touching detection, and the notices without touching either.
 """
 from __future__ import annotations
 
-from backend.safety.models import ACTIONS, Policy, PolicyRule
+from backend.safety.models import ACTIONS, OUTPUT_ONLY_ACTIONS, Policy, PolicyRule
 
 
 def _matches(
@@ -72,3 +72,23 @@ def validate_policy(policy: Policy) -> None:
             raise ValueError(f"Unknown policy condition: {sorted(unknown)}")
         if "jailbreak" in rule.when and not isinstance(rule.when["jailbreak"], bool):
             raise ValueError("The jailbreak condition must be a boolean")
+
+
+def validate_policy_for_position(policy: Policy, *, position: str) -> None:
+    """Reject an action that cannot mean anything at this position.
+
+    ``mask`` rewrites the spans that matched, so it needs a draft to rewrite. On the
+    input side there is nothing to rewrite - the user's question is not ours to edit
+    - so a rule asking for it there is a configuration error rather than a runtime
+    surprise.
+    """
+    if position not in {"input", "output"}:
+        raise ValueError(f"Unknown gate position: {position}")
+    if position == "input":
+        unusable = [
+            rule.action for rule in policy.rules if rule.action in OUTPUT_ONLY_ACTIONS
+        ]
+        if unusable:
+            raise ValueError(
+                f"These actions cannot be used on the input side: {sorted(set(unusable))}"
+            )

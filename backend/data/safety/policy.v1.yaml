@@ -27,12 +27,15 @@ rules:
   - when: {modifier: definitional}
     action: allow
 
-  # A severity floor is a safety backstop and is evaluated before any per-concern
-  # row, so raising a concern's severity in the concerns pack cannot be silently
-  # absorbed by a more permissive concern rule below.
-  - when: {severity_at_least: 6}
-    action: refuse
-    notice: generic
+  # The most specific and most consequential outcomes come first, so a specific
+  # notice is not swallowed by a general safety floor. An emergency must read as an
+  # emergency, not as a generic refusal.
+  - when: {concern: emergency}
+    action: escalate
+    notice: emergency
+  - when: {concern: self_harm}
+    action: escalate
+    notice: emergency
 
   # Manipulation plus an asserted risk topic is the shape of a real attempt: the
   # user is trying to make a risk acceptable, or borrowing an authority the model
@@ -42,14 +45,15 @@ rules:
     action: refuse
     notice: manipulation
 
+  # Then the severity floor: a safety backstop for anything the rules above did not
+  # name. Raising a concern's severity in the concerns pack cannot be absorbed by a
+  # more permissive concern rule below.
+  - when: {severity_at_least: 6}
+    action: refuse
+    notice: generic
+
   # Urgent risk is never softened by context except when it is explicitly negated,
   # which the rules above already handled.
-  - when: {concern: emergency}
-    action: escalate
-    notice: emergency
-  - when: {concern: self_harm}
-    action: escalate
-    notice: emergency
   - when: {concern: extreme_diet}
     action: refuse
     notice: disordered_eating

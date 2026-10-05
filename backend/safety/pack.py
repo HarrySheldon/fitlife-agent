@@ -24,7 +24,7 @@ from backend.safety.models import (
     PolicyRule,
     RulePack,
 )
-from backend.safety.policy import validate_policy
+from backend.safety.policy import validate_policy, validate_policy_for_position
 
 
 DEFAULT_PACK_DIR = pathlib.Path(__file__).resolve().parent.parent / "data" / "safety"
@@ -214,6 +214,10 @@ def load_pack(directory: pathlib.Path | None = None) -> RulePack:
     for rule in policy.rules:
         if rule.notice is not None and rule.notice not in messages.notices:
             raise ValueError(f"Policy references an unknown notice: {rule.notice}")
+    # An action that cannot mean anything at a position is a configuration error, and
+    # it is caught here rather than surfacing as a confusing runtime result.
+    validate_policy_for_position(policy, position="input")
+    validate_policy_for_position(policy, position="output")
 
     return RulePack(
         schema_version=SUPPORTED_SCHEMA_VERSION,

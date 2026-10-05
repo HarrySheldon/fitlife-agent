@@ -12,3 +12,5 @@ notices:
   emergency: 请先暂停训练。如有紧急危险，请立即联系当地急救服务，并请身边可信任的人陪伴。
   manipulation: 我不会因为角色设定或权限声明而改变我的职责范围。如果你有饮食或训练方面的问题，我可以继续帮你分析。
   out_of_scope: 我可以帮助你了解饮食、训练和一般生活方式；这个请求超出我的能力范围。
+  # Wording used when a single span is replaced and the rest of the answer is kept.
+  mask_medical: （涉及诊断或用药的内容已省略）

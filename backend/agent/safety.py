@@ -32,6 +32,9 @@ class SafetyReviewer:
 
 _OUTCOME_BY_ACTION = {
     "allow": "allow",
+    # Observation ships the draft untouched, so at the service level it is an allow
+    # that happens to carry a record of what was noticed.
+    "annotate": "allow",
     "disclose": "rewrite",
     "mask": "rewrite",
     "rewrite": "rewrite",  # fail-closed projection used when review is unavailable

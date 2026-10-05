@@ -20,7 +20,7 @@ from backend.safety import pack as pack_loader
 from backend.safety.match import build_index, find_hits
 from backend.safety.models import Messages, Modifier, Policy, RulePack, SafetyDecision, Verdict
 from backend.safety.normalize import normalize, split_clauses, to_source_span
-from backend.safety.policy import evaluate
+from backend.safety.policy import evaluate, validate_policy_for_position
 from backend.safety.scope import detect_jailbreak, resolve_modifier, severity_for
 
 
@@ -157,7 +157,9 @@ def _decide(signal: _Signal, policy: Policy) -> tuple[Verdict, str | None]:
         action, notice_key = "refuse", "generic"
     verdict = Verdict(
         detected=signal.concern is not None or signal.severity > 6,
-        filtered=action != "allow",
+        # `filtered` means text was withheld or changed, so `annotate` is not
+        # filtered: it is observation only and ships the draft exactly as written.
+        filtered=action not in {"allow", "annotate"},
         action=action,
         severity=min(signal.severity, _OVERSIZE),
         concern=signal.concern,
@@ -171,6 +173,36 @@ def _decide(signal: _Signal, policy: Policy) -> tuple[Verdict, str | None]:
 
 def _notice(notice_key: str | None, messages: Messages) -> str | None:
     return messages.notice(notice_key)
+
+
+def _mask_spans(text: str, spans, replacement: str) -> str:
+    """Replace only the matched spans, keeping every other character.
+
+    This is what makes `mask` different from `refuse`: the answer survives, only the
+    offending fragment is replaced. Two details matter and are easy to get wrong:
+
+    - overlapping or touching spans are merged first, otherwise a later replacement
+      lands inside text an earlier one already rewrote;
+    - replacement runs from the end backwards, otherwise each substitution shifts
+      the offsets of the ones still to come.
+    """
+    if not spans:
+        return text
+    ordered = sorted((max(0, start), min(len(text), end)) for start, end in spans)
+    merged: list[list[int]] = []
+    for start, end in ordered:
+        if start >= end:
+            continue
+        # Strictly overlapping spans merge; merely touching ones are left alone,
+        # because merging them would delete the characters between them.
+        if merged and start < merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    masked = text
+    for start, end in reversed(merged):
+        masked = masked[:start] + replacement + masked[end:]
+    return masked
 
 
 def _primary(*signals: _Signal) -> _Signal:
@@ -266,7 +298,10 @@ def review_output(
             )
             raise SafetyRefusal(raised, question, notice=active_messages.notice("*"))
 
-    if verdict.action == "allow":
+    if verdict.action in {"allow", "annotate"}:
+        # `annotate` ships the draft unchanged; it is recorded, not acted on. It
+        # exists so a rollout can observe what a rule would have caught before the
+        # rule is allowed to change anyone's answer.
         return ReviewResult(text=draft, verdict=verdict)
 
     notice = _notice(notice_key, active_messages)
@@ -274,5 +309,12 @@ def review_output(
         # Disclose keeps the answer and adds the boundary statement.
         return ReviewResult(
             text=f"{draft}\n\n{notice}" if notice else draft, verdict=verdict, notice=notice
+        )
+    if verdict.action == "mask":
+        replacement = notice or active_messages.notice("*") or ""
+        return ReviewResult(
+            text=_mask_spans(draft, verdict.evidence_spans, replacement),
+            verdict=verdict,
+            notice=notice,
         )
     raise SafetyRefusal(verdict, question, notice=notice)
