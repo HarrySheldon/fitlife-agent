@@ -12,6 +12,9 @@ from backend.agent.safety import check_input, review_output, SafetyRefusal, SAFE
 from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
 from backend.agent.model_payloads import incremental_writer_payload, serialized_payload
+from backend.safety.context import ContextReport, sanitize_context
+from backend.safety.gate import default_pack
+from backend.safety.models import RulePack
 from backend.application.ports.fitness_repository import FitnessRepository
 from backend.application.ports.model_gateway import ModelGateway
 from backend.domain.errors import ApplicationError, model_gateway_error
@@ -63,6 +66,8 @@ class FitLifeWorkflow:
         self.retriever = retriever
         self.context_metadata = deepcopy(context_metadata or {})
         self.safety_reviewer = safety_reviewer
+        self._loaded_safety_pack: RulePack | None = None
+        self._last_context_report: ContextReport = ContextReport()
         self.analyzers = analyzers or AnalyzerRegistry()
 
     async def execute(self, command: AgentCommand, context: RuntimeContext) -> AgentResult:
@@ -232,7 +237,9 @@ class FitLifeWorkflow:
 
     async def _writer(self, context: RuntimeContext, state: AgentState) -> AgentState:
         initial_results = state.get("initial_tool_results_snapshot", {})
-        context.consume_context(serialized_payload(incremental_writer_payload(state, initial_results)))
+        payload = incremental_writer_payload(state, initial_results)
+        payload = self._sanitize_context(payload)
+        context.consume_context(serialized_payload(payload))
         answer = await context.tool(
             "write_answer_model",
             "safe",
@@ -242,6 +249,24 @@ class FitLifeWorkflow:
             raise model_gateway_error(ValueError("Model returned a blank answer"))
         context.consume_output(answer)
         return {"final_answer": answer, "llm_used": True, "llm_answer_used": True}
+
+    def _safety_pack(self) -> RulePack:
+        if self._loaded_safety_pack is None:
+            # No broad except on purpose. Startup already validated the pack, so a
+            # failure here is a real fault, and falling back to the raw payload would
+            # hand the model exactly the text this check exists to remove.
+            self._loaded_safety_pack = default_pack()
+        return self._loaded_safety_pack
+
+    def _sanitize_context(self, payload):
+        """Remove instruction-like user text before the model reads the payload.
+
+        A record's own text is data, and this is where that is enforced rather than
+        merely requested in the prompt.
+        """
+        sanitized, report = sanitize_context(payload, self._safety_pack())
+        self._last_context_report = report
+        return sanitized
 
     def _project(self, state: AgentState) -> AgentResult:
         validation = state.get("validation_result") or {"passed": True, "warnings": []}
