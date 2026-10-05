@@ -34,6 +34,14 @@ rules:
     action: refuse
     notice: generic
 
+  # Manipulation plus an asserted risk topic is the shape of a real attempt: the
+  # user is trying to make a risk acceptable, or borrowing an authority the model
+  # does not have. A pattern alone never escalates, so "假设你是教练" stays
+  # answerable and the gate does not become an over-refusing one.
+  - when: {jailbreak: true, modifier: asserted}
+    action: refuse
+    notice: manipulation
+
   # Urgent risk is never softened by context except when it is explicitly negated,
   # which the rules above already handled.
   - when: {concern: emergency}
@@ -54,8 +62,11 @@ rules:
   - when: {concern: dangerous_training}
     action: refuse
     notice: dangerous_training
+  # Out of scope is not a safety failure: the request is off-topic, not harmful.
+  # Refusing it outright is over-refusal, so it ships the answer position with a
+  # boundary statement instead. This mirrors the scope clause in the writer prompt.
   - when: {concern: out_of_scope}
-    action: refuse
+    action: disclose
     notice: out_of_scope
 
   # Clinical vocabulary that is actually asserted: answer the coaching part and

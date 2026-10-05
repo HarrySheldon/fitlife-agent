@@ -99,4 +99,43 @@ imperative_markers:
   - 换药
   - take
   - mg
+# Manipulation patterns. These are an axis of their own, not risk topics: a pattern
+# alone is harmless, a risk topic alone is handled by the cue classes above, and the
+# combination is what a real attempt looks like. Each entry needs a concrete marker;
+# bare topic words (越狱, jailbreak, DAN) are deliberately excluded because mentioning
+# them — "什么是 DAN" — is a question, not an attempt.
+jailbreak_patterns:
+  role_play:
+    - 假设你是
+    - 假设你是一名
+    - 假装你是
+    - 你现在是医生
+    - 你是我的医生
+    - 你是我的营养师
+    - 角色扮演
+    - 扮演医生
+    - 扮演营养师
+    - 作为医生
+    - 以医生身份
+    - act as a doctor
+    - pretend you are
+  authority_claim:
+    - 我有权限
+    - 我被授权
+    - 开发者模式
+    - 管理员已授权
+    - 系统允许你
+    - 你的限制已解除
+    - developer mode
+    - you are authorized
+  rule_override:
+    - 忽略之前的
+    - 忽略上述
+    - 忽略以上
+    - 不要遵守
+    - 忘记你的规则
+    - 无视你的限制
+    - 不用管那些限制
+    - ignore previous
+    - disregard your
 

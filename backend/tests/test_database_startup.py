@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
+from backend.infrastructure import startup as startup_module
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.main import create_app
 from backend.tools.data_access import (
     DEFAULT_PROFILE,
@@ -92,3 +94,24 @@ def test_registration_after_startup_immediately_cuts_over_empty_user(isolated_ru
             (f"legacy_csv_v1:{user_id}", user_id),
         ).fetchone()
     assert row == ("completed",)
+
+
+def test_startup_validates_the_safety_packs(isolated_runtime):
+    """The rule packs are validated at boot, not on the first request that needs them."""
+    _, _ = isolated_runtime
+    summary = startup_module.run_startup()
+
+    assert summary.status == "ready"
+
+
+def test_startup_refuses_to_run_with_a_broken_safety_pack(isolated_runtime, monkeypatch):
+    """A broken pack must refuse to start rather than weaken the gate at runtime."""
+    _, _ = isolated_runtime
+
+    def broken_pack():
+        raise ValueError("policy references an unknown concern: nope")
+
+    monkeypatch.setattr(startup_module, "load_safety_packs", broken_pack)
+
+    with pytest.raises(ValueError):
+        startup_module.run_startup()

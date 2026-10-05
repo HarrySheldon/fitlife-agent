@@ -5,7 +5,8 @@ term, a notice or a policy threshold.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
@@ -111,6 +112,9 @@ class CueTables:
     third_party: tuple[str, ...] = ()
     definitional_markers: tuple[str, ...] = ()
     imperative_markers: tuple[str, ...] = ()
+    # Manipulation patterns keyed by pattern id. A separate axis from cue classes:
+    # these describe *how* a request is framed, not what it is about.
+    jailbreak_patterns: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def class_of(self, name: str) -> tuple[str, ...]:
         return tuple(getattr(self, name))
@@ -171,6 +175,13 @@ class TermHit:
     default_severity: int
 
 
+VerdictSource = Literal[
+    "gate",              # decided by the deterministic rule pack
+    "review",            # an extension reviewer rejected the draft
+    "review_unavailable",  # the reviewer could not run, so the draft was withheld
+]
+
+
 @dataclass(frozen=True)
 class Verdict:
     """Separates what was noticed from what is done about it."""
@@ -182,6 +193,11 @@ class Verdict:
     concern: str | None
     modifiers: tuple[Modifier, ...]
     evidence_spans: tuple[tuple[int, int], ...]
+    # Audit trail: auditing asks which rule fired and which patterns matched, not
+    # only what the outcome was.
+    rule_version: str = ""
+    matched_patterns: tuple[str, ...] = field(default=())
+    source: VerdictSource = "gate"
 
     @property
     def blocked(self) -> bool:

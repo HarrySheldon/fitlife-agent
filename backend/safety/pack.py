@@ -130,7 +130,29 @@ def load_cues(path: pathlib.Path | None = None) -> CueTables:
         imperative_markers=_text_tuple(
             payload.get("imperative_markers"), field="imperative_markers"
         ),
+        jailbreak_patterns=_load_jailbreak_patterns(payload.get("jailbreak_patterns")),
     )
+
+
+def _load_jailbreak_patterns(raw: Any) -> dict[str, tuple[str, ...]]:
+    """Manipulation patterns, keyed by pattern id.
+
+    Requiring a mapping (rather than one flat phrase list) keeps the reason for each
+    match reportable, which is what makes an escalated decision reviewable.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("jailbreak_patterns must be a mapping of pattern id to phrases")
+    patterns: dict[str, tuple[str, ...]] = {}
+    for pattern_id, phrases in raw.items():
+        if not isinstance(pattern_id, str) or not pattern_id:
+            raise ValueError("A jailbreak pattern needs a string id")
+        values = _text_tuple(phrases, field=f"jailbreak_patterns.{pattern_id}")
+        if not values:
+            raise ValueError(f"Jailbreak pattern {pattern_id} declares no phrases")
+        patterns[pattern_id] = values
+    return patterns
 
 
 def load_policy(path: pathlib.Path | None = None) -> Policy:

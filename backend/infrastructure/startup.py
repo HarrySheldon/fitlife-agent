@@ -22,6 +22,7 @@ from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.sqlite.migrations import run_migrations
 from backend.infrastructure.sqlite.runtime import get_database
 from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.safety.gate import default_pack as load_safety_packs
 
 
 logger = logging.getLogger("fitlife.startup")
@@ -53,6 +54,28 @@ def run_startup(
     started = time.monotonic()
     database = database or get_database()
     data_dir = Path(data_dir or get_settings().data_dir)
+
+    # The safety rule packs are validated here rather than on first use. A broken,
+    # missing or unsupported pack must refuse to start, not fail the first request
+    # that happens to need the gate.
+    phase_started = time.monotonic()
+    _event(
+        operation="safety_pack_load",
+        version="1.0.0",
+        status="started",
+        counts={},
+        duration_ms=0,
+        checksum_prefix="",
+    )
+    pack = load_safety_packs()
+    _event(
+        operation="safety_pack_load",
+        version=pack.pack_version,
+        status="completed",
+        counts={"concerns": len(pack.concerns), "policy_rules": len(pack.policy.rules)},
+        duration_ms=_elapsed(phase_started),
+        checksum_prefix="",
+    )
 
     phase_started = time.monotonic()
     run_migrations(database, RECORDS_MIGRATIONS)

@@ -21,7 +21,7 @@ from backend.safety.match import build_index, find_hits
 from backend.safety.models import Messages, Modifier, Policy, RulePack, SafetyDecision, Verdict
 from backend.safety.normalize import normalize, split_clauses, to_source_span
 from backend.safety.policy import evaluate
-from backend.safety.scope import resolve_modifier, severity_for
+from backend.safety.scope import detect_jailbreak, resolve_modifier, severity_for
 
 
 SAFETY_RULE_VERSION = "fitlife-safety-v1"
@@ -87,6 +87,9 @@ class _Signal:
     modifier: Modifier = Modifier.asserted
     severity: int = 0
     spans: tuple[tuple[int, int], ...] = field(default=())
+    # Manipulation patterns are reported separately from the risk topic: the
+    # decision layer escalates on the combination, never on a pattern alone.
+    jailbreak: tuple[str, ...] = field(default=())
 
 
 def _analyse(text: str, pack: RulePack) -> _Signal:
@@ -138,7 +141,8 @@ def _analyse(text: str, pack: RulePack) -> _Signal:
             actionable_modifier = hit_modifier
 
     return _Signal(concern, modifier if concern else Modifier.asserted,
-                   max(actionable, 0), tuple(spans))
+                   max(actionable, 0), tuple(spans),
+                   detect_jailbreak(normalized, pack.cues))
 
 
 def _decide(signal: _Signal, policy: Policy) -> tuple[Verdict, str | None]:
@@ -147,6 +151,7 @@ def _decide(signal: _Signal, policy: Policy) -> tuple[Verdict, str | None]:
         concern=signal.concern,
         modifier=signal.modifier.value,
         severity=signal.severity,
+        jailbreak=signal.jailbreak,
     )
     if signal.severity > 6:
         action, notice_key = "refuse", "generic"
@@ -158,6 +163,8 @@ def _decide(signal: _Signal, policy: Policy) -> tuple[Verdict, str | None]:
         concern=signal.concern,
         modifiers=(signal.modifier,) if signal.concern else (),
         evidence_spans=signal.spans,
+        rule_version=SAFETY_RULE_VERSION,
+        matched_patterns=signal.jailbreak,
     )
     return verdict, notice_key
 
@@ -242,14 +249,21 @@ def review_output(
         except Exception:
             # Review did not run, so nothing was filtered by it. The draft is still
             # withheld: fail closed.
-            unavailable = Verdict(True, False, "refuse", verdict.severity,
-                                  "review_unavailable", verdict.modifiers,
-                                  verdict.evidence_spans)
+            unavailable = Verdict(
+                True, False, "refuse", verdict.severity, "review_unavailable",
+                verdict.modifiers, verdict.evidence_spans,
+                rule_version=verdict.rule_version, matched_patterns=verdict.matched_patterns,
+                source="review_unavailable",
+            )
             raise SafetyRefusal(unavailable, question,
                                 notice=active_messages.notice("*")) from None
         if decision.outcome == "refuse":
-            raised = Verdict(True, True, "refuse", max(verdict.severity, 3),
-                             verdict.concern, verdict.modifiers, verdict.evidence_spans)
+            raised = Verdict(
+                True, True, "refuse", max(verdict.severity, 3), verdict.concern,
+                verdict.modifiers, verdict.evidence_spans,
+                rule_version=verdict.rule_version, matched_patterns=verdict.matched_patterns,
+                source="review",
+            )
             raise SafetyRefusal(raised, question, notice=active_messages.notice("*"))
 
     if verdict.action == "allow":

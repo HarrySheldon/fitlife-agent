@@ -52,6 +52,23 @@ def resolve_modifier(
     return Modifier.asserted
 
 
+def detect_jailbreak(normalized: Normalized, cues: CueTables) -> tuple[str, ...]:
+    """Return the manipulation patterns present in the text.
+
+    This is a separate axis from risk topics. A pattern alone is not a violation —
+    "假设你是教练" is harmless — so the decision layer only escalates when a pattern
+    co-occurs with an asserted risk topic. That is what a real attempt looks like:
+    a risk topic the user is trying to make acceptable, or an authority the model
+    is being asked to borrow.
+    """
+    text = normalized.text
+    return tuple(
+        pattern_id
+        for pattern_id, patterns in cues.jailbreak_patterns.items()
+        if any(pattern in text for pattern in patterns)
+    )
+
+
 def severity_for(hit, clause, modifier: Modifier, cues: CueTables) -> int:
     """Context-safe uses carry no actionable severity.
 
