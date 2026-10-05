@@ -122,6 +122,8 @@ class CueTables:
     # Manipulation patterns keyed by pattern id. A separate axis from cue classes:
     # these describe *how* a request is framed, not what it is about.
     jailbreak_patterns: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # Units that mark a number as a claim about a measurement.
+    measurement_units: tuple[str, ...] = ()
 
     def class_of(self, name: str) -> tuple[str, ...]:
         return tuple(getattr(self, name))

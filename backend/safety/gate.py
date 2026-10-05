@@ -12,7 +12,7 @@ Flow::
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 
 from backend.domain.errors import ApplicationError
@@ -20,6 +20,7 @@ from backend.safety import pack as pack_loader
 from backend.safety.match import build_index, find_hits
 from backend.safety.models import Messages, Modifier, Policy, RulePack, SafetyDecision, Verdict
 from backend.safety.normalize import normalize, split_clauses, to_source_span
+from backend.safety.groundedness import check_groundedness
 from backend.safety.policy import evaluate, validate_policy_for_position
 from backend.safety.scope import detect_jailbreak, resolve_modifier, severity_for
 
@@ -205,6 +206,44 @@ def _mask_spans(text: str, spans, replacement: str) -> str:
     return masked
 
 
+def _with_caveat(
+    text: str,
+    notice: str | None,
+    supporting: tuple[float, ...] | None,
+    active: RulePack,
+    verdict: Verdict,
+) -> tuple[str, Verdict]:
+    """Append the caller's notice and, when a number is unsupported, a caveat.
+
+    An unsupported figure is disclosed rather than masked: cutting it out of the
+    sentence usually leaves a claim that reads worse than the number did, while a
+    caveat keeps the answer usable and tells the reader what to distrust.
+    """
+    parts = [text]
+    if notice:
+        parts.append(notice)
+    if supporting is None:
+        return "\n\n".join(part for part in parts if part), verdict
+
+    report = check_groundedness(
+        text, allowed=supporting, units=active.cues.measurement_units
+    )
+    if report.grounded:
+        return "\n\n".join(part for part in parts if part), verdict
+
+    caveat = active.messages.notice("ungrounded")
+    if caveat:
+        parts.append(caveat)
+    ungrounded_verdict = replace(
+        verdict,
+        action="disclose",
+        detected=True,
+        filtered=True,
+        concern=verdict.concern or "ungrounded",
+    )
+    return "\n\n".join(part for part in parts if part), ungrounded_verdict
+
+
 def _primary(*signals: _Signal) -> _Signal:
     """Pick the signal that carries the most information.
 
@@ -233,11 +272,17 @@ def review_output(
     pack: RulePack | None = None,
     policy: Policy | None = None,
     messages: Messages | None = None,
+    supporting_values: tuple[float, ...] | None = None,
 ) -> ReviewResult:
     """Output gate. Returns the text to ship plus the verdict that produced it.
 
     ``policy`` and ``messages`` are injected separately so that changing one
     cannot silently change the other.
+
+    ``supporting_values`` is the data the answer had available. When it is supplied,
+    the numbers the draft presents as measurements are checked against it and an
+    unsupported one appends a caveat. It is ``None`` by default, so a caller that has
+    no data to compare against does not silently get a check that passes everything.
     """
     active = pack or default_pack()
     active_policy = policy or active.policy
@@ -302,19 +347,17 @@ def review_output(
         # `annotate` ships the draft unchanged; it is recorded, not acted on. It
         # exists so a rollout can observe what a rule would have caught before the
         # rule is allowed to change anyone's answer.
-        return ReviewResult(text=draft, verdict=verdict)
+        text, verdict = _with_caveat(draft, None, supporting_values, active, verdict)
+        return ReviewResult(text=text, verdict=verdict)
 
     notice = _notice(notice_key, active_messages)
     if verdict.action == "disclose":
         # Disclose keeps the answer and adds the boundary statement.
-        return ReviewResult(
-            text=f"{draft}\n\n{notice}" if notice else draft, verdict=verdict, notice=notice
-        )
+        text, verdict = _with_caveat(draft, notice, supporting_values, active, verdict)
+        return ReviewResult(text=text, verdict=verdict, notice=notice)
     if verdict.action == "mask":
         replacement = notice or active_messages.notice("*") or ""
-        return ReviewResult(
-            text=_mask_spans(draft, verdict.evidence_spans, replacement),
-            verdict=verdict,
-            notice=notice,
-        )
+        masked = _mask_spans(draft, verdict.evidence_spans, replacement)
+        text, verdict = _with_caveat(masked, None, supporting_values, active, verdict)
+        return ReviewResult(text=text, verdict=verdict, notice=notice)
     raise SafetyRefusal(verdict, question, notice=notice)

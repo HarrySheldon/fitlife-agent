@@ -14,3 +14,5 @@ notices:
   out_of_scope: 我可以帮助你了解饮食、训练和一般生活方式；这个请求超出我的能力范围。
   # Wording used when a single span is replaced and the rest of the answer is kept.
   mask_medical: （涉及诊断或用药的内容已省略）
+  # Appended when the draft states a measurement the supplied data does not support.
+  ungrounded: 说明：以上个别数值未在本次读取的记录中找到，请以记录页为准。

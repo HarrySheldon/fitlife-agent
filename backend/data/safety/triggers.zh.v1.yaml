@@ -138,4 +138,29 @@ jailbreak_patterns:
     - 不用管那些限制
     - ignore previous
     - disregard your
+# Units that mark a number as a measurement rather than a heading or a list index.
+# Only numbers carrying one of these are checked for groundedness, which keeps the
+# check from flagging the prose a normal answer is full of.
+measurement_units:
+  - 千卡
+  - 大卡
+  - 卡路里
+  - 克
+  - 千克
+  - 公斤
+  - 斤
+  - 分钟
+  - 小时
+  - 次
+  - 组
+  - 公斤
+  - kcal
+  - cal
+  - g
+  - kg
+  - ml
+  - min
+  - h
+  - reps
+  - sets
 

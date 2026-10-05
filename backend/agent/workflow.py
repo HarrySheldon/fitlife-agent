@@ -14,6 +14,7 @@ from backend.agent.validator import validate_generated_plan
 from backend.agent.model_payloads import incremental_writer_payload, serialized_payload
 from backend.safety.context import ContextReport, sanitize_context
 from backend.safety.gate import default_pack
+from backend.safety.groundedness import supporting_values
 from backend.safety.models import RulePack
 from backend.application.ports.fitness_repository import FitnessRepository
 from backend.application.ports.model_gateway import ModelGateway
@@ -105,7 +106,14 @@ class FitLifeWorkflow:
 
     async def _review(self, context, state):
         try:
-            answer, decision = review_output(state["user_query"], state["final_answer"], reviewer=self.safety_reviewer)
+            answer, decision = review_output(
+                state["user_query"],
+                state["final_answer"],
+                reviewer=self.safety_reviewer,
+                # The figures the answer was allowed to use. Without them the gate
+                # has nothing to check a stated number against.
+                supporting_values=supporting_values(state.get("tool_results", {})),
+            )
         except SafetyRefusal as error:
             context.record("SAFETY_DECIDED", context, {"outcome": error.decision.outcome,
                            "risk_category": error.decision.risk_category, "rule_version": SAFETY_RULE_VERSION})

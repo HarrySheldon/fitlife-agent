@@ -131,6 +131,9 @@ def load_cues(path: pathlib.Path | None = None) -> CueTables:
             payload.get("imperative_markers"), field="imperative_markers"
         ),
         jailbreak_patterns=_load_jailbreak_patterns(payload.get("jailbreak_patterns")),
+        measurement_units=_text_tuple(
+            payload.get("measurement_units"), field="measurement_units"
+        ),
     )
 
 

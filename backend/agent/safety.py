@@ -52,6 +52,9 @@ _CATEGORY_BY_CONCERN: dict[str, RiskCategory] = {
     "disordered_eating": "extreme_diet",
     "dangerous_training": "dangerous_training",
     "out_of_scope": "out_of_scope",
+    # A stated measurement the data does not support. Not a safety category: the
+    # answer is usable, the reader just needs to know what to distrust.
+    "ungrounded": "low",
     # Reported when an extension review could not run; the deterministic gate
     # still withheld the draft, so this is a category and not an action.
     "review_unavailable": "review_unavailable",
@@ -88,9 +91,16 @@ def review_output(
     draft: str,
     *,
     reviewer: SafetyReviewer | None = None,
+    supporting_values: tuple[float, ...] | None = None,
 ) -> tuple[str, SafetyDecision]:
-    """Review a draft answer; returns the text to ship and the decision."""
-    result = _review_output(question, draft, reviewer=reviewer)
+    """Review a draft answer; returns the text to ship and the decision.
+
+    ``supporting_values`` are the figures the answer was allowed to state. Passing
+    them turns on the groundedness check; omitting them leaves it off.
+    """
+    result = _review_output(
+        question, draft, reviewer=reviewer, supporting_values=supporting_values
+    )
     return result.text, decision_for(result.verdict)
 
 
