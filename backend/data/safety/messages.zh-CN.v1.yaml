@@ -1,0 +1,13 @@
+schema_version: 1
+pack_version: "1.0.0"
+locale: zh-CN
+# The presentation layer. Editing these strings cannot change a verdict.
+# `*` is the fallback notice for any action that does not carry a named notice.
+notices:
+  "*": 我只能提供一般生活方式建议。当前内容需要专业评估，不能据此进行诊断、用药、极端节食或危险训练。请咨询合格专业人员。
+  generic: 我只能提供一般生活方式建议。当前内容需要专业评估，请咨询合格专业人员。
+  clinical_boundary: 我能帮你分析饮食和训练记录，但不能做诊断或调整用药。这方面请咨询合格的专业人员。
+  disordered_eating: 这个方向我不能帮你规划。如果你正在经历进食困扰，建议尽快联系专业人员或你信任的人。
+  dangerous_training: 带伤或忍痛训练我不能帮你安排。请先让专业人员评估，再决定恢复训练。训练中出现胸痛、眩晕或呼吸困难时请立即停止。
+  emergency: 请先暂停训练。如有紧急危险，请立即联系当地急救服务，并请身边可信任的人陪伴。
+  out_of_scope: 我可以帮助你了解饮食、训练和一般生活方式；此请求超出本工具的能力范围。

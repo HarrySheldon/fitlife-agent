@@ -45,10 +45,17 @@ class StructuredSuggestionWorkflow:
         context.consume_output(serialized)
 
         def review():
-            _, decision = review_output(command.question, serialized)
-            # A prose fallback cannot safely replace a typed nutrition/plan object.
-            if decision.outcome != "allow":
-                decision = decision.model_copy(update={"outcome": "refuse"})
+            try:
+                _, decision = review_output(command.question, serialized)
+            except SafetyRefusal as refusal:
+                # A prose fallback cannot safely replace a typed nutrition/plan
+                # object, so a refusal stays a refusal.
+                context.record("SAFETY_DECIDED", context, {
+                    "outcome": refusal.decision.outcome,
+                    "risk_category": refusal.decision.risk_category,
+                    "rule_version": SAFETY_RULE_VERSION,
+                })
+                raise
             context.record("SAFETY_DECIDED", context, {
                 "outcome": decision.outcome, "risk_category": decision.risk_category,
                 "rule_version": SAFETY_RULE_VERSION,

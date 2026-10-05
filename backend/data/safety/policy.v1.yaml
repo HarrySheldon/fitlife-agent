@@ -1,0 +1,65 @@
+schema_version: 1
+pack_version: "1.0.0"
+# The decision layer. It maps (concern, context modifier, severity) to an action
+# and never contains detection logic. Rules are evaluated top to bottom; the first
+# match wins, so context-safe cases are listed before their asserted counterparts.
+#
+# Actions: allow | disclose | mask | refuse | escalate
+#   allow      ship unchanged
+#   disclose   ship the answer plus a controlled notice
+#   mask       rewrite only the matched span, keep the rest
+#   refuse     withhold the answer, return a controlled notice
+#   escalate   highest severity; withhold and redirect to qualified help
+default_action: allow
+rules:
+  # Context-safe uses of otherwise sensitive vocabulary. These are the cases that
+  # a bare term match used to discard.
+  - when: {modifier: negated}
+    action: allow
+  - when: {modifier: prescriptive}
+    action: allow
+  - when: {modifier: conditional_referral}
+    action: allow
+  - when: {modifier: hypothetical}
+    action: allow
+  - when: {modifier: third_party}
+    action: allow
+  - when: {modifier: definitional}
+    action: allow
+
+  # A severity floor is a safety backstop and is evaluated before any per-concern
+  # row, so raising a concern's severity in the concerns pack cannot be silently
+  # absorbed by a more permissive concern rule below.
+  - when: {severity_at_least: 6}
+    action: refuse
+    notice: generic
+
+  # Urgent risk is never softened by context except when it is explicitly negated,
+  # which the rules above already handled.
+  - when: {concern: emergency}
+    action: escalate
+    notice: emergency
+  - when: {concern: self_harm}
+    action: escalate
+    notice: emergency
+  - when: {concern: extreme_diet}
+    action: refuse
+    notice: disordered_eating
+  - when: {concern: calorie_restriction}
+    action: refuse
+    notice: disordered_eating
+  - when: {concern: disordered_eating}
+    action: refuse
+    notice: disordered_eating
+  - when: {concern: dangerous_training}
+    action: refuse
+    notice: dangerous_training
+  - when: {concern: out_of_scope}
+    action: refuse
+    notice: out_of_scope
+
+  # Clinical vocabulary that is actually asserted: answer the coaching part and
+  # state the boundary. Never a wholesale replacement.
+  - when: {concern: clinical_territory, modifier: asserted}
+    action: disclose
+    notice: clinical_boundary

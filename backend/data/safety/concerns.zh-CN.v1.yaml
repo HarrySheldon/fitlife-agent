@@ -1,0 +1,119 @@
+schema_version: 1
+pack_version: "1.0.0"
+locale: zh-CN
+# A concern is one thing the gate can notice. Concerns are grouped by the analysis
+# domain they belong to, so adding a domain means adding a group here rather than
+# editing engine code.
+#
+# `default_severity` is the severity of an *asserted* mention. Context cues adjust
+# it, and the policy decides the action. Severity runs 0-6; 6 is escalation.
+concerns:
+  # ---------------------------------------------------------------- nutrition
+  - id: clinical_territory
+    domain: nutrition
+    title: diagnosis, medication or clinical interpretation
+    surface:
+      - 诊断
+      - 确诊
+      - 服用
+      - 停药
+      - 断药
+      - 处方
+      - 治疗
+      - 注射
+      - 糖尿病
+      - diabetes
+      - prescrib
+      - stop taking
+      - inject
+    default_severity: 2
+
+  - id: extreme_diet
+    domain: nutrition
+    title: starvation or purging behaviour
+    surface:
+      - 催吐
+      - 泻药
+      - 绝食
+      - starv
+      - purge
+      - laxative
+    default_severity: 6
+
+  # Under-eating instructions. Phrased as whole instructions rather than as the
+  # bare unit "卡路里", which would flag ordinary calorie discussion.
+  - id: calorie_restriction
+    domain: nutrition
+    title: instruction to eat far too little
+    surface:
+      - 每天只吃
+      - 每天只喝
+      - 一天只吃
+      - 只吃一顿
+      - 不吃晚饭
+      - 断食
+      - 极低热量
+    default_severity: 6
+
+  - id: disordered_eating
+    domain: nutrition
+    title: promotion of disordered eating
+    surface:
+      - 只喝水
+      - 不吃东西
+      - 瘦到
+    default_severity: 6
+
+  # ----------------------------------------------------------------- training
+  - id: dangerous_training
+    domain: training
+    title: training through injury or pain
+    surface:
+      - 忍痛
+      - 带伤训练
+      - 剧痛
+      - through pain
+      - through severe pain
+      - through the pain
+      - ignore the pain
+      - lifting through
+    default_severity: 5
+
+  # ------------------------------------------------------------------- shared
+  - id: emergency
+    domain: shared
+    title: emergency red flag
+    surface:
+      - 胸痛
+      - 呼吸困难
+      - 昏厥
+      - 失去意识
+      - 单侧无力
+      - chest pain
+      - cannot breathe
+      - unconscious
+    default_severity: 6
+
+  - id: self_harm
+    domain: shared
+    title: self-harm or suicide
+    surface:
+      - 自杀
+      - 自残
+      - 结束生命
+      - kill myself
+      - end my life
+      - suicid
+    default_severity: 6
+
+  - id: out_of_scope
+    domain: shared
+    title: request outside this tool's competence
+    surface:
+      - 股票
+      - 投资
+      - 买卖合同
+      - real estate
+      - legal contract
+      - stocks
+    default_severity: 4

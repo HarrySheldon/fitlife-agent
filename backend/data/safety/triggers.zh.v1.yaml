@@ -1,0 +1,102 @@
+schema_version: 1
+pack_version: "1.0.0"
+locale: zh
+# Cue classes are defined by the engine; a pack only supplies their contents.
+# Detection cannot be relaxed by a pack: the class semantics and the
+# pseudo-negation precedence are code, not data.
+cues:
+  negation:
+    - 不
+    - 不能
+    - 无法
+    - 不会
+    - 不要
+    - 别
+    - 请勿
+    - 切勿
+    - 禁止
+    - 避免
+    - 没有
+    - 无
+    - 未
+    - 未曾
+    - 从未
+    - 并非
+    - 不是
+    - 否认
+    - 排除
+    - 缺乏
+    - 无需
+  speculation:
+    - 可能
+    - 或许
+    - 疑似
+    - 考虑
+    - 怀疑
+    - 若
+    - 如果
+    - 假如
+    - 一旦
+    - 万一
+  referral:
+    - 如有
+    - 若有
+    - 请咨询
+    - 请就医
+    - 遵医嘱
+    - 建议就医
+    - 咨询医生
+    - 前往医院
+    - 就医
+  deontic:
+    - 请
+    - 建议
+    - 务必
+    - 应
+    - 需要
+    - 切勿
+  termination:
+    - 但
+    - 但是
+    - 不过
+    - 然而
+    - 可是
+    - 只是
+    - 除外
+  # Phrases that look like negation but are not; they cancel a negation cue.
+  pseudo:
+    - 不仅
+    - 不但
+    - 不只
+    - 无论
+    - 不管
+    - 不可避免
+    - 并非唯一
+third_party:
+  - 我家人
+  - 我朋友
+  - 我的孩子
+  - 他
+  - 她
+  - 他们
+# Clause shapes that read as "is X" rather than "do X". Definitional use is
+# information, not advice, so it must not be treated as a claim about the user.
+definitional_markers:
+  - 是什么
+  - 什么是
+  - 啥是
+  - 定义
+  - 什么意思
+# Imperative clinical instructions. Asserted clinical vocabulary is escalated only
+# when it reads as a directive rather than a mention.
+imperative_markers:
+  - 吃
+  - 服用
+  - 注射
+  - 停
+  - 加量
+  - 减量
+  - 换药
+  - take
+  - mg
+
