@@ -11,7 +11,7 @@ TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled", "timed_out"})
 ERROR_CODES = frozenset({"INTERNAL_ERROR", "MODEL_AUTH_FAILED", "MODEL_NOT_FOUND", "MODEL_TERMINAL_ERROR",
     "MODEL_CONNECTION_FAILED", "MODEL_TIMEOUT", "MODEL_QUOTA_EXHAUSTED", "MODEL_SAFETY_REFUSAL",
     "MODEL_TRANSIENT_ERROR", "MODEL_INVALID_REQUEST", "RUN_CANCELLED", "RUN_TIMED_OUT",
-    "RUN_BUDGET_EXCEEDED", "AI_NOT_CONFIGURED", "CREDENTIAL_STORE_UNAVAILABLE", "SAFETY_REFUSAL", "AGENT_RATE_LIMITED", "CONFIGURATION_INVALID"})
+    "RUN_BUDGET_EXCEEDED", "AI_NOT_CONFIGURED", "CREDENTIAL_STORE_UNAVAILABLE", "SAFETY_REFUSAL", "AGENT_RATE_LIMITED", "CONFIGURATION_INVALID", "CHECKPOINT_UNAVAILABLE"})
 EVENT_TYPES = frozenset({
     "RUN_ACCEPTED", "RUN_STARTED", "STEP_STARTED", "STEP_RETRY_SCHEDULED",
     "STEP_SUCCEEDED", "STEP_FAILED", "TOOL_STARTED", "TOOL_FINISHED",
@@ -34,7 +34,7 @@ class InvalidTransition(RuntimeError):
 
 def safe_payload(payload: Mapping[str, object]) -> dict:
     """Reject unknown fields and free-form text; never stringify exceptions."""
-    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls", "internal_error_id", "error_code", "error_type", "outcome", "tool", "risk_category", "rule_version"}
+    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version"}
     result = {}
     for key, value in payload.items():
         if key not in allowed:
@@ -52,6 +52,8 @@ def safe_payload(payload: Mapping[str, object]) -> dict:
             raise ValueError("Invalid safety risk")
         elif key == "rule_version" and value != "fitlife-safety-v1":
             raise ValueError("Invalid safety rule version")
+        elif key == "error_class" and (not isinstance(value, str) or re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", value) is None):
+            raise ValueError("Invalid error class name")
         elif key == "internal_error_id" and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{32}", value) is None):
             raise ValueError("Invalid event identifier")
         elif key == "tool" and value not in {"plan_route_model", "write_answer_model", "load_profile", "analyze_meals", "analyze_workouts", "retrieve_knowledge", "generate_weekly_report", "generate_next_week_plan", "validate_plan", "other"}:

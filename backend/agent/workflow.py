@@ -4,6 +4,7 @@ from copy import deepcopy
 from collections.abc import Awaitable, Callable
 
 from backend.agent.contracts import AgentCommand, AgentResult
+from backend.agent.analyzers import Analyzer, AnalyzerRegistry
 from backend.agent.checkpoints import restore_planner_state
 from backend.agent.generator import generate_plan
 from backend.agent.runtime import RuntimeContext
@@ -55,12 +56,14 @@ class FitLifeWorkflow:
         retriever: Retriever = retrieve_knowledge,
         context_metadata: dict | None = None,
         safety_reviewer=None,
+        analyzers: AnalyzerRegistry | None = None,
     ) -> None:
         self.repository = repository
         self.gateway = gateway
         self.retriever = retriever
         self.context_metadata = deepcopy(context_metadata or {})
         self.safety_reviewer = safety_reviewer
+        self.analyzers = analyzers or AnalyzerRegistry()
 
     async def execute(self, command: AgentCommand, context: RuntimeContext) -> AgentResult:
         check_input(command.question)
@@ -135,30 +138,24 @@ class FitLifeWorkflow:
         }
 
     async def _data_analyzer(self, context: RuntimeContext, state: AgentState) -> AgentState:
+        """Run every analysis the planner activated, in registry order.
+
+        The workflow knows no domain by name: it iterates the registry, so a new
+        analysis is registered rather than branched on here.
+        """
         route = _route(state)
-        profile = state["profile"]
         results = dict(state.get("tool_results", {}))
         calls = list(state.get("tool_calls", []))
-        user_id = state.get("current_user_id")
         if "report_week" in results and "weekly_report" in results:
             return {"tool_calls": calls, "tool_results": results}
-        if route.get("needs_meal_analysis"):
-            calls = _append_tool_call({"tool_calls": calls}, "analyze_meals")
-            results["meal_analysis"] = await context.tool(
-                "analyze_meals",
+
+        analysis_context = _AnalysisContext(self.repository, state.get("current_user_id"), state["profile"])
+        for analyzer in self.analyzers.activated_by(route):
+            calls = _append_tool_call({"tool_calls": calls}, analyzer.id)
+            results[analyzer.provides] = await context.tool(
+                analyzer.id,
                 "safe",
-                lambda: analyze_meals(
-                    self.repository.read_meals(user_id),
-                    calorie_target=profile["daily_calorie_target"],
-                    protein_target=profile["daily_protein_target"],
-                ),
-            )
-        if route.get("needs_workout_analysis"):
-            calls = _append_tool_call({"tool_calls": calls}, "analyze_workouts")
-            results["workout_analysis"] = await context.tool(
-                "analyze_workouts",
-                "safe",
-                lambda: analyze_workouts(self.repository.read_workouts(user_id)),
+                lambda analyzer=analyzer: analyzer.run(analysis_context),
             )
         return {"tool_calls": calls, "tool_results": results}
 
@@ -266,6 +263,27 @@ class FitLifeWorkflow:
             sources=tuple(docs),
             model=self.gateway.model,
         )
+
+
+class _AnalysisContext:
+    """Narrow read-only view handed to an analysis."""
+
+    def __init__(self, repository, user_id, profile):
+        self._repository = repository
+        self._user_id = user_id
+        self._profile = profile
+
+    @property
+    def repository(self):
+        return self._repository
+
+    @property
+    def user_id(self):
+        return self._user_id
+
+    @property
+    def profile(self):
+        return self._profile
 
 
 def _invoke_model(operation):

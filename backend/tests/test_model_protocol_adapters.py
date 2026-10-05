@@ -1,19 +1,26 @@
 from types import SimpleNamespace
 
+import pytest
 from pydantic import BaseModel, ConfigDict
 
 from backend.agent.planner import PlannerRoute
+from backend.config import Settings
 from backend.domain.model_connection import ModelConnection
 from backend.infrastructure.model_gateway.factory import create_model_gateway
 from backend.infrastructure.model_gateway.openai_chat_completions import OpenAIChatCompletionsAdapter
-from backend.infrastructure.model_gateway.openai_responses import OpenAIResponsesAdapter
+from backend.infrastructure.model_gateway.openai_responses import (
+    OpenAIResponsesAdapter,
+    build_model_gateway,
+)
 
 
 class ResponsesApi:
     def __init__(self) -> None:
         self.create_calls: list[dict] = []
+        self.parse_calls: list[dict] = []
 
     def parse(self, **kwargs):
+        self.parse_calls.append(kwargs)
         output_type = kwargs["text_format"]
         parsed = (
             StrictExample(value="ok")
@@ -76,6 +83,39 @@ class ChatCompletionsApi:
 class ModelsApi:
     def list(self):
         return SimpleNamespace(data=[SimpleNamespace(id="model-b"), SimpleNamespace(id="model-a")])
+
+
+class MissingStructuredRouteResponses:
+    """A response whose message carries no parsed structured payload."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def parse(self, **kwargs):
+        self.calls.append(kwargs)
+        content = SimpleNamespace(type="output_text", parsed=None)
+        return SimpleNamespace(output=[SimpleNamespace(type="message", content=[content])])
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return SimpleNamespace(output_text="")
+
+
+class BlankAnswerResponses:
+    """A response that returns no answer text at all."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def parse(self, **kwargs):
+        self.calls.append(kwargs)
+        parsed = PlannerRoute(intent="knowledge_qa")
+        content = SimpleNamespace(type="output_text", parsed=parsed)
+        return SimpleNamespace(output=[SimpleNamespace(type="message", content=[content])])
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return SimpleNamespace(output_text="   ")
 
 
 class StrictExample(BaseModel):
@@ -178,3 +218,54 @@ def test_factory_uses_explicit_protocol_without_auto_detection():
 
     assert isinstance(responses, OpenAIResponsesAdapter)
     assert isinstance(chat, OpenAIChatCompletionsAdapter)
+
+
+def test_deployment_gateway_requires_explicit_enablement():
+    """The deployment-level demo path stays off unless explicitly enabled."""
+    settings = Settings(llm_enabled=False, openai_api_key="sk-test")
+
+    assert build_model_gateway(settings=settings) is None
+
+
+def test_deployment_gateway_requires_an_api_key():
+    settings = Settings(llm_enabled=True, openai_api_key=None)
+
+    assert build_model_gateway(settings=settings) is None
+
+
+def test_responses_adapter_sends_the_configured_model_and_route_schema():
+    """The request must carry the configured model and the PlannerRoute schema."""
+    responses = ResponsesApi()
+    adapter = OpenAIResponsesAdapter(client=SimpleNamespace(responses=responses), model="test-model")
+
+    adapter.plan_route("question")
+
+    assert responses.parse_calls[0]["model"] == "test-model"
+    assert responses.parse_calls[0]["text_format"] is PlannerRoute
+
+
+def test_responses_adapter_prompts_identify_the_agent_and_ask_for_markdown():
+    responses = ResponsesApi()
+    adapter = OpenAIResponsesAdapter(client=SimpleNamespace(responses=responses), model="test-model")
+
+    adapter.plan_route("question")
+    adapter.write_answer({"user_query": "question", "tool_results": {"meal": "meal_templates.md"}})
+
+    assert "FitLife Coach Agent" in responses.parse_calls[0]["instructions"]
+    assert "Markdown" in responses.create_calls[-1]["instructions"]
+
+
+def test_responses_adapter_rejects_a_response_without_a_structured_route():
+    responses = MissingStructuredRouteResponses()
+    adapter = OpenAIResponsesAdapter(client=SimpleNamespace(responses=responses), model="test-model")
+
+    with pytest.raises(ValueError, match="structured output"):
+        adapter.plan_route("question")
+
+
+def test_responses_adapter_rejects_a_blank_answer():
+    responses = BlankAnswerResponses()
+    adapter = OpenAIResponsesAdapter(client=SimpleNamespace(responses=responses), model="test-model")
+
+    with pytest.raises(ValueError, match="text"):
+        adapter.write_answer({"user_query": "question"})

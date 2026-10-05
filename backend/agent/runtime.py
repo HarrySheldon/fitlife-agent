@@ -93,10 +93,30 @@ class RuntimeContext:
             raise BudgetExceeded("The run token budget was exhausted.")
 
     def checkpoint(self, name, state):
+        """Persist a recovery boundary on a best-effort basis.
+
+        A checkpoint buys recovery, not correctness. Losing one may cost the
+        ability to resume an interrupted run; it must never cost the answer, so a
+        storage failure is recorded and reported instead of aborting the pipeline.
+        """
         self.raise_if_cancelled()
         if self.checkpoint_store is None:
-            raise RuntimeError("Checkpoint storage is unavailable")
-        return self.checkpoint_store.save(self.run_id, self.user_id, name, state)
+            self._report_checkpoint_unavailable(name, "no checkpoint store is configured")
+            return None
+        try:
+            return self.checkpoint_store.save(self.run_id, self.user_id, name, state)
+        except Exception as error:
+            self._report_checkpoint_unavailable(name, type(error).__name__)
+            return None
+
+    def _report_checkpoint_unavailable(self, name, error_type):
+        try:
+            self.record("STEP_FAILED", self, {"error_code": "CHECKPOINT_UNAVAILABLE",
+                                              "error_type": "internal", "error_class": error_type})
+        except Exception:
+            # Diagnostics must never be able to fail the run either.
+            pass
+
     def consume_input(self, text):
         self.raise_if_cancelled()
         self.input_chars += len(text)

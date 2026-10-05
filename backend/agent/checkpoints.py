@@ -1,14 +1,23 @@
 """Versioned planner recovery boundary; contains no user or model prose."""
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
-from backend.agent.planner import PlannerRoute
+from backend.agent.route_contract import PlannerRoute
+
+# A live provider classifies in its own words ("nutrition_analysis",
+# "meal_summary", "fat_loss_training_plan"). That label is carried for the trace
+# and the deterministic writer, while the routing flags drive the workflow. So
+# this boundary bounds the *shape* of a label instead of enumerating a taxonomy:
+# an off-taxonomy label must never be able to abort a run.
+IntentLabel = Annotated[
+    str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64, strict=True)
+]
 
 
 class CheckpointRoute(PlannerRoute):
     model_config = ConfigDict(extra="forbid", strict=True)
-    intent: Literal["weekly_report", "plan_generation", "mixed", "meal_analysis", "workout_analysis", "knowledge_qa"]
+    intent: IntentLabel
 
 
 class PlannerCheckpoint(BaseModel):

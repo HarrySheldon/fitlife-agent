@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from backend.agent.planner import PlannerRoute
 from backend.application.ports.structured_model_gateway import (
     StructuredModelGateway,
 )
+
+if TYPE_CHECKING:
+    # Typing only. Importing the contract at runtime would pull the analysis
+    # registry into every consumer of this package and close an import cycle.
+    from backend.agent.planner import PlannerRoute
 
 
 @runtime_checkable
