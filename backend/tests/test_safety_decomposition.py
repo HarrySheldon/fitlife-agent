@@ -165,6 +165,57 @@ def test_engine_source_contains_no_pack_surface_terms():
     assert not found, f"surface terms embedded in engine code: {found}"
 
 
+def test_engine_source_contains_no_measurement_unit_literals():
+    """Units live in the pack, with one exception that cannot be tested this way.
+
+    Chinese units are asserted outright. Short Latin unit abbreviations are not:
+    ``min`` is the Python builtin ``min()``, ``h`` and ``g`` are ordinary identifier
+    characters, so a source scan cannot tell a unit from code and would report a
+    leak where the engine is calling ``min()``. The exception is named rather than
+    silently skipped, so it stays small and visible.
+    """
+    loaded = pack_loader.load_pack()
+    units = list(loaded.cues.measurement_units)
+    assert units, "pack declares no measurement units"
+
+    # Cannot be distinguished from ordinary code by a source scan.
+    ambiguous = {"min", "h", "g", "cal"}
+    checkable = [unit for unit in units if unit not in ambiguous]
+
+    engine_files = [
+        path
+        for path in sorted(RULES_DIR.glob("*.py"))
+        if path.name not in {"__init__.py", "pack.py"}
+    ]
+    engine_code = "\n".join(_code_only(path) for path in engine_files)
+
+    found = [
+        unit
+        for unit in checkable
+        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(unit)}(?![A-Za-z0-9_])", engine_code)
+    ]
+    assert not found, f"measurement units embedded in engine code: {found}"
+
+
+def test_the_unit_check_would_notice_a_real_leak():
+    """The check above must be able to fail, or it proves nothing."""
+    fake_engine = "def f(carbs): return carbs + 克"
+
+    assert re.search(r"(?<![A-Za-z0-9_])克(?![A-Za-z0-9_])", fake_engine)
+
+
+def test_the_ambiguous_unit_exception_stays_small():
+    """A widening exception would quietly hollow out the check above."""
+    loaded = pack_loader.load_pack()
+    checkable = [
+        unit
+        for unit in loaded.cues.measurement_units
+        if unit not in {"min", "h", "g", "cal"}
+    ]
+
+    assert len(checkable) >= 12
+
+
 # --------------------------------------------------------------------------
 # Detection and presentation are separable
 # --------------------------------------------------------------------------

@@ -27,11 +27,51 @@ from backend.tools.workout_analyzer import analyze_workouts
 Retriever = Callable[[str, int], list[dict]]
 
 
+def unprotected_workflow_error(workflow_name: str, detail: str) -> ApplicationError:
+    """Build the internal fault raised when a guard step did not run.
+
+    It is a server-side fault rather than a user error: the pipeline was assembled
+    without a check the product promises, so the result cannot be trusted.
+    """
+    return ApplicationError(
+        code="UNPROTECTED_WORKFLOW",
+        message=f"{workflow_name} finished without running a required guard: {detail}",
+        status_code=500,
+        processing_mode="agent",
+    )
+
+
+# The guards every pipeline must run, in this relative order. The list is short on
+# purpose: it names the seams whose absence would silently remove a protection, not
+# every step in the pipeline.
+REQUIRED_GUARD_ORDER: tuple[str, ...] = ("input_guard", "context_guard", "safety_reviewer")
+
+
+def verify_guard_steps(workflow, completed: tuple[str, ...]) -> None:
+    """Check a finished run against the guard contract.
+
+    Verified against what the run actually did rather than what it declares, so a
+    workflow cannot satisfy this by naming its steps.
+    """
+    name = type(workflow).__name__
+    absent = [step for step in REQUIRED_GUARD_ORDER if step not in completed]
+    if absent:
+        raise unprotected_workflow_error(name, ", ".join(absent))
+    positions = [completed.index(step) for step in REQUIRED_GUARD_ORDER]
+    if positions != sorted(positions):
+        raise unprotected_workflow_error(name, f"guards ran out of order: {completed}")
+
+
+def _run_input_guard(command: AgentCommand) -> None:
+    """The first gate, as a named step so the guard contract can see it ran."""
+    check_input(command.question)
+
+
 def rebuild_state_after_planner(command: AgentCommand, checkpoint: dict, *, context_metadata=None) -> AgentState:
     """Rebuild from the original command; deterministic data must be reloaded.
 
-    Only planner output is restored. Future input_guard and safety_reviewer
-    remain mandatory when wiring this boundary into an execution path.
+    Only planner output is restored. The input and context guards and the safety
+    reviewer remain mandatory, which ``verify_guard_steps`` enforces on the run.
     """
     return {
         "operation": command.operation,
@@ -72,7 +112,10 @@ class FitLifeWorkflow:
         self.analyzers = analyzers or AnalyzerRegistry()
 
     async def execute(self, command: AgentCommand, context: RuntimeContext) -> AgentResult:
-        check_input(command.question)
+        # The guards run as named steps, so the contract check has something to
+        # verify against. A guard called outside the step machinery would be
+        # invisible to it - and removable without anything noticing.
+        await context.step("input_guard", lambda: _run_input_guard(command))
         context.set_model_metadata(provider=getattr(self.gateway, "provider", None), model=self.gateway.model)
         state: AgentState = {
             "operation": command.operation,
@@ -100,9 +143,25 @@ class FitLifeWorkflow:
             await self._apply(context, "retriever", state, self._retriever)
         await self._apply(context, "deterministic_generator", state, self._generator)
         await self._apply(context, "deterministic_validator", state, self._validator)
+        await self._apply(context, "context_guard", state, self._context_guard)
         await self._apply(context, "writer", state, self._writer)
         await self._apply(context, "safety_reviewer", state, self._review)
+        verify_guard_steps(self, tuple(context.completed_steps))
         return await context.step("result_projector", lambda: self._project(state))
+
+    async def _context_guard(self, context: RuntimeContext, state: AgentState) -> AgentState:
+        """Remove instruction-like user text before the writer can hand it over.
+
+        A record's own text is data, and this is where that is enforced rather than
+        merely requested in the prompt. It runs as its own step so the guard contract
+        can see that it happened.
+        """
+        payload = incremental_writer_payload(
+            state, state.get("initial_tool_results_snapshot", {})
+        )
+        sanitized, report = sanitize_context(payload, self._safety_pack())
+        self._last_context_report = report
+        return {"writer_payload": sanitized}
 
     async def _review(self, context, state):
         try:
@@ -244,10 +303,9 @@ class FitLifeWorkflow:
         return {"tool_calls": calls, "tool_results": results, "validation_result": validation}
 
     async def _writer(self, context: RuntimeContext, state: AgentState) -> AgentState:
-        initial_results = state.get("initial_tool_results_snapshot", {})
-        payload = incremental_writer_payload(state, initial_results)
-        payload = self._sanitize_context(payload)
-        context.consume_context(serialized_payload(payload))
+        # The payload was sanitised by the context guard, which is a separate step so
+        # that the guard contract can see it ran.
+        context.consume_context(serialized_payload(state["writer_payload"]))
         answer = await context.tool(
             "write_answer_model",
             "safe",
@@ -265,16 +323,6 @@ class FitLifeWorkflow:
             # hand the model exactly the text this check exists to remove.
             self._loaded_safety_pack = default_pack()
         return self._loaded_safety_pack
-
-    def _sanitize_context(self, payload):
-        """Remove instruction-like user text before the model reads the payload.
-
-        A record's own text is data, and this is where that is enforced rather than
-        merely requested in the prompt.
-        """
-        sanitized, report = sanitize_context(payload, self._safety_pack())
-        self._last_context_report = report
-        return sanitized
 
     def _project(self, state: AgentState) -> AgentResult:
         validation = state.get("validation_result") or {"passed": True, "warnings": []}

@@ -89,11 +89,13 @@ def test_explicit_workflow_runs_steps_in_order_and_skips_unrequested_retrieval()
     asyncio.run(workflow.execute(AgentCommand("chat", "hello", None), context))
 
     assert context.completed_steps == [
+        "input_guard",
         "planner",
         "profile_loader",
         "data_analyzer",
         "deterministic_generator",
         "deterministic_validator",
+        "context_guard",
         "writer",
         "safety_reviewer",
         "result_projector",
@@ -110,7 +112,10 @@ def test_explicit_workflow_includes_retriever_when_planner_requests_it():
 
     result = asyncio.run(workflow.execute(AgentCommand("evaluation", "hello", None), context))
 
-    assert context.completed_steps[3] == "retriever"
+    # Asserted by relative order rather than by index, so adding a step does not
+    # make this fail for an unrelated reason.
+    steps = context.completed_steps
+    assert steps.index("data_analyzer") < steps.index("retriever") < steps.index("writer")
     assert result.sources == ({"source": "test.md", "text": "hello"},)
 
 

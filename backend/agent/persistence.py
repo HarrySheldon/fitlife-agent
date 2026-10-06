@@ -48,7 +48,7 @@ def safe_payload(payload: Mapping[str, object]) -> dict:
             raise ValueError("Invalid error category")
         elif key == "outcome" and value not in {"succeeded", "failed", "cancelled", "timed_out", "allow", "rewrite", "refuse"}:
             raise ValueError("Invalid outcome")
-        elif key == "risk_category" and value not in {"low", "emergency", "self_harm", "medical", "extreme_diet", "dangerous_training", "input_limit", "review_unavailable", "out_of_scope"}:
+        elif key == "risk_category" and value not in {"low", "emergency", "self_harm", "medical", "extreme_diet", "dangerous_training", "input_limit", "review_unavailable", "out_of_scope", "harassment"}:
             raise ValueError("Invalid safety risk")
         elif key == "rule_version" and value != "fitlife-safety-v1":
             raise ValueError("Invalid safety rule version")

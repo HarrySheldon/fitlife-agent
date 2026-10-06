@@ -61,6 +61,10 @@ def _run_writer_step(tool_results: dict):
         "retrieved_docs": [],
     }
     context = _Context()
+    # The context guard is its own step now, so the writer is driven the way the
+    # pipeline drives it: guard first, then write. `_apply` merges what a step
+    # returns into the state; a direct call has to do that itself.
+    state.update(asyncio.run(workflow._context_guard(context, state)))
     asyncio.run(workflow._writer(context, state))
     return context, workflow
 
@@ -119,4 +123,6 @@ async def _writer_step_result():
         "initial_tool_results_snapshot": {},
         "retrieved_docs": [],
     }
-    return await workflow._writer(_Context(), state)
+    context = _Context()
+    state.update(await workflow._context_guard(context, state))
+    return await workflow._writer(context, state)
