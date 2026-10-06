@@ -24,14 +24,17 @@ from backend.safety.gate import (
     review_output,
 )
 from backend.safety.models import Modifier, Policy, Verdict
+from backend.safety.review import ModelSafetyReviewer, ReviewModel
 
 __all__ = [
     "MAX_QUESTION_CHARS",
     "SAFETY_RULE_VERSION",
     "ContextFinding",
     "ContextReport",
+    "ModelSafetyReviewer",
     "Modifier",
     "Policy",
+    "ReviewModel",
     "ReviewResult",
     "SafetyRefusal",
     "Verdict",

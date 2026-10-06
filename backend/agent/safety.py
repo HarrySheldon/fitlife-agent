@@ -52,6 +52,9 @@ _CATEGORY_BY_CONCERN: dict[str, RiskCategory] = {
     "disordered_eating": "extreme_diet",
     "dangerous_training": "dangerous_training",
     "out_of_scope": "out_of_scope",
+    # Demeaning the user. Raised by the model reviewer, which reports it as a
+    # category rather than a concern because no rule pack produces it.
+    "harassment": "harassment",
     # A stated measurement the data does not support. Not a safety category: the
     # answer is usable, the reader just needs to know what to distrust.
     "ungrounded": "low",
@@ -65,7 +68,11 @@ def decision_for(verdict: Verdict) -> SafetyDecision:
     """Project a gate verdict onto the service-level decision."""
     outcome = _OUTCOME_BY_ACTION[verdict.action]
     category: RiskCategory = "low"
-    if verdict.concern in _CATEGORY_BY_CONCERN:
+    if verdict.review_category is not None:
+        # A reviewer states its own category; it is not describing a concern that a
+        # rule pack defines.
+        category = verdict.review_category
+    elif verdict.concern in _CATEGORY_BY_CONCERN:
         category = _CATEGORY_BY_CONCERN[verdict.concern]
     elif verdict.severity > 6:
         category = "input_limit"

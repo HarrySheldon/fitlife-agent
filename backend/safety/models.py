@@ -67,6 +67,10 @@ RiskCategory = Literal[
     "input_limit",
     "review_unavailable",
     "out_of_scope",
+    # Demeaning or insulting the user. Judged by the model reviewer rather than by
+    # rules: the clearest cases are compliments used as insults, which no word list
+    # holds.
+    "harassment",
 ]
 ControlledDisclaimer = Literal[
     "General lifestyle guidance only.", "仅供一般生活方式参考。"
@@ -207,6 +211,11 @@ class Verdict:
     rule_version: str = ""
     matched_patterns: tuple[str, ...] = field(default=())
     source: VerdictSource = "gate"
+    # A category reported by an extension reviewer. Kept separate from `concern`,
+    # which is rule-pack vocabulary: a reviewer is not describing a rule that fired,
+    # and conflating the two would put non-pack values where the policy looks for
+    # concerns.
+    review_category: RiskCategory | None = None
 
     @property
     def blocked(self) -> bool:

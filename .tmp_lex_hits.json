@@ -1,0 +1,48 @@
+{
+ "corpus_files": 7,
+ "hit_terms": 7,
+ "hits": {
+  "nt": [
+   "concerns.zh-CN.v1.yaml",
+   "messages.zh-CN.v1.yaml",
+   "policy.v1.yaml",
+   "report_generator.py",
+   "today_overview.py",
+   "triggers.zh.v1.yaml",
+   "validator.py"
+  ],
+  "ex": [
+   "concerns.zh-CN.v1.yaml",
+   "policy.v1.yaml",
+   "report_generator.py",
+   "today_overview.py",
+   "triggers.zh.v1.yaml",
+   "validator.py"
+  ],
+  "der": [
+   "concerns.zh-CN.v1.yaml",
+   "messages.zh-CN.v1.yaml",
+   "policy.v1.yaml",
+   "report_generator.py",
+   "today_overview.py"
+  ],
+  "eg": [
+   "concerns.zh-CN.v1.yaml",
+   "policy.v1.yaml",
+   "report_generator.py",
+   "triggers.zh.v1.yaml"
+  ],
+  "ntr": [
+   "concerns.zh-CN.v1.yaml",
+   "policy.v1.yaml",
+   "triggers.zh.v1.yaml"
+  ],
+  "hr": [
+   "concerns.zh-CN.v1.yaml",
+   "triggers.zh.v1.yaml"
+  ],
+  "鸡": [
+   "report_generator.py"
+  ]
+ }
+}

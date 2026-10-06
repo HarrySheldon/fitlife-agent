@@ -94,7 +94,48 @@ def test_unavailable_or_malformed_review_never_returns_draft(bad_result):
             return bad_result
 
     with pytest.raises(SafetyRefusal) as raised:
-        review_output("How should I exercise?", "private draft", reviewer=Broken())
+        review_output(
+            "How should I exercise?",
+            "You have diabetes. Take 50 mg daily.",
+            reviewer=Broken(),
+        )
+
+    assert raised.value.decision.risk_category == "review_unavailable"
+    assert "private" not in str(raised.value)
+
+
+def test_a_reviewer_that_cannot_run_does_not_blank_an_ordinary_answer():
+    """An add-on check must not become a single point of failure for the product.
+
+    The draft below is high risk, so the deterministic verdict already refuses it
+    and the reviewer is never reached. The case this pins is the opposite one: when
+    the rules are content with the draft, a reviewer that timed out has contributed
+    nothing and must leave that verdict alone.
+    """
+    class Broken:
+        def review(self, question, draft):
+            raise OSError("private service details")
+
+    answer, decision = review_output(
+        "这周蛋白吃够了吗", "你日均蛋白 98 克，目标 126 克。", reviewer=Broken()
+    )
+
+    assert answer == "你日均蛋白 98 克，目标 126 克。"
+    assert decision.outcome == "allow"
+    # The failure is still not surfaced: it can carry internal detail.
+    assert "private" not in answer
+
+
+def test_a_reviewer_that_cannot_run_still_withholds_a_high_risk_draft():
+    """Where the rules already found high risk, no review means no shipment."""
+    class Broken:
+        def review(self, question, draft):
+            raise OSError("private service details")
+
+    with pytest.raises(SafetyRefusal) as raised:
+        review_output(
+            "帮我看看化验单", "你患有糖尿病，每天服用二甲双胍 500mg。", reviewer=Broken()
+        )
 
     assert raised.value.decision.risk_category == "review_unavailable"
     assert "private" not in str(raised.value)
@@ -138,6 +179,7 @@ def test_controlled_metadata_rejects_free_text():
 
 
 def test_reviewer_cannot_return_sensitive_free_text_as_safety_metadata():
+    """A reviewer must not be able to leak content through a diagnostic channel."""
     class Reviewer:
         def review(self, question, draft):
             return SafetyDecision.model_construct(
@@ -146,13 +188,11 @@ def test_reviewer_cannot_return_sensitive_free_text_as_safety_metadata():
             )
 
     question = "Training tips? My private address is 123 Example Street."
-    with pytest.raises(SafetyRefusal) as raised:
-        review_output(question, "## Walk", reviewer=Reviewer())
+    answer, decision = review_output(question, "## Walk", reviewer=Reviewer())
 
-    decision = raised.value.decision
-    assert decision.risk_category == "review_unavailable"
+    assert decision.outcome == "allow"
     assert "123 Example Street" not in repr(decision)
-    assert "123 Example Street" not in str(raised.value)
+    assert "123 Example Street" not in answer
 
 
 @pytest.mark.parametrize("question", [
@@ -195,6 +235,12 @@ def test_a_manipulation_pattern_alone_does_not_escalate(question):
 
 
 def test_unvalidated_reviewer_model_cannot_bypass_controlled_metadata():
+    """Smuggling free text through safety metadata must not reach the user.
+
+    The reviewer returns a constructed instance with the question stuffed into the
+    metadata fields. It is rejected at the boundary and contributes nothing: no
+    refusal is recorded for it, and the text it tried to leak appears nowhere.
+    """
     class Reviewer:
         def review(self, question, draft):
             return SafetyDecision.model_construct(
@@ -202,10 +248,13 @@ def test_unvalidated_reviewer_model_cannot_bypass_controlled_metadata():
                 required_disclaimer=question,
             )
 
-    with pytest.raises(SafetyRefusal) as raised:
-        review_output("Private address 123 Example Street", "## Walk", reviewer=Reviewer())
+    answer, decision = review_output(
+        "Private address 123 Example Street", "## Walk", reviewer=Reviewer()
+    )
 
-    decision = raised.value.decision
-    assert decision.risk_category == "review_unavailable"
+    assert decision.outcome == "allow"
+    assert decision.risk_category == "low"
+    assert decision.violations == ()
+    assert decision.required_disclaimer is None
     assert "123 Example Street" not in repr(decision)
-    assert "123 Example Street" not in str(raised.value)
+    assert "123 Example Street" not in answer

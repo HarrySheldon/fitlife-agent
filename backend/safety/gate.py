@@ -29,6 +29,11 @@ SAFETY_RULE_VERSION = "fitlife-safety-v1"
 MAX_QUESTION_CHARS = 8_000
 _OVERSIZE = 7  # above every pack severity: an oversized input is never shippable
 
+# At or above this severity the rules have already made a high-risk finding, so a
+# reviewer that cannot run must not let the draft through. Below it the reviewer is
+# an additional opinion, and its absence leaves the deterministic outcome alone.
+REVIEWER_FAILCLOSED_SEVERITY = 6
+
 # Safety metadata may only be drawn from the controlled vocabulary. Free text here
 # would turn a diagnostic channel into a content leak.
 _CONTROLLED_DISCLAIMERS = frozenset({
@@ -38,6 +43,10 @@ _CONTROLLED_DISCLAIMERS = frozenset({
 _CONTROLLED_RISKS = frozenset({
     "low", "emergency", "self_harm", "medical", "extreme_diet",
     "dangerous_training", "input_limit", "review_unavailable", "out_of_scope",
+    # Raised by the model reviewer rather than by a rule pack. Listed here so that
+    # its verdict survives the controlled-vocabulary check; without it the reviewer
+    # would be silently ignored, which is worse than not having one.
+    "harassment",
 })
 
 
@@ -324,22 +333,40 @@ def review_output(
             ):
                 raise ValueError("A disclaimer must be a controlled notice")
         except Exception:
-            # Review did not run, so nothing was filtered by it. The draft is still
-            # withheld: fail closed.
-            unavailable = Verdict(
-                True, False, "refuse", verdict.severity, "review_unavailable",
-                verdict.modifiers, verdict.evidence_spans,
-                rule_version=verdict.rule_version, matched_patterns=verdict.matched_patterns,
-                source="review_unavailable",
+            # The reviewer could not run, so it contributed nothing. What happens
+            # next depends on what the deterministic gate already found, because a
+            # reviewer that cannot answer is not the same as a reviewer that found
+            # something:
+            #
+            # - a draft the rules already treat as high risk keeps the fail-closed
+            #   behaviour: no review happened, so nothing may be shipped;
+            # - otherwise the deterministic outcome stands. Withholding every answer
+            #   because an optional extra check timed out is the over-refusal this
+            #   design exists to avoid, and it makes an add-on check into a single
+            #   point of failure for the whole product.
+            #
+            # The error itself is never surfaced: it can carry internal detail, and
+            # it is not the user's business whether a reviewer ran.
+            if verdict.severity >= REVIEWER_FAILCLOSED_SEVERITY:
+                unavailable = Verdict(
+                    True, False, "refuse", verdict.severity, "review_unavailable",
+                    verdict.modifiers, verdict.evidence_spans,
+                    rule_version=verdict.rule_version,
+                    matched_patterns=verdict.matched_patterns,
+                    source="review_unavailable",
+                )
+                raise SafetyRefusal(unavailable, question,
+                                    notice=active_messages.notice("*")) from None
+            return ReviewResult(
+                text=_with_caveat(draft, None, supporting_values, active, verdict)[0],
+                verdict=verdict,
             )
-            raise SafetyRefusal(unavailable, question,
-                                notice=active_messages.notice("*")) from None
         if decision.outcome == "refuse":
             raised = Verdict(
                 True, True, "refuse", max(verdict.severity, 3), verdict.concern,
                 verdict.modifiers, verdict.evidence_spans,
                 rule_version=verdict.rule_version, matched_patterns=verdict.matched_patterns,
-                source="review",
+                source="review", review_category=decision.risk_category,
             )
             raise SafetyRefusal(raised, question, notice=active_messages.notice("*"))
 
