@@ -11,8 +11,14 @@ from backend.agent.runtime import RuntimeContext
 from backend.agent.safety import check_input, review_output, SafetyRefusal, SAFETY_RULE_VERSION
 from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
+from backend.agent.grounded_answer import (
+    GROUNDED_WRITER_INSTRUCTIONS,
+    GroundedAnswer,
+    render_grounded_answer,
+)
 from backend.agent.model_payloads import incremental_writer_payload, serialized_payload
 from backend.agent.semantic_review import ObservationReviewer, collect_review
+from backend.safety.evidence import build_evidence
 from backend.safety.context import ContextReport, sanitize_context
 from backend.safety.gate import default_pack
 from backend.safety.groundedness import supporting_values
@@ -104,6 +110,7 @@ class FitLifeWorkflow:
         analyzers: AnalyzerRegistry | None = None,
         review_mode: str = "off",
         structured_gateway=None,
+        grounding_mode: str = "legacy",
     ) -> None:
         self.repository = repository
         self.gateway = gateway
@@ -113,6 +120,7 @@ class FitLifeWorkflow:
         # Fixed when the workflow is built, not read per step: a run must not change
         # its own safety posture halfway through.
         self.review_mode = review_mode
+        self.grounding_mode = grounding_mode
         self._structured_gateway = structured_gateway
         self._loaded_safety_pack: RulePack | None = None
         self._last_context_report: ContextReport = ContextReport()
@@ -181,7 +189,13 @@ class FitLifeWorkflow:
         return sanitized
 
     async def _review(self, context, state):
-        supporting = supporting_values(state.get("tool_results", {}))
+        # In evidence mode the figures were written by the renderer from the catalog,
+        # so re-checking them with the heuristic would add a caveat about numbers this
+        # code produced itself. The legacy path still uses it.
+        supporting = (
+            None if self._uses_evidence(state)
+            else supporting_values(state.get("tool_results", {}))
+        )
         try:
             # The deterministic gate first. If the rules refuse, no model is consulted:
             # the answer is already withheld and a semantic opinion cannot change that.
@@ -189,8 +203,10 @@ class FitLifeWorkflow:
                 state["user_query"],
                 state["final_answer"],
                 reviewer=self.safety_reviewer,
-                # The figures the answer was allowed to use. Without them the gate
-                # has nothing to check a stated number against.
+                # The figures the answer was allowed to use. Without them the gate has
+                # nothing to check a stated number against. In evidence mode that is
+                # None on purpose: the numbers came from the catalog, and re-checking
+                # them here would add a caveat about text this code rendered itself.
                 supporting_values=supporting,
             )
         except SafetyRefusal as error:
@@ -379,7 +395,16 @@ class FitLifeWorkflow:
     async def _writer(self, context: RuntimeContext, state: AgentState) -> AgentState:
         # The payload was sanitised by the context guard, which is a separate step so
         # that the guard contract can see it ran.
-        context.consume_context(serialized_payload(state["writer_payload"]))
+        payload = state["writer_payload"]
+        context.consume_context(serialized_payload(payload))
+        if self._uses_evidence(state):
+            answer = await self._grounded_writer(context, state, payload)
+        else:
+            answer = await self._freeform_writer(context, state)
+        context.consume_output(answer)
+        return {"final_answer": answer, "llm_used": True, "llm_answer_used": True}
+
+    async def _freeform_writer(self, context: RuntimeContext, state: AgentState) -> str:
         answer = await context.tool(
             "write_answer_model",
             "safe",
@@ -387,8 +412,51 @@ class FitLifeWorkflow:
         )
         if not answer.strip():
             raise model_gateway_error(ValueError("Model returned a blank answer"))
-        context.consume_output(answer)
-        return {"final_answer": answer, "llm_used": True, "llm_answer_used": True}
+        return answer
+
+    def _uses_evidence(self, state: AgentState) -> bool:
+        """Whether this run states its figures from the catalog instead of prose."""
+        return self.grounding_mode == "evidence" and state.get("intent") in {
+            "meal_analysis", "workout_analysis"
+        }
+
+    async def _grounded_writer(self, context: RuntimeContext, state: AgentState, payload) -> str:
+        """Ask for a structure, then state the numbers here rather than in the model.
+
+        The catalog is built from this run's tool results alone, so it cannot carry
+        anything belonging to another user.
+        """
+        gateway = self._structured_gateway
+        if gateway is None:
+            # Falling back to free text would publish exactly the prose this mode
+            # exists to stop trusting.
+            raise configuration_error(
+                "Grounded answers are enabled but no structured model gateway is configured."
+            )
+        catalog = build_evidence(state.get("tool_results", {}))
+        grounded_payload = {
+            "user_query": payload.get("user_query", ""),
+            "context": payload,
+            "evidence": [
+                {"id": fact.id, "metric": fact.metric, "unit": fact.unit, "scope": fact.scope}
+                for fact in catalog.values()
+            ],
+        }
+        result = await context.tool(
+            "write_answer_model",
+            "safe",
+            lambda: _invoke_model(
+                lambda: gateway.parse_structured(
+                    instructions=GROUNDED_WRITER_INSTRUCTIONS,
+                    input_text=serialized_payload(grounded_payload),
+                    response_model=GroundedAnswer,
+                )
+            ),
+        )
+        rendered = render_grounded_answer(result.output, catalog)
+        if not rendered.text.strip():
+            raise model_gateway_error(ValueError("Grounded answer rendered empty"))
+        return rendered.text
 
     def _safety_pack(self) -> RulePack:
         if self._loaded_safety_pack is None:

@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # would have decided without changing the answer; "enforce" lets a refusal tighten
     # the disposition. The deployment chooses; the code does not assume.
     safety_review_mode: Literal["off", "shadow", "enforce"] = "off"
+    # How numeric claims are checked. "legacy" keeps the heuristic that compares the
+    # draft's figures against every number in the tool results - a bare number is not
+    # evidence, so it cannot tell a weight from a protein intake or one day from
+    # another. "evidence" renders the figures from a metric/unit/scope catalog instead,
+    # for the two intents that have one. Deployments move when they have chosen.
+    safety_grounding_mode: Literal["legacy", "evidence"] = "legacy"
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_model: str = "gpt-5.5"

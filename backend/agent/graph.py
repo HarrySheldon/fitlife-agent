@@ -61,6 +61,11 @@ def _review_mode() -> str:
     return get_settings().safety_review_mode
 
 
+def _grounding_mode() -> str:
+    """Read once per run, from configuration rather than from the request."""
+    return get_settings().safety_grounding_mode
+
+
 class _LazyFitLifeWorkflow:
     def __init__(self, repository, gateway, user_id, preferences, context_loader=None,
                  structured_gateway=None):
@@ -81,6 +86,7 @@ class _LazyFitLifeWorkflow:
             context_metadata=self.preferences.model_dump(),
             review_mode=_review_mode(),
             structured_gateway=self.structured_gateway,
+            grounding_mode=_grounding_mode(),
         )
         return await workflow.execute(command, context)
 
