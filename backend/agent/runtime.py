@@ -223,7 +223,7 @@ class RuntimeContext:
             task.add_done_callback(_consume_completion)
     async def _invoke(self, name, operation, replay, is_tool=False):
         limit = self.policy.retry.max_attempts if replay == "safe" else 1
-        known_tools = {"plan_route_model", "write_answer_model", "load_profile", "analyze_meals", "analyze_workouts", "retrieve_knowledge", "generate_weekly_report", "generate_next_week_plan", "validate_plan"}
+        known_tools = {"plan_route_model", "write_answer_model", "safety_review_model", "load_profile", "analyze_meals", "analyze_workouts", "retrieve_knowledge", "generate_weekly_report", "generate_next_week_plan", "validate_plan"}
         metadata = {"tool": name if name in known_tools else "other"} if is_tool else {}
         for attempt in range(1, limit + 1):
             self.attempt = attempt

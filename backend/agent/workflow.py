@@ -12,13 +12,14 @@ from backend.agent.safety import check_input, review_output, SafetyRefusal, SAFE
 from backend.agent.state import AgentState
 from backend.agent.validator import validate_generated_plan
 from backend.agent.model_payloads import incremental_writer_payload, serialized_payload
+from backend.agent.semantic_review import ObservationReviewer, collect_review
 from backend.safety.context import ContextReport, sanitize_context
 from backend.safety.gate import default_pack
 from backend.safety.groundedness import supporting_values
 from backend.safety.models import RulePack
 from backend.application.ports.fitness_repository import FitnessRepository
 from backend.application.ports.model_gateway import ModelGateway
-from backend.domain.errors import ApplicationError, model_gateway_error
+from backend.domain.errors import ApplicationError, configuration_error, model_gateway_error
 from backend.rag.retriever import retrieve_knowledge
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.report_generator import generate_weekly_report
@@ -101,12 +102,18 @@ class FitLifeWorkflow:
         context_metadata: dict | None = None,
         safety_reviewer=None,
         analyzers: AnalyzerRegistry | None = None,
+        review_mode: str = "off",
+        structured_gateway=None,
     ) -> None:
         self.repository = repository
         self.gateway = gateway
         self.retriever = retriever
         self.context_metadata = deepcopy(context_metadata or {})
         self.safety_reviewer = safety_reviewer
+        # Fixed when the workflow is built, not read per step: a run must not change
+        # its own safety posture halfway through.
+        self.review_mode = review_mode
+        self._structured_gateway = structured_gateway
         self._loaded_safety_pack: RulePack | None = None
         self._last_context_report: ContextReport = ContextReport()
         self.analyzers = analyzers or AnalyzerRegistry()
@@ -174,22 +181,79 @@ class FitLifeWorkflow:
         return sanitized
 
     async def _review(self, context, state):
+        supporting = supporting_values(state.get("tool_results", {}))
         try:
+            # The deterministic gate first. If the rules refuse, no model is consulted:
+            # the answer is already withheld and a semantic opinion cannot change that.
             answer, decision = review_output(
                 state["user_query"],
                 state["final_answer"],
                 reviewer=self.safety_reviewer,
                 # The figures the answer was allowed to use. Without them the gate
                 # has nothing to check a stated number against.
-                supporting_values=supporting_values(state.get("tool_results", {})),
+                supporting_values=supporting,
             )
         except SafetyRefusal as error:
             context.record("SAFETY_DECIDED", context, {"outcome": error.decision.outcome,
                            "risk_category": error.decision.risk_category, "rule_version": SAFETY_RULE_VERSION})
             raise
+
+        answer, decision = await self._semantic_review(
+            context, state, answer, decision, supporting
+        )
         context.record("SAFETY_DECIDED", context, {"outcome": decision.outcome,
                        "risk_category": decision.risk_category, "rule_version": SAFETY_RULE_VERSION})
         return {"final_answer": answer}
+
+    async def _semantic_review(self, context, state, answer, decision, supporting):
+        """Run the model review on the text that would actually be published.
+
+        The draft is re-gated from the publishable answer rather than from the raw
+        draft, so a notice the rules already appended is not appended twice.
+        """
+        mode = self.review_mode
+        if mode == "off":
+            context.record("SAFETY_REVIEWED", context,
+                           {"review_mode": mode, "review_status": "disabled"})
+            return answer, decision
+
+        gateway = self._structured_gateway
+        if gateway is None:
+            # Missing capability is a configuration fault, never a silent skip: a
+            # deployment that asked for enforcement must not quietly get none.
+            context.record("SAFETY_REVIEWED", context,
+                           {"review_mode": mode, "review_status": "unsupported"})
+            if mode == "enforce":
+                raise configuration_error(
+                    "Semantic review is set to enforce but no structured model gateway "
+                    "is configured."
+                )
+            return answer, decision
+
+        observation = await collect_review(
+            context, gateway, mode, state["user_query"], answer
+        )
+        context.record("SAFETY_REVIEWED", context,
+                       {"review_mode": observation.mode, "review_status": observation.status})
+        if observation.status in {"disabled", "unsupported"}:
+            return answer, decision
+
+        # One reviewer call decides; `_review` is not re-entered.
+        try:
+            reviewed, review_decision = review_output(
+                state["user_query"],
+                answer,
+                reviewer=ObservationReviewer(observation, mode),
+                supporting_values=supporting,
+            )
+        except SafetyRefusal as refusal:
+            context.record("SAFETY_DECIDED", context, {
+                "outcome": refusal.decision.outcome,
+                "risk_category": refusal.decision.risk_category,
+                "rule_version": SAFETY_RULE_VERSION,
+            })
+            raise
+        return reviewed, review_decision
 
     async def _apply(
         self,

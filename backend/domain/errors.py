@@ -33,6 +33,20 @@ class ApplicationError(Exception):
         self.provider_code = provider_code
 
 
+def configuration_error(message: str) -> ApplicationError:
+    """The deployment asked for something the configuration cannot provide.
+
+    Raised rather than skipped: a deployment that turned a check on must not silently
+    receive behaviour with that check absent.
+    """
+    return ApplicationError(
+        code="CONFIGURATION_INVALID",
+        message=message,
+        status_code=409,
+        processing_mode="agent",
+    )
+
+
 def ai_not_configured_error() -> ApplicationError:
     return ApplicationError(
         code="AI_NOT_CONFIGURED",

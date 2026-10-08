@@ -6,6 +6,7 @@ from dataclasses import replace
 import json
 
 from backend.agent.contracts import AgentCommand, AgentOperation
+from backend.config import get_settings
 from backend.infrastructure.agent_runtime.factory import CurrentAgentRuntime
 from backend.agent.workflow import FitLifeWorkflow
 from backend.application.ports.fitness_repository import FitnessRepository
@@ -51,10 +52,21 @@ def run_fitlife_agent(
     return DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
 
 
+def _review_mode() -> str:
+    """Read the review mode once per run, from configuration rather than the request.
+
+    A user cannot turn the review off by asking, and the value does not change midway
+    through a run.
+    """
+    return get_settings().safety_review_mode
+
+
 class _LazyFitLifeWorkflow:
-    def __init__(self, repository, gateway, user_id, preferences, context_loader=None):
+    def __init__(self, repository, gateway, user_id, preferences, context_loader=None,
+                 structured_gateway=None):
         self.repository, self.gateway, self.user_id, self.preferences = repository, gateway, user_id, preferences
         self.context_loader = context_loader
+        self.structured_gateway = structured_gateway
 
     async def execute(self, command, context):
         repository = self.repository or await context.call(get_fitness_repository)
@@ -63,7 +75,13 @@ class _LazyFitLifeWorkflow:
             context.consume_context(json.dumps(results, ensure_ascii=False, default=str))
             command = replace(command, initial_tool_results=results, initial_tool_calls=tuple(calls))
         gateway = self.gateway or await context.call(lambda: _resolve_gateway(self.user_id))
-        workflow = FitLifeWorkflow(repository, gateway, context_metadata=self.preferences.model_dump())
+        workflow = FitLifeWorkflow(
+            repository,
+            gateway,
+            context_metadata=self.preferences.model_dump(),
+            review_mode=_review_mode(),
+            structured_gateway=self.structured_gateway,
+        )
         return await workflow.execute(command, context)
 
 

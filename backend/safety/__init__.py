@@ -24,7 +24,12 @@ from backend.safety.gate import (
     review_output,
 )
 from backend.safety.models import Modifier, Policy, Verdict
-from backend.safety.review import ModelSafetyReviewer, ReviewModel
+from backend.safety.review import (
+    ModelSafetyReviewer,
+    ReviewModel,
+    ReviewVerdict,
+    StructuredReviewAdapter,
+)
 
 __all__ = [
     "MAX_QUESTION_CHARS",
@@ -36,7 +41,9 @@ __all__ = [
     "Policy",
     "ReviewModel",
     "ReviewResult",
+    "ReviewVerdict",
     "SafetyRefusal",
+    "StructuredReviewAdapter",
     "Verdict",
     "check_input",
     "default_pack",

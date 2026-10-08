@@ -21,8 +21,11 @@ Two consequences are accepted rather than hidden:
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
+
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from backend.safety.models import SafetyDecision
 
@@ -72,3 +75,46 @@ class ModelSafetyReviewer:
         if not isinstance(decision, SafetyDecision):
             raise ValueError("The review model must return a SafetyDecision")
         return decision
+
+
+class ReviewVerdict(BaseModel):
+    """What the review model is allowed to say.
+
+    Two legal pairings and nothing else. The model is not handed ``SafetyDecision``
+    to fill in: that type carries `rewrite`, disclaimers and free-form reason strings
+    which the reviewer has no business setting, and a model asked to fill them would
+    eventually use one.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    outcome: Literal["allow", "refuse"]
+    risk_category: Literal["low", "harassment"]
+
+    @model_validator(mode="after")
+    def check_pair(self):
+        if (self.outcome, self.risk_category) not in {("allow", "low"), ("refuse", "harassment")}:
+            raise ValueError("Invalid review verdict pair")
+        return self
+
+
+@dataclass
+class StructuredReviewAdapter:
+    """Asks a structured gateway the review question.
+
+    The draft is passed as data rather than interpolated into the instructions, so a
+    draft cannot rewrite the question it is being judged against.
+    """
+
+    gateway: object  # StructuredModelGateway; kept loose to avoid a layer import
+    instructions: str = REVIEW_INSTRUCTIONS
+
+    def review(self, question: str, draft: str):
+        input_text = json.dumps(
+            {"question": question, "draft": draft}, ensure_ascii=False
+        )
+        return self.gateway.parse_structured(
+            instructions=self.instructions,
+            input_text=input_text,
+            response_model=ReviewVerdict,
+        )

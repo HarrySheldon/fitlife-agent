@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +14,11 @@ class Settings(BaseSettings):
     app_env: str = "demo"
     llm_enabled: bool = False
     agent_runtime_policy: dict[str, object] = Field(default_factory=dict)
+    # How the semantic review treats an answer. "off" makes no extra call, which is the
+    # default because it costs one provider request per answer. "shadow" records what it
+    # would have decided without changing the answer; "enforce" lets a refusal tighten
+    # the disposition. The deployment chooses; the code does not assume.
+    safety_review_mode: Literal["off", "shadow", "enforce"] = "off"
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_model: str = "gpt-5.5"
