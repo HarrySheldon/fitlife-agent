@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from typing import Any
@@ -14,7 +14,7 @@ from backend.infrastructure.model_gateway.openai_responses import (
     _model_ids,
     _probe_tool,
 )
-from backend.agent.model_payloads import writer_payload
+from backend.agent.model_payloads import writer_payload_for_model
 from backend.application.ports.model_call_context import model_timeout_options
 
 
@@ -45,7 +45,10 @@ class OpenAIChatCompletionsAdapter:
                 {"role": "system", "content": WRITER_INSTRUCTIONS},
                 {
                     "role": "user",
-                    "content": json.dumps(writer_payload(state), ensure_ascii=False),
+                    # The sanitised payload when the context guard produced one;
+                    # rebuilding it from the raw state would send data the guard never
+                    # saw.
+                    "content": json.dumps(writer_payload_for_model(state), ensure_ascii=False),
                 },
             ],
             **model_timeout_options(),

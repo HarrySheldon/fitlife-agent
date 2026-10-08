@@ -156,12 +156,22 @@ class FitLifeWorkflow:
         merely requested in the prompt. It runs as its own step so the guard contract
         can see that it happened.
         """
+        return {"writer_payload": self.sanitize_writer_payload(state)}
+
+    def sanitize_writer_payload(self, state: AgentState) -> dict:
+        """The payload the writer is allowed to send.
+
+        Recorded on the state so the adapters send this instead of rebuilding the
+        payload from the raw state. The check has to run on what the provider actually
+        receives; a guard that sanitises one payload while the adapter sends another
+        guards nothing.
+        """
         payload = incremental_writer_payload(
             state, state.get("initial_tool_results_snapshot", {})
         )
         sanitized, report = sanitize_context(payload, self._safety_pack())
         self._last_context_report = report
-        return {"writer_payload": sanitized}
+        return sanitized
 
     async def _review(self, context, state):
         try:

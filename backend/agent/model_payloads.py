@@ -16,3 +16,21 @@ def incremental_writer_payload(state: Mapping[str, object], initial_results: Map
 
 def serialized_payload(payload: Mapping[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+def writer_payload_for_model(state: Mapping[str, object]) -> dict[str, object]:
+    """The payload to send: the sanitised one once the context guard has produced it.
+
+    The guard sanitises the payload and records it on the state, but the adapters used
+    to rebuild it here from the raw state and send that instead - the check ran on one
+    payload and a different payload went on the wire, so an instruction hidden in a
+    record still reached the model. Preferring the recorded payload keeps the check on
+    what the provider actually receives.
+
+    The fallback keeps callers outside the agent pipeline working; they have no
+    context to sanitise.
+    """
+    recorded = state.get("writer_payload")
+    if isinstance(recorded, Mapping) and recorded:
+        return dict(recorded)
+    return writer_payload(state)

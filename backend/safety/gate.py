@@ -332,21 +332,27 @@ def review_output(
                 decision.required_disclaimer
             ):
                 raise ValueError("A disclaimer must be a controlled notice")
+            # A reviewer answers one question: may this ship, or must it be withheld.
+            # `rewrite` and `annotate` are ours to decide, and accepting one here would
+            # be silently shipping under a label nobody checked.
+            if decision.outcome not in {"allow", "refuse"}:
+                raise ValueError("Unsupported reviewer outcome")
         except Exception:
-            # The reviewer could not run, so it contributed nothing. What happens
-            # next depends on what the deterministic gate already found, because a
-            # reviewer that cannot answer is not the same as a reviewer that found
-            # something:
+            # The reviewer could not run, so it contributed nothing. The reviewer that
+            # could not answer is not a reviewer that found something.
             #
-            # - a draft the rules already treat as high risk keeps the fail-closed
-            #   behaviour: no review happened, so nothing may be shipped;
-            # - otherwise the deterministic outcome stands. Withholding every answer
-            #   because an optional extra check timed out is the over-refusal this
-            #   design exists to avoid, and it makes an add-on check into a single
-            #   point of failure for the whole product.
+            # Crucially this must not return early: the deterministic action - mask,
+            # disclose, refuse, escalate - has still to be carried out. Returning the
+            # draft here would drop the disposition the rules already chose, and the
+            # low-severity branch is exactly where mask and disclose live.
             #
-            # The error itself is never surfaced: it can carry internal detail, and
-            # it is not the user's business whether a reviewer ran.
+            # A draft the rules already treat as high risk keeps the fail-closed
+            # behaviour: no review happened, so nothing may be shipped. Below that the
+            # rules' answer stands, because withholding every answer when an optional
+            # extra check times out is the over-refusal this design exists to avoid.
+            #
+            # The error itself is never surfaced: it can carry internal detail, and it
+            # is not the user's business whether a reviewer ran.
             if verdict.severity >= REVIEWER_FAILCLOSED_SEVERITY:
                 unavailable = Verdict(
                     True, False, "refuse", verdict.severity, "review_unavailable",
@@ -357,18 +363,17 @@ def review_output(
                 )
                 raise SafetyRefusal(unavailable, question,
                                     notice=active_messages.notice("*")) from None
-            return ReviewResult(
-                text=_with_caveat(draft, None, supporting_values, active, verdict)[0],
-                verdict=verdict,
-            )
-        if decision.outcome == "refuse":
-            raised = Verdict(
-                True, True, "refuse", max(verdict.severity, 3), verdict.concern,
-                verdict.modifiers, verdict.evidence_spans,
-                rule_version=verdict.rule_version, matched_patterns=verdict.matched_patterns,
-                source="review", review_category=decision.risk_category,
-            )
-            raise SafetyRefusal(raised, question, notice=active_messages.notice("*"))
+        else:
+            if decision.outcome == "refuse":
+                raised = Verdict(
+                    True, True, "refuse", max(verdict.severity, 3), verdict.concern,
+                    verdict.modifiers, verdict.evidence_spans,
+                    rule_version=verdict.rule_version,
+                    matched_patterns=verdict.matched_patterns,
+                    source="review", review_category=decision.risk_category,
+                )
+                raise SafetyRefusal(raised, question,
+                                    notice=active_messages.notice("*"))
 
     if verdict.action in {"allow", "annotate"}:
         # `annotate` ships the draft unchanged; it is recorded, not acted on. It

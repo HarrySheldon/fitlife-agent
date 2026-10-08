@@ -9,7 +9,7 @@ from backend.application.ports.structured_model_gateway import (
     StructuredOutput,
 )
 from backend.config import Settings, get_settings
-from backend.agent.model_payloads import writer_payload
+from backend.agent.model_payloads import writer_payload_for_model
 from backend.application.ports.model_call_context import model_timeout_options
 
 
@@ -87,7 +87,9 @@ class OpenAIResponsesAdapter:
         response = self.client.responses.create(
             model=self.model,
             instructions=WRITER_INSTRUCTIONS,
-            input=json.dumps(writer_payload(state), ensure_ascii=False),
+            # The sanitised payload when the context guard produced one. Rebuilding it
+            # from the raw state would send data the guard never saw.
+            input=json.dumps(writer_payload_for_model(state), ensure_ascii=False),
             **model_timeout_options(),
         )
         text = str(getattr(response, "output_text", "")).strip()
