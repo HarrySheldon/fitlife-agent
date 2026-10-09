@@ -11,6 +11,7 @@ from backend.infrastructure.agent_runtime.factory import CurrentAgentRuntime
 from backend.agent.workflow import FitLifeWorkflow
 from backend.application.ports.fitness_repository import FitnessRepository
 from backend.application.ports.model_gateway import ModelGateway
+from backend.application.ports.structured_model_gateway import StructuredModelGateway
 from backend.application.use_cases.generate_plan import GeneratePlan
 from backend.application.use_cases.generate_weekly_report import GenerateWeeklyReport
 from backend.domain.errors import ApplicationError, ai_not_configured_error, model_gateway_error
@@ -80,12 +81,15 @@ class _LazyFitLifeWorkflow:
             context.consume_context(json.dumps(results, ensure_ascii=False, default=str))
             command = replace(command, initial_tool_results=results, initial_tool_calls=tuple(calls))
         gateway = self.gateway or await context.call(lambda: _resolve_gateway(self.user_id))
+        structured_gateway = self.structured_gateway
+        if structured_gateway is None and isinstance(gateway, StructuredModelGateway):
+            structured_gateway = gateway
         workflow = FitLifeWorkflow(
             repository,
             gateway,
             context_metadata=self.preferences.model_dump(),
             review_mode=_review_mode(),
-            structured_gateway=self.structured_gateway,
+            structured_gateway=structured_gateway,
             grounding_mode=_grounding_mode(),
         )
         return await workflow.execute(command, context)

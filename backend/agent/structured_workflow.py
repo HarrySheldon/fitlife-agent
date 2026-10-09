@@ -10,6 +10,8 @@ from backend.agent.contracts import AgentCommand, AgentOperation, AgentResult
 from backend.agent.model_payloads import serialized_payload
 from backend.agent.safety import SAFETY_RULE_VERSION, SafetyRefusal, check_input, review_output
 from backend.agent.workflow import verify_guard_steps
+from backend.agent.semantic_review import ObservationReviewer, ReviewMode, collect_review
+from backend.config import get_settings
 from backend.application.ports.structured_model_gateway import StructuredModelGateway, StructuredModelResult
 from backend.infrastructure.agent_runtime import factory
 from backend.safety.context import sanitize_context
@@ -30,6 +32,7 @@ class StructuredSuggestionWorkflow:
     gateway_resolver: Callable[[], StructuredModelGateway]
     # Set by the context guard; the writer sends this rather than the raw text.
     guarded_input_text: str = field(default="")
+    review_mode: ReviewMode = "off"
 
     async def execute(self, command, context) -> AgentResult:
         # The three guards run as named steps so verify_guard_steps can see them. They
@@ -53,9 +56,22 @@ class StructuredSuggestionWorkflow:
         serialized = output.model_dump_json()
         context.consume_output(serialized)
 
-        def review():
+        async def review():
             try:
                 _, decision = review_output(command.question, serialized)
+                if decision.outcome != "allow":
+                    raise SafetyRefusal(decision, command.question)
+                observation = await collect_review(
+                    context, gateway, self.review_mode, command.question, serialized,
+                )
+                context.record("SAFETY_REVIEWED", context, {
+                    "review_mode": observation.mode, "review_status": observation.status,
+                })
+                if self.review_mode == "enforce":
+                    _, decision = review_output(
+                        command.question, serialized,
+                        reviewer=ObservationReviewer(observation, self.review_mode),
+                    )
             except SafetyRefusal as refusal:
                 # A prose fallback cannot safely replace a typed nutrition/plan
                 # object, so a refusal stays a refusal.
@@ -112,6 +128,7 @@ def run_structured_agent(
     command = AgentCommand(operation=operation, question=question, user_id=user_id, request_id=request_id)
     outcome = (runtime or factory.get_agent_runtime()).execute_sync(command, StructuredSuggestionWorkflow(
         instructions, input_text, response_model, gateway_resolver,
+        review_mode=get_settings().safety_review_mode,
     ))
     result = outcome.result.tool_results["structured"]
     return StructuredAgentResult(result.output, result.model, result.usage, outcome.run_id, outcome.request_id)

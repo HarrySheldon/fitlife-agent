@@ -224,8 +224,8 @@ class FitLifeWorkflow:
     async def _semantic_review(self, context, state, answer, decision, supporting):
         """Run the model review on the text that would actually be published.
 
-        The draft is re-gated from the publishable answer rather than from the raw
-        draft, so a notice the rules already appended is not appended twice.
+        The reviewer sees the publishable answer. Enforcement re-gates the original
+        draft so deterministic notices are applied exactly once.
         """
         mode = self.review_mode
         if mode == "off":
@@ -251,14 +251,14 @@ class FitLifeWorkflow:
         )
         context.record("SAFETY_REVIEWED", context,
                        {"review_mode": observation.mode, "review_status": observation.status})
-        if observation.status in {"disabled", "unsupported"}:
+        if mode == "shadow" or observation.status in {"disabled", "unsupported"}:
             return answer, decision
 
         # One reviewer call decides; `_review` is not re-entered.
         try:
             reviewed, review_decision = review_output(
                 state["user_query"],
-                answer,
+                state["final_answer"],
                 reviewer=ObservationReviewer(observation, mode),
                 supporting_values=supporting,
             )
