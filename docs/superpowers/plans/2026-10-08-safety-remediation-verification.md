@@ -1,5 +1,7 @@
 # 安全整改验证报告
 
+> 2026-10-09 核查修正：下文为 2026-10-08 的历史执行记录，不应将其中“阶段 A、B、C 已完成”作为当前验收结论。后续发现正式入口未传递结构化网关、结构化建议未接入语义审核、二次审核重复追加提示，以及合成评测样本缺失。补齐记录及最新测试结果见 [2026-10-09 补齐验证报告](./2026-10-09-safety-remediation-followup.md)。历史测试通过不证明这些未覆盖路径已正确接入。
+
 **执行者：** DSH agent
 **日期：** 2026-10-08
 **计划：** [2026-10-08-safety-correctness-integration-grounding.md](./2026-10-08-safety-correctness-integration-grounding.md)
@@ -57,6 +59,29 @@ Set-Location -LiteralPath 'D:\code\vibe-coding\fitlife-agent\.worktrees\agent-ru
 **退出码：** `0`
 **结果：** `1373 passed, 1 warning in 463.47s`
 **唯一 warning：** `StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated`（既有，与本次无关）
+
+### 2.2b 全量后端测试（Task V1 合成样本后）
+
+```powershell
+& 'D:\code\vibe-coding\fitlife-agent\.venv\Scripts\python.exe' -m pytest backend/tests -q -p no:cacheprovider --basetemp=.tmp\runV1
+```
+
+**退出码：** `0`
+**结果：** `1492 passed, 1 warning in 445.96s`
+
+### 2.2c 合成契约套件单独运行
+
+```powershell
+& $projectPython -m pytest backend/tests/test_safety_synthetic_contracts.py -q
+```
+
+**退出码：** `0`　**结果：** `114 passed`
+
+| 组成 | 数量 | 要求 |
+|---|---|---|
+| reviewer 样本（明确贬低 / 中性不利事实 / 边界） | **60** | ≥60（20+20+20） |
+| grounding 样本（8 类） | **45** | ≥40（每类 ≥5） |
+| 结构性与路径断言 | 9 | — |
 
 ### 2.3 本阶段新增的测试文件
 
@@ -123,7 +148,9 @@ Set-Location -LiteralPath 'D:\code\vibe-coding\fitlife-agent\.worktrees\agent-ru
 | 证据 | `test_safety_writer_payload_reaches_provider.py` 用**假客户端捕获 provider 实际收到的 input**，断言其中不含注入文本 |
 
 **这正是计划 §0 警告的"检查一份、发送另一份"模式，而我上一轮的测试恰好复制了这个错误。**
-计划 §2 Task C3 的对应要求（"测试两个 Provider 实际收到的 input/messages"）在阶段 C 同样执行。
+计划 §2 Task C3 的对应要求（"测试两个 Provider 实际收到的 input/messages"）在阶段 C 同样执行：
+`test_grounded_answer_providers.py` 用假客户端捕获 **Responses 与 Chat Completions 两个 adapter**
+实际收到的 `input` / `messages`，断言其中含问题、含证据目录（metric/unit/scope），并断言渲染出的数字来自目录。
 
 ---
 
@@ -134,9 +161,18 @@ Set-Location -LiteralPath 'D:\code\vibe-coding\fitlife-agent\.worktrees\agent-ru
 | 项 | 原因 |
 |---|---|
 | **真实 Provider 评测**（计划 Task V2） | **需用户同意费用与数据发送**；本环境不访问真实模型 |
-| 合成评测样本（计划 Task V1：`reviewer_cases.json` ≥60、`grounding_cases.json` ≥40） | 未创建 |
+| ~~合成评测样本（Task V1）~~ | ✅ **已完成**，见 §2.2c |
 | 灰度与门槛判定（计划 §7 发布门槛） | 无真实评测数据，不做判断 |
 | 阶段 B 的 enforce 上线、阶段 C 的 evidence 上线 | 均为部署决策，默认 `off` / `legacy` |
+
+**关于 Task V1 的诚实说明**：合成样本验证的是**程序契约**，不是模型安全性。
+`reviewer_cases.json` 里的 `refuse` 用例由**固定假 provider** 回放期望值，因此它证明的是
+"判定一旦产生，就会沿正确路径传递"，**不是"模型会正确判定"**。
+把这份套件的通过率描述为模型安全率是错的，计划 §7 也明确禁止。
+
+**词表许可**：ToxiCN 的词表是 CC BY-NC-ND 4.0（禁商用、禁演绎），且实测含有
+`草`/`狗`/`猪` 等健身场景正常词。**本套件不包含该词表**，样本中的贬低表述是为测试
+程序路径而自写的合成文本。
 
 ### 5.2 已知取舍（不隐藏）
 
@@ -175,8 +211,11 @@ Set-Location -LiteralPath 'D:\code\vibe-coding\fitlife-agent\.worktrees\agent-ru
 
 ## 7. 结论
 
-- **阶段 A、B、C 的代码与契约测试已完成**，全量 `1373 passed` / 退出码 `0`。
+- **阶段 A、B、C 的代码与契约测试已完成**，全量 `1492 passed` / 退出码 `0`。
+- **Task V1 合成契约套件已完成**（reviewer 60 条、grounding 45 条，`114 passed`）。
 - **真实模型效果评测未执行**，因此**不声称**模型安全率、误拒率或漏检率达到任何门槛。
+  计划 §7 的发布门槛（误拒率 ≤5%、漏检率 ≤10%、错误数值事实 = 0）**一项都未测量**。
 - 计划 §0 指出的相邻风险已核实并修复，且修复方式针对**真实发送路径**而非内部状态。
+- 测试对两个 Provider 均断言**实际发送内容**，而非内部状态。
 - 发布顺序遵循计划 §8：A 已可上线（不增加调用成本）；B 与 C 的代码已就位但保持
   `off` / `legacy`，切换需要真实评测数据与部署决定。
