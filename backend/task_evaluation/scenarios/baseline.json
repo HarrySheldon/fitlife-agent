@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "entry-confirm",
+      "version": 1,
+      "initial_state": {
+        "profile": {
+          "height_cm": 175,
+          "weight_kg": 70,
+          "age": 30,
+          "energy_parameter": "neutral",
+          "activity_level": "moderate",
+          "effective_from": "2026-01-01T00:00:00Z"
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-07-26",
+            "raw_text": "早餐：白飯 100g\n力量：杠铃深蹲 3x8 60kg"
+          },
+          "capture": {"draft_id": "data.id", "version": "data.version"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft_id}/confirm",
+          "headers": {
+            "If-Match": "{version}",
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000001"
+          },
+          "expected_status": 200,
+          "capture": {"meal_ids": "data.meal_ids"}
+        }
+      ],
+      "expected": {"confirmed_meals": 1, "confirmed_workouts": 1, "idempotency_count": 1}
+    },
+    {
+      "id": "entry-idempotent",
+      "version": 1,
+      "initial_state": {
+        "profile": {
+          "height_cm": 175,
+          "weight_kg": 70,
+          "age": 30,
+          "energy_parameter": "neutral",
+          "activity_level": "moderate",
+          "effective_from": "2026-01-01T00:00:00Z"
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-07-26",
+            "raw_text": "早餐：白飯 100g\n力量：杠铃深蹲 3x8 60kg"
+          },
+          "capture": {"draft_id": "data.id", "version": "data.version"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft_id}/confirm",
+          "headers": {
+            "If-Match": "{version}",
+            "Idempotency-Key": "11111111-1111-1111-1111-111111111111"
+          },
+          "expected_status": 200,
+          "capture": {"meal_ids": "data.meal_ids"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft_id}/confirm",
+          "headers": {
+            "If-Match": "{version}",
+            "Idempotency-Key": "11111111-1111-1111-1111-111111111111"
+          },
+          "expected_status": 200
+        }
+      ],
+      "expected": {"confirmed_meals": 1, "confirmed_workouts": 1, "idempotency_count": 1, "replay_verified": true}
+    },
+    {
+      "id": "cross-user-rejected",
+      "version": 1,
+      "initial_state": {
+        "profile": {
+          "height_cm": 175,
+          "weight_kg": 70,
+          "age": 30,
+          "energy_parameter": "neutral",
+          "activity_level": "moderate",
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "authorization": {"additional_users": ["intruder"]}
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-07-26",
+            "raw_text": "早餐：白飯 100g"
+          },
+          "capture": {"draft_id": "data.id", "version": "data.version"}
+        },
+        {
+          "actor": "intruder",
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft_id}/confirm",
+          "headers": {
+            "If-Match": "{version}",
+            "Idempotency-Key": "22222222-2222-2222-2222-222222222222"
+          },
+          "expected_status": 404
+        }
+      ],
+      "expected": {"confirmed_meals": 0, "actor.primary.confirmed_workouts": 0, "actor.primary.idempotency_count": 0, "actor.intruder.confirmed_meals": 0, "actor.intruder.confirmed_workouts": 0, "actor.intruder.draft_count": 0, "actor.intruder.idempotency_count": 0}
+    },
+    {
+      "id": "expired-draft",
+      "version": 1,
+      "initial_state": {
+        "profile": {
+          "height_cm": 175,
+          "weight_kg": 70,
+          "age": 30,
+          "energy_parameter": "neutral",
+          "activity_level": "moderate",
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "faults": {"expire_drafts": true}
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-07-26",
+            "raw_text": "早餐：白飯 100g"
+          },
+          "capture": {"draft_id": "data.id", "version": "data.version"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft_id}/confirm",
+          "headers": {
+            "If-Match": "{version}",
+            "Idempotency-Key": "33333333-3333-3333-3333-333333333333"
+          },
+          "expected_status": 410
+        }
+      ],
+      "expected": {"confirmed_meals": 0, "confirmed_workouts": 0, "idempotency_count": 0}
+    },
+    {
+      "id": "plan-activate",
+      "version": 1,
+      "initial_state": {
+        "profile": {
+          "height_cm": 175,
+          "weight_kg": 70,
+          "age": 30,
+          "energy_parameter": "neutral",
+          "activity_level": "moderate",
+          "effective_from": "2026-01-01T00:00:00Z"
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/plan/draft",
+          "capture": {"draft_id": "data.draft_id"}
+        },
+        {
+          "method": "POST",
+          "path": "/plan/activate",
+          "body": {"draft_id": {"$ref": "draft_id"}},
+          "expected_status": 200
+        }
+      ],
+      "expected": {"active_plan_count": 1, "plan_history_count": 1, "plan_draft_count": 0, "plans_readable": true, "plans_validated": true}
+    },
+    {
+      "id": "coach-in-scope",
+      "version": 1,
+      "initial_state": {
+        "profile": {
+          "height_cm": 175,
+          "weight_kg": 70,
+          "age": 30,
+          "energy_parameter": "neutral",
+          "activity_level": "moderate",
+          "effective_from": "2026-01-01T00:00:00Z"
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/coach/action",
+          "body": {"surface": "today", "action": "explain_today"},
+          "expected_status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/chat",
+          "body": {"question": "今天的飲食和訓練狀態怎樣？"},
+          "expected_status": 200
+        }
+      ],
+      "expected": {"confirmed_meals": 0, "confirmed_workouts": 0, "answer_nonempty": true, "response_has_run_id": true, "successful_runs": 2}
+    }
+  ]
+}
