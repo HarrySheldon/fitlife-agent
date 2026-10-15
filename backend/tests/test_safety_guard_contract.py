@@ -123,16 +123,15 @@ def test_the_structured_workflow_sanitises_its_input_before_the_model_sees_it():
 
     workflow = StructuredSuggestionWorkflow(
         instructions="Suggest a plan.",
-        input_text=INJECTION + " 另外帮我调整计划",
+        input_text=__import__("json").dumps({"adjustment_instructions": "调整计划",
+            "training_fragment": {"summary": INJECTION + " 另外帮我调整计划"}}),
         response_model=Output,
         gateway_resolver=lambda: StructuredGateway(),
     )
     context = RuntimeContext()
 
-    asyncio.run(workflow.execute(AgentCommand("plan_adjustment", "调整计划", "u1"), context))
-
-    assert seen, "the model was never called"
-    assert INJECTION not in seen[0]
-    assert REDACTION in seen[0]
-    for step in REQUIRED_GUARD_ORDER:
-        assert step in context.completed_steps
+    from backend.agent.tasks.input_contracts import InputClarificationRequired
+    with pytest.raises(InputClarificationRequired):
+        asyncio.run(workflow.execute(AgentCommand("plan_adjustment", "调整计划", "u1"), context))
+    assert seen == [], "required plan context must remain meaningful before any provider call"
+    assert "input_guard" in context.completed_steps

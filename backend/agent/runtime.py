@@ -320,6 +320,8 @@ class AgentRuntime:
                     run_id, request_id, command.user_id, command.operation, "accepted",
                     created_at=now.isoformat(), deadline_at=(now + timedelta(seconds=policy.deadline_seconds)).isoformat(),
                     policy_version=f"policy-{config.revision}",
+                    task_id=command.task_ref.task_id if command.task_ref else None,
+                    task_version=command.task_ref.version if command.task_ref else None,
                     policy_snapshot_json=RunPolicySnapshot(revision=config.revision, policy=policy).model_dump_json()))
                 self._runs[run_id] = self.repository.update(replace(self._runs[run_id], status="running", started_at=utc_now()), "RUN_STARTED")
             if config_error:

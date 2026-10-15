@@ -71,6 +71,8 @@ class OpenAIResponsesAdapter:
         self.model = model
 
     def plan_route(self, question: str) -> PlannerRoute:
+        from backend.agent.tasks.input_contracts import build_review_input
+        question = build_review_input(question=question, draft="").question
         response = self.client.responses.parse(
             model=self.model,
             instructions=PLANNER_INSTRUCTIONS,

@@ -478,8 +478,9 @@ def test_agent_adjustment_context_changes_with_the_full_active_plan():
             context = __import__("json").loads(input_text)
             captured.append(context)
             output = {
-                **context["active_plan"],
-                "diet_plan": {**context["active_plan"]["diet_plan"], "marker": context["active_plan_id"]},
+                **VALID_PLAN,
+                "diet_plan": context["diet_fragment"],
+                "workout_plan": context["training_fragment"],
             }
             return StructuredModelResult(
                 output=response_model.model_validate(output), model=self.model, usage={"input_tokens": 1}
@@ -497,9 +498,9 @@ def test_agent_adjustment_context_changes_with_the_full_active_plan():
     first = generate_adjusted_plan("user-a", active("plan-00000001", 1800), "lighter", gateway=Gateway())
     second = generate_adjusted_plan("user-a", active("plan-00000002", 2400), "lighter", gateway=Gateway())
 
-    assert captured[0]["active_plan_id"] == "plan-00000001"
-    assert captured[0]["active_plan"]["diet_plan"]["daily_calorie_target"] == 1800
+    assert "active_plan_id" not in captured[0]
+    assert captured[0]["diet_fragment"]["daily_calorie_target"] == 1800
     assert captured[0]["adjustment_instructions"] == "lighter"
-    assert captured[1]["active_plan_id"] == "plan-00000002"
-    assert captured[1]["active_plan"]["diet_plan"]["daily_calorie_target"] == 2400
+    assert "active_plan_id" not in captured[1]
+    assert captured[1]["diet_fragment"]["daily_calorie_target"] == 2400
     assert first["diet_plan"] != second["diet_plan"]

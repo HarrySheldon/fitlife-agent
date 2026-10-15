@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from collections.abc import Awaitable, Callable
 
 from backend.agent.contracts import AgentCommand, AgentResult
@@ -131,6 +132,20 @@ class FitLifeWorkflow:
         # verify against. A guard called outside the step machinery would be
         # invisible to it - and removable without anything noticing.
         await context.step("input_guard", lambda: _run_input_guard(command))
+        from backend.safety.business_scope import decide_business_scope, is_auxiliary_request
+        from backend.agent.tasks.boundary_workflow import BoundaryWorkflow
+
+        trusted_page = command.trusted_page_intent and not command.raw_coach_question
+        policy_question = command.raw_coach_question or command.question
+        scope = decide_business_scope(policy_question)
+        if trusted_page:
+            from backend.safety.business_scope import ScopeDecision
+            scope = ScopeDecision("in_scope", (command.question,))
+        if scope.scope == "out_of_scope" or scope.needs_clarification or is_auxiliary_request(policy_question):
+            return await BoundaryWorkflow(scope).execute(command, context)
+        if scope.allowed_subtasks and not trusted_page:
+            command = replace(command, question="；".join(scope.allowed_subtasks))
+            policy_question = command.question
         context.set_model_metadata(provider=getattr(self.gateway, "provider", None), model=self.gateway.model)
         state: AgentState = {
             "operation": command.operation,
@@ -146,6 +161,13 @@ class FitLifeWorkflow:
             "retrieved_docs": [],
         }
         await self._apply(context, "planner", state, self._planner)
+        scope = scope if trusted_page else decide_business_scope(policy_question, planner_consulted=True)
+        if scope.scope == "out_of_scope" or scope.needs_clarification:
+            return await BoundaryWorkflow(scope).execute(command, context)
+        if scope.allowed_subtasks:
+            approved_question = "；".join(scope.allowed_subtasks)
+            state["user_query"] = approved_question
+            state["messages"] = [{"role": "user", "content": approved_question}]
         if context.checkpoint_store is not None:
             context.checkpoint("planner", {
                 "schema_version": 1,
@@ -171,7 +193,8 @@ class FitLifeWorkflow:
         merely requested in the prompt. It runs as its own step so the guard contract
         can see that it happened.
         """
-        return {"writer_payload": self.sanitize_writer_payload(state)}
+        return {"writer_payload": self.sanitize_writer_payload(state),
+                "writer_payload_owner": state.get("current_user_id")}
 
     def sanitize_writer_payload(self, state: AgentState) -> dict:
         """The payload the writer is allowed to send.
@@ -184,8 +207,10 @@ class FitLifeWorkflow:
         payload = incremental_writer_payload(
             state, state.get("initial_tool_results_snapshot", {})
         )
-        sanitized, report = sanitize_context(payload, self._safety_pack())
+        sanitized, report = sanitize_context(payload, self._safety_pack(), scan_all=True)
         self._last_context_report = report
+        from backend.agent.tasks.input_contracts import validate_context_findings
+        validate_context_findings(report)
         return sanitized
 
     async def _review(self, context, state):

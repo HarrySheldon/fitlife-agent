@@ -89,7 +89,9 @@ def test_analyzer_sends_only_unresolved_candidates_and_minimum_profile():
     call = gateway.parse_structured.call_args.kwargs
     request = json.loads(call["input_text"])
     assert PROMPT_VERSION == "smart-entry-analysis-v1"
-    assert request["profile"] == {"weight_kg": 70}
+    assert "profile" not in request
+    assert "weight_kg" not in call["input_text"]
+    assert "bodyweight" not in call["input_text"]
     assert [item["id"] for item in request["candidates"]] == ["segment-food"]
     assert "set_count" not in request["candidates"][0]["explicit_values"]
 

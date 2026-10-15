@@ -110,9 +110,8 @@ class StructuredReviewAdapter:
     instructions: str = REVIEW_INSTRUCTIONS
 
     def review(self, question: str, draft: str):
-        input_text = json.dumps(
-            {"question": question, "draft": draft}, ensure_ascii=False
-        )
+        from backend.agent.tasks.input_contracts import build_review_input
+        input_text = build_review_input(question=question, draft=draft).model_dump_json()
         return self.gateway.parse_structured(
             instructions=self.instructions,
             input_text=input_text,

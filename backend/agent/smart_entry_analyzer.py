@@ -88,7 +88,7 @@ def analyze_smart_entry(
     unresolved = tuple(candidate for candidate in candidates if candidate.issues)
     payload = {
         "locale": locale,
-        "profile": {"weight_kg": weight_kg},
+        "current_meal_text": "\n".join(candidate.raw_text for candidate in unresolved),
         "candidates": [
             {
                 "id": candidate.id,
@@ -103,7 +103,6 @@ def analyze_smart_entry(
                         "set_count",
                         "reps",
                         "load_kg",
-                        "bodyweight",
                         "duration_min",
                         "device_calories",
                     )

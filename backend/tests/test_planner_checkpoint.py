@@ -36,7 +36,7 @@ class Gateway:
 
 def test_real_workflow_persists_reconstructable_planner_boundary(stores):
     repository, store, reopen = stores
-    command = AgentCommand("chat", "private question", None)
+    command = AgentCommand("chat", "Explain fitness recovery", None)
     workflow = FitLifeWorkflow(FileFitnessRepository(), Gateway(), retriever=lambda *_: [])
     outcome = asyncio.run(AgentRuntime(repository=repository, checkpoint_store=store).execute(command, workflow))
     saved = reopen().get(outcome.run_id, None, "planner")

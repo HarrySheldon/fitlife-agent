@@ -1,18 +1,19 @@
 from __future__ import annotations
 import json
 from collections.abc import Mapping
+from backend.agent.tasks.input_contracts import build_chat_input, sanitize_stage_input, ChatInput
 
 def writer_payload(state: Mapping[str, object]) -> dict[str, object]:
-    return {"user_query": state.get("user_query", ""), "context_metadata": state.get("context_metadata", {}),
-            "intent": state.get("intent", ""), "profile": state.get("profile", {}),
-            "tool_results": state.get("tool_results", {}), "retrieved_docs": state.get("retrieved_docs", []),
-            "validation_result": state.get("validation_result", {})}
+    return build_chat_input(current_question=state.get("user_query", ""),
+        approved_intent=state.get("intent", ""), context_metadata=state.get("context_metadata", {}),
+        nutrient_targets_and_restrictions=state.get("profile", {}),
+        analysis_summaries=state.get("tool_results", {}), sources=state.get("retrieved_docs", []),
+        validation=state.get("validation_result", {}), sanitize=False).model_dump()
 
 def incremental_writer_payload(state: Mapping[str, object], initial_results: Mapping[str, object]) -> dict[str, object]:
-    payload = writer_payload(state)
-    current = payload["tool_results"] if isinstance(payload["tool_results"], Mapping) else {}
-    payload["tool_results"] = {key: value for key, value in current.items() if key not in initial_results or initial_results[key] != value}
-    return payload
+    # Providers are stateless: unchanged initial facts still belong in every call.
+    # The stage projection bounds disclosure and the caller budgets these bytes.
+    return writer_payload(state)
 
 def serialized_payload(payload: Mapping[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
@@ -31,6 +32,8 @@ def writer_payload_for_model(state: Mapping[str, object]) -> dict[str, object]:
     context to sanitise.
     """
     recorded = state.get("writer_payload")
-    if isinstance(recorded, Mapping) and recorded:
-        return dict(recorded)
-    return writer_payload(state)
+    owner = state.get("current_user_id")
+    if isinstance(recorded, Mapping) and recorded and state.get("writer_payload_owner") == owner:
+        # Revalidation keeps direct adapter callers from injecting extra cache fields.
+        return sanitize_stage_input(ChatInput.model_validate(writer_payload(recorded))).model_dump()
+    return sanitize_stage_input(ChatInput.model_validate(writer_payload(state))).model_dump()

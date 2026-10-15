@@ -103,7 +103,7 @@ def test_workflow_retries_wrapped_provider_429_by_status_semantics():
     gateway = Gateway()
 
     outcome = asyncio.run(AgentRuntime().execute(
-        AgentCommand("chat", "hello", None), FitLifeWorkflow(FileFitnessRepository(), gateway)
+        AgentCommand("chat", "如何合理安排训练恢复？", None), FitLifeWorkflow(FileFitnessRepository(), gateway)
     ))
 
     assert outcome.status == "succeeded"
@@ -118,7 +118,7 @@ def test_wrapped_terminal_provider_errors_are_not_retried():
                 self.attempts += 1; raise ProviderApiError(status, code)
             def write_answer(self, state): return "never"
         gateway = Gateway()
-        try: asyncio.run(AgentRuntime().execute(AgentCommand("chat", "hello", None), FitLifeWorkflow(FileFitnessRepository(), gateway)))
+        try: asyncio.run(AgentRuntime().execute(AgentCommand("chat", "如何合理安排训练恢复？", None), FitLifeWorkflow(FileFitnessRepository(), gateway)))
         except Exception: pass
         assert gateway.attempts == 1
 
@@ -145,13 +145,13 @@ def test_completed_snapshots_are_bounded_without_evicting_active():
 
 
 def test_writer_budget_payload_matches_adapter_and_counts_replaced_initial_value():
-    initial = {"report": "small"}
-    state = {"user_query": "q", "context_metadata": {}, "intent": "x", "profile": {},
-             "tool_results": {"report": "x" * 10_000}, "retrieved_docs": [], "validation_result": {}}
+    initial = {"meal_analysis": {"summary": "small"}}
+    state = {"user_query": "q", "context_metadata": {}, "intent": "meal_analysis", "profile": {},
+             "tool_results": {"meal_analysis": {"summary": "x" * 10_000}}, "retrieved_docs": [], "validation_result": {}}
     incremental = incremental_writer_payload(state, initial)
 
-    assert writer_payload(state)["tool_results"]["report"] == "x" * 10_000
-    assert incremental["tool_results"]["report"] == "x" * 10_000
+    assert writer_payload(state)["tool_results"]["meal_analysis"]["summary"] == "x" * 10_000
+    assert incremental["tool_results"]["meal_analysis"]["summary"] == "x" * 10_000
     assert len(serialized_payload(incremental)) > 10_000
     state["tool_results"] = initial
-    assert incremental_writer_payload(state, initial)["tool_results"] == {}
+    assert incremental_writer_payload(state, initial)["tool_results"] == initial

@@ -26,7 +26,7 @@ from backend.schemas import AuthenticatedUser, CoachActionResponse, GeneratedPla
 
 router = APIRouter(prefix="/plan")
 
-_ADJUSTMENT_INSTRUCTIONS = """Adjust the supplied active fitness plan according to the user's instructions.
+_ADJUSTMENT_INSTRUCTIONS = """Adjust the supplied training_fragment and diet_fragment according to adjustment_instructions.
 Return the complete adjusted diet_plan and workout_plan, retain safe useful details from the active plan,
 and include a validation object and trace object. Never activate or persist a plan."""
 
@@ -40,8 +40,8 @@ def generate_adjusted_plan(
     request_id: str | None = None,
 ) -> dict:
     context = {
-        "active_plan_id": active.plan_id,
-        "active_plan": active.plan.model_dump(mode="json"),
+        "training_fragment": active.plan.workout_plan,
+        "diet_fragment": active.plan.diet_plan,
         "adjustment_instructions": instructions,
     }
     try:

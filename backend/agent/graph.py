@@ -38,6 +38,7 @@ def run_fitlife_agent(
     surface: str | None = None,
     context_date: str | None = None,
     request_id: str | None = None,
+    _trusted_page_intent: bool = False,
 ) -> dict:
     command = AgentCommand(
         operation=operation,
@@ -48,6 +49,7 @@ def run_fitlife_agent(
         initial_tool_results=dict(initial_tool_results or {}),
         initial_tool_calls=tuple(initial_tool_calls or ()),
         request_id=request_id,
+        trusted_page_intent=_trusted_page_intent,
     )
     workflow = _LazyFitLifeWorkflow(repository, gateway, user_id, preferences or UserPreferences())
     return DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
@@ -75,8 +77,22 @@ class _LazyFitLifeWorkflow:
         self.structured_gateway = structured_gateway
 
     async def execute(self, command, context):
+        from backend.safety.business_scope import decide_business_scope, is_auxiliary_request
+        from backend.agent.tasks.boundary_workflow import BoundaryWorkflow
+
+        # Evaluate actual user text before repository, contextual tools or gateway.
+        text = command.raw_coach_question if command.raw_coach_question is not None else command.question
+        scope = decide_business_scope(text)
+        if scope.scope == "out_of_scope" or scope.needs_clarification or is_auxiliary_request(text):
+            return await BoundaryWorkflow(scope).execute(command, context)
+        if scope.scope == "mixed":
+            command = replace(command, question="；".join(scope.allowed_subtasks))
+        elif command.raw_coach_question and scope.scope == "unclear":
+            # The generated page prompt cannot turn unrelated free text into a
+            # fitness request. Let the planner see that original text alone.
+            command = replace(command, question=command.raw_coach_question)
         repository = self.repository or await context.call(get_fitness_repository)
-        if self.context_loader is not None:
+        if self.context_loader is not None and not (command.raw_coach_question and scope.scope == "unclear"):
             results, calls = await context.step("context_loader", lambda: self.context_loader(repository))
             context.consume_context(json.dumps(results, ensure_ascii=False, default=str))
             command = replace(command, initial_tool_results=results, initial_tool_calls=tuple(calls))
@@ -104,6 +120,8 @@ def run_contextual_coach_action(
     command = AgentCommand(
         operation="coach_action", question=_coach_prompt(surface, action, date, question),
         user_id=user_id, surface=surface, context_date=date, request_id=request_id,
+        raw_coach_question=question or "",
+        trusted_page_intent=not bool(question),
     )
     workflow = _LazyFitLifeWorkflow(
         repository, gateway, user_id, preferences or UserPreferences(),
@@ -125,6 +143,7 @@ def interpret_persisted_weekly_report(
         initial_tool_results={"report_week": week, "weekly_report": report},
         initial_tool_calls=["load_persisted_weekly_report"], preferences=preferences,
         operation="weekly_review", surface="review",
+        _trusted_page_intent=True,
         request_id=request_id,
     )
     result["trace"] = {**result.get("trace", {}), "surface": "review", "report_week": week}
@@ -142,6 +161,7 @@ def interpret_persisted_plan(
         initial_tool_results={"active_plan_id": plan_id, "active_plan": plan},
         initial_tool_calls=["load_persisted_plan"], preferences=preferences,
         operation="plan_review", surface="plan",
+        _trusted_page_intent=True,
         request_id=request_id,
     )
     result["trace"] = {**result.get("trace", {}), "surface": "plan", "active_plan_id": plan_id}

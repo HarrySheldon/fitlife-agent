@@ -56,7 +56,7 @@ class FreeFormIntentGateway:
 def test_off_taxonomy_intent_does_not_abort_the_run(intent):
     """The exact production failure: a good plan was thrown away by storage."""
     repository = MemoryRunRepository()
-    command = AgentCommand("chat", "private question", None)
+    command = AgentCommand("chat", "How is my protein intake?", None)
     workflow = FitLifeWorkflow(
         FileFitnessRepository(),
         FreeFormIntentGateway(intent),
@@ -88,7 +88,7 @@ def test_off_taxonomy_intent_survives_the_planner_boundary(intent):
 def test_unavailable_checkpoint_storage_does_not_abort_the_run():
     """Checkpointing is an aid; its absence must cost recovery, not the answer."""
     repository = MemoryRunRepository()
-    command = AgentCommand("chat", "private question", None)
+    command = AgentCommand("chat", "How is my protein intake?", None)
     workflow = FitLifeWorkflow(
         FileFitnessRepository(),
         FreeFormIntentGateway("meal_analysis"),
@@ -110,7 +110,7 @@ def test_failing_checkpoint_write_does_not_abort_the_run():
         def save(self, run_id, user_id, name, state):
             raise InvalidTransition("checkpoint storage is full")
 
-    command = AgentCommand("chat", "private question", None)
+    command = AgentCommand("chat", "How is my protein intake?", None)
     workflow = FitLifeWorkflow(
         FileFitnessRepository(),
         FreeFormIntentGateway("meal_analysis"),

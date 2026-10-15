@@ -7,6 +7,8 @@ path, which also hid the original error from the caller.
 """
 import asyncio
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
@@ -67,6 +69,31 @@ def test_legacy_run_key_is_migrated_and_history_is_preserved(tmp_path):
     assert "id" in columns
     assert "run_id" not in columns
     assert repository.get("legacy-run", "user").status == "succeeded"
+    assert repository.get("legacy-run", "user").task_id is None
+    assert repository.get("legacy-run", "user").task_version is None
+
+
+@pytest.mark.parametrize("legacy_key", [True, False])
+def test_old_layout_preserves_checkpoints_and_accepts_linked_run(tmp_path, legacy_key):
+    from backend.agent.contracts import AgentRunSnapshot
+    from backend.infrastructure.agent_runtime.sqlite_checkpoint_store import SQLiteCheckpointStore
+
+    path = tmp_path / "old.sqlite3"
+    _legacy_database(path)
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE agent_checkpoints (run_id TEXT NOT NULL, name TEXT NOT NULL, state_json TEXT NOT NULL, version INTEGER NOT NULL, PRIMARY KEY(run_id, name))")
+        connection.execute("INSERT INTO agent_checkpoints VALUES (?, ?, ?, ?)",
+                           ("legacy-run", "planner", '{"completed": true, "attempt": 1}', 1))
+        if not legacy_key:
+            connection.execute("ALTER TABLE agent_runs RENAME COLUMN run_id TO id")
+    repository = SQLiteRunRepository(path)
+    linked = AgentRunSnapshot("linked", "linked-request", "user", "chat", "accepted",
+                              task_id="task", task_version=2)
+    repository.create(linked)
+    reopened = SQLiteRunRepository(path)
+    assert reopened.get("linked", "user") == linked
+    assert reopened.get("legacy-run", "user").task_id is None
+    assert SQLiteCheckpointStore(reopened).get("legacy-run", "user", "planner").state == {"completed": True, "attempt": 1}
 
 
 def test_migrated_database_accepts_new_runs(tmp_path):
@@ -93,6 +120,35 @@ def test_current_layout_is_left_untouched(tmp_path):
         row[1] for row in sqlite3.connect(path).execute("PRAGMA table_info(agent_runs)")
     ) == first_columns
     assert repository.get is not None
+
+
+@pytest.mark.parametrize("layout", ["id", "run_id", "new"])
+def test_concurrent_runtime_initialization_is_atomic_and_repeatable(tmp_path, layout):
+    for trial in range(10):
+        path = tmp_path / f"runtime-{trial}.sqlite3"
+        if layout != "new":
+            _legacy_database(path)
+            if layout == "id":
+                with sqlite3.connect(path) as connection:
+                    connection.execute("ALTER TABLE agent_runs RENAME COLUMN run_id TO id")
+        barrier = Barrier(2)
+
+        def initialize():
+            barrier.wait(timeout=5)
+            return SQLiteRunRepository(path)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(initialize) for _ in range(2)]
+            repositories = [future.result(timeout=15) for future in futures]
+        for repository in (*repositories, SQLiteRunRepository(path)):
+            if layout != "new":
+                run = repository.get("legacy-run", "user")
+                assert run.status == "succeeded" and run.task_id is None
+            with repository.connect() as connection:
+                columns = [row[1] for row in connection.execute("PRAGMA table_info(agent_runs)")]
+                assert columns.count("task_id") == columns.count("task_version") == 1
+                assert "id" in columns and "run_id" not in columns
+                assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
 
 
 def test_finalization_failure_keeps_the_original_error_attached(tmp_path, monkeypatch):

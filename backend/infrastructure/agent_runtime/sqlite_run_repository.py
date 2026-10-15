@@ -14,11 +14,14 @@ class SQLiteRunRepository:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
+            # Serialize schema inspection and every DDL change across constructors.
+            # executescript would commit this transaction before running its SQL.
+            connection.execute("BEGIN IMMEDIATE")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise RuntimeError("Unsupported runtime database schema")
             self._migrate_legacy_run_key(connection)
-            connection.executescript("""
+            connection.execute("""
                 CREATE TABLE IF NOT EXISTS agent_runs (
                     id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE,
                     user_id TEXT, operation TEXT NOT NULL, status TEXT NOT NULL,
@@ -28,14 +31,20 @@ class SQLiteRunRepository:
                     provider TEXT, model TEXT, input_chars INTEGER NOT NULL,
                     input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, tool_calls INTEGER NOT NULL,
                     internal_error_id TEXT, failure_stage TEXT, version INTEGER NOT NULL
-                );
+                )
+            """)
+            connection.execute("""
                 CREATE TABLE IF NOT EXISTS agent_run_events (
                     run_id TEXT NOT NULL, seq INTEGER NOT NULL, event_type TEXT NOT NULL,
                     step TEXT, attempt INTEGER, occurred_at TEXT NOT NULL,
                     payload_json TEXT NOT NULL, PRIMARY KEY(run_id, seq)
-                );
+                )
             """)
-            connection.execute("PRAGMA user_version=1")
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(agent_runs)")}
+            for name, sql_type in (("task_id", "TEXT"), ("task_version", "INTEGER")):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE agent_runs ADD COLUMN {name} {sql_type}")
+            connection.execute("PRAGMA user_version=2")
 
     @contextmanager
     def connect(self):
@@ -48,10 +57,12 @@ class SQLiteRunRepository:
 
     @staticmethod
     def _get(connection, run_id, user_id):
-        row = connection.execute("SELECT * FROM agent_runs WHERE id=? AND user_id IS ?", (run_id, user_id)).fetchone()
+        names = tuple(field.name for field in fields(AgentRunSnapshot))
+        columns = ",".join("id" if name == "run_id" else name for name in names)
+        row = connection.execute(f"SELECT {columns} FROM agent_runs WHERE id=? AND user_id IS ?", (run_id, user_id)).fetchone()
         if row is None:
             raise KeyError(run_id)
-        return AgentRunSnapshot(**dict(zip((field.name for field in fields(AgentRunSnapshot)), row)))
+        return AgentRunSnapshot(**dict(zip(names, row)))
 
     @staticmethod
     def _append(connection, event):
@@ -84,7 +95,8 @@ class SQLiteRunRepository:
             raise InvalidTransition("New run must be accepted")
         with self.connect() as connection:
             values = tuple(asdict(run).values())
-            connection.execute("INSERT INTO agent_runs VALUES (" + ",".join("?" for _ in values) + ")", values)
+            columns = ",".join("id" if name == "run_id" else name for name in asdict(run))
+            connection.execute("INSERT INTO agent_runs (" + columns + ") VALUES (" + ",".join("?" for _ in values) + ")", values)
             self._append(connection, RunEvent(run.run_id, 1, "RUN_ACCEPTED"))
         return run
 

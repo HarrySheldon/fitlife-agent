@@ -4,18 +4,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from backend.agent.contracts import AgentCommand, AgentOperation, AgentResult
-from backend.agent.model_payloads import serialized_payload
 from backend.agent.safety import SAFETY_RULE_VERSION, SafetyRefusal, check_input, review_output
 from backend.agent.workflow import verify_guard_steps
 from backend.agent.semantic_review import ObservationReviewer, ReviewMode, collect_review
 from backend.config import get_settings
 from backend.application.ports.structured_model_gateway import StructuredModelGateway, StructuredModelResult
 from backend.infrastructure.agent_runtime import factory
-from backend.safety.context import sanitize_context
-from backend.safety.gate import default_pack
 
 
 @dataclass(frozen=True)
@@ -40,7 +37,14 @@ class StructuredSuggestionWorkflow:
         # the user's own adjustment instructions and raw entry text - straight to the
         # model with no context check at all.
         await context.step("input_guard", lambda: check_input(command.question))
-        await context.step("context_guard", lambda: self._guard_context(context))
+        await context.step("context_guard", lambda: self._guard_context(context, command))
+        from backend.safety.business_scope import decide_business_scope
+        from backend.agent.tasks.input_contracts import InputClarificationRequired
+        scope = decide_business_scope(command.question)
+        if scope.scope == "out_of_scope":
+            await context.step("safety_reviewer", lambda: review_output(command.question, "Please provide a fitness or nutrition request."))
+            verify_guard_steps(self, tuple(context.completed_steps))
+            raise InputClarificationRequired("BUSINESS_SCOPE_NOT_SUPPORTED")
         gateway = await context.step("model_configuration", self.gateway_resolver)
         context.set_model_metadata(provider=getattr(gateway, "provider", None), model=gateway.model)
 
@@ -97,7 +101,7 @@ class StructuredSuggestionWorkflow:
             sources=(), model=result.model,
         ))
 
-    def _guard_context(self, context) -> None:
+    def _guard_context(self, context, command) -> None:
         """Sanitise the free text this workflow is about to hand the model.
 
         The input gate has already looked at the question. This is the second, and
@@ -107,16 +111,15 @@ class StructuredSuggestionWorkflow:
         It runs as a named step so `verify_guard_steps` can see that it happened -
         this workflow previously had no context check at all, and nothing noticed.
         """
-        payload = {"instructions": self.instructions, "input_text": self.input_text}
-        sanitized, report = sanitize_context(payload, default_pack())
-        self.guarded_input_text = sanitized["input_text"]
-        context.consume_context(serialized_payload(sanitized))
-        if not report.clean:
-            context.record("SAFETY_DECIDED", context, {
-                "outcome": "rewrite",
-                "risk_category": "low",
-                "rule_version": SAFETY_RULE_VERSION,
-            })
+        from backend.agent.tasks.input_contracts import structured_stage_input, InputClarificationRequired
+        try:
+            payload = structured_stage_input(command.operation, self.input_text)
+        except ValidationError:
+            # Only validation of this user supplied DTO is a user error. Gateway
+            # output validation and programming faults retain their own handling.
+            raise InputClarificationRequired() from None
+        self.guarded_input_text = payload.model_dump_json()
+        context.consume_context(self.instructions + self.guarded_input_text)
 
 
 def run_structured_agent(

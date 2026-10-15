@@ -71,19 +71,19 @@ class ContextReport:
         return not self.findings
 
 
-def _walk(value: Any, path: str):
+def _walk(value: Any, path: str, *, scan_all: bool = False):
     """Yield (path, string) for every user-authored string in the structure."""
     if isinstance(value, dict):
         for key, item in value.items():
             child = f"{path}.{key}" if path else str(key)
-            if str(key) in PROTECTED_KEYS:
+            if not scan_all and str(key) in PROTECTED_KEYS:
                 continue
-            if path and any(child.startswith(p) for p in PROTECTED_PREFIXES):
+            if not scan_all and path and any(child.startswith(p) for p in PROTECTED_PREFIXES):
                 continue
-            yield from _walk(item, child)
+            yield from _walk(item, child, scan_all=scan_all)
     elif isinstance(value, (list, tuple)):
         for index, item in enumerate(value):
-            yield from _walk(item, f"{path}[{index}]")
+            yield from _walk(item, f"{path}[{index}]", scan_all=scan_all)
     elif isinstance(value, str) and value.strip():
         yield path, value
 
@@ -97,10 +97,10 @@ def _strip_invisible(text: str) -> str:
     return _CONTROL_CHARS.sub("", text)
 
 
-def scan_context(payload: Any, cues: CueTables) -> tuple[ContextFinding, ...]:
+def scan_context(payload: Any, cues: CueTables, *, scan_all: bool = False) -> tuple[ContextFinding, ...]:
     """Report user-authored strings that read like an instruction."""
     findings: list[ContextFinding] = []
-    for path, text in _walk(payload, ""):
+    for path, text in _walk(payload, "", scan_all=scan_all):
         cleaned = _strip_invisible(text)
         patterns = detect_jailbreak(normalize(cleaned), cues)
         if patterns:
@@ -125,14 +125,14 @@ def _redact(value: Any, path: str, hits: dict[str, ContextFinding]) -> Any:
 
 
 def sanitize_context(
-    payload: Any, pack: RulePack, *, policy: Policy | None = None
+    payload: Any, pack: RulePack, *, policy: Policy | None = None, scan_all: bool = False
 ) -> tuple[Any, ContextReport]:
     """Return the payload with instruction-like user text removed.
 
     `policy` is accepted so a pack can later choose to observe rather than redact,
     matching what `annotate` does for the other positions.
     """
-    findings = scan_context(payload, pack.cues)
+    findings = scan_context(payload, pack.cues, scan_all=scan_all)
     if not findings:
         return payload, ContextReport()
     hits = {finding.path: finding for finding in findings}

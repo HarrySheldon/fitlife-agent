@@ -89,9 +89,11 @@ class _ChatClient:
 
 def test_the_helper_prefers_an_already_sanitised_payload():
     state = _state("鸡胸肉")
-    state["writer_payload"] = {"sentinel": True}
+    from backend.agent.model_payloads import writer_payload
+    cached = writer_payload({"user_query": "sanitized sentinel", "intent": "knowledge_qa"})
+    state["writer_payload"] = cached
 
-    assert writer_payload_for_model(state) == {"sentinel": True}
+    assert writer_payload_for_model(state) == cached
 
 
 def test_the_helper_falls_back_when_nothing_was_recorded():

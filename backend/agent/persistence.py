@@ -11,7 +11,9 @@ TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled", "timed_out"})
 ERROR_CODES = frozenset({"INTERNAL_ERROR", "MODEL_AUTH_FAILED", "MODEL_NOT_FOUND", "MODEL_TERMINAL_ERROR",
     "MODEL_CONNECTION_FAILED", "MODEL_TIMEOUT", "MODEL_QUOTA_EXHAUSTED", "MODEL_SAFETY_REFUSAL",
     "MODEL_TRANSIENT_ERROR", "MODEL_INVALID_REQUEST", "RUN_CANCELLED", "RUN_TIMED_OUT",
-    "RUN_BUDGET_EXCEEDED", "AI_NOT_CONFIGURED", "CREDENTIAL_STORE_UNAVAILABLE", "SAFETY_REFUSAL", "AGENT_RATE_LIMITED", "CONFIGURATION_INVALID", "CHECKPOINT_UNAVAILABLE"})
+    "RUN_BUDGET_EXCEEDED", "AI_NOT_CONFIGURED", "CREDENTIAL_STORE_UNAVAILABLE", "SAFETY_REFUSAL", "AGENT_RATE_LIMITED", "CONFIGURATION_INVALID", "CHECKPOINT_UNAVAILABLE",
+    "TASK_NOT_FOUND", "TASK_VERSION_CONFLICT", "IDEMPOTENCY_CONFLICT", "TASK_EXPIRED", "TASK_BUDGET_EXHAUSTED", "REPAIR_LIMIT",
+    "INPUT_CLARIFICATION_REQUIRED", "INPUT_CONSTRAINT_CLARIFICATION_REQUIRED", "BUSINESS_SCOPE_NOT_SUPPORTED"})
 EVENT_TYPES = frozenset({
     "RUN_ACCEPTED", "RUN_STARTED", "STEP_STARTED", "STEP_RETRY_SCHEDULED",
     "STEP_SUCCEEDED", "STEP_FAILED", "TOOL_STARTED", "TOOL_FINISHED",
@@ -82,7 +84,7 @@ def next_snapshot(current, proposed, event_type):
         raise VersionConflict("Stale run version")
     if current.status in TERMINAL_STATUSES:
         raise InvalidTransition("Run is already terminal")
-    immutable = ("run_id", "request_id", "user_id", "operation", "created_at", "deadline_at", "policy_version", "policy_snapshot_json")
+    immutable = ("run_id", "request_id", "user_id", "operation", "created_at", "deadline_at", "policy_version", "policy_snapshot_json", "task_id", "task_version")
     if any(getattr(current, name) != getattr(proposed, name) for name in immutable):
         raise InvalidTransition("Immutable run metadata changed")
     expected = {"RUN_STARTED": "running", "RUN_SUCCEEDED": "succeeded", "RUN_FAILED": "failed", "RUN_CANCELLED": "cancelled", "RUN_TIMED_OUT": "timed_out"}

@@ -47,7 +47,7 @@ class UserCipher:
 
 def test_agent_uses_injected_gateway_and_reports_model_metadata():
     result = run_fitlife_agent(
-        "Help me understand today",
+        "Help me understand today's nutrition",
         repository=FileFitnessRepository(),
         gateway=FakeGateway(),
     )
@@ -71,7 +71,7 @@ def test_authenticated_agent_uses_user_gateway_without_deployment_fallback(monke
         lambda: (_ for _ in ()).throw(AssertionError("deployment gateway must be ignored")),
     )
 
-    result = run_fitlife_agent("Help me understand today", user_id="user-a")
+    result = run_fitlife_agent("Help me understand today's nutrition", user_id="user-a")
 
     assert result["model"] == "fake-model"
     assert calls == ["user-a"]
@@ -162,7 +162,7 @@ def test_agent_normalizes_model_timeout_without_template_fallback():
 
     with pytest.raises(ApplicationError) as raised:
         run_fitlife_agent(
-            "Help me understand today",
+            "Help me understand today's nutrition",
             repository=FileFitnessRepository(),
             gateway=TimeoutGateway(),
         )
@@ -214,7 +214,7 @@ def test_agent_adds_preferences_as_context_without_changing_question_or_answer()
             return "## 原样保留的 Agent 回答"
 
     gateway = CapturingGateway()
-    question = "Answer this in the language I used, not the interface language."
+    question = "Explain nutrition in the language I used instead of the interface language."
 
     result = run_fitlife_agent(
         question,

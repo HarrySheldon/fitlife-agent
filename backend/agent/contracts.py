@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, Mapping, Protocol
 from pydantic import BaseModel
 from uuid import uuid4
+from backend.agent.tasks.contracts import TaskRef
 
 if TYPE_CHECKING:
     from backend.agent.runtime import RuntimeContext
@@ -22,6 +23,9 @@ class AgentCommand:
     initial_tool_calls: tuple[str, ...] = ()
     request_id: str | None = None
     request_overrides: Mapping[str, object] | None = None
+    task_ref: TaskRef | None = None
+    raw_coach_question: str | None = None
+    trusted_page_intent: bool = False
 
 
 @dataclass(frozen=True)
@@ -84,6 +88,12 @@ class AgentRunSnapshot:
     internal_error_id: str | None = None
     failure_stage: str | None = None
     version: int = 1
+    task_id: str | None = None
+    task_version: int | None = None
+
+    def __post_init__(self):
+        if self.task_id is not None or self.task_version is not None:
+            TaskRef(self.task_id, self.task_version)
 
 @dataclass(frozen=True)
 class CancelResult:

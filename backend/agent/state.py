@@ -14,6 +14,8 @@ class AgentState(TypedDict, total=False):
     context_metadata: dict
     intent: str
     profile: dict
+    writer_payload: dict
+    writer_payload_owner: str | None
     tool_requests: dict
     tool_calls: list[str]
     tool_results: dict

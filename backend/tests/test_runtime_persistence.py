@@ -56,6 +56,30 @@ def test_run_transition_and_event_are_versioned_and_atomic(repository):
         repository.get("run", "other-user")
 
 
+def test_task_link_survives_run_cancellation_and_cannot_change(repository):
+    from backend.agent.persistence import InvalidTransition
+    run = repository.create(AgentRunSnapshot("linked", "linked-q", "user", "chat", "accepted",
+                                              task_id="waiting-task", task_version=3))
+    with pytest.raises(InvalidTransition):
+        repository.update(replace(run, status="running", task_version=4), "RUN_STARTED")
+    cancelled = repository.update(replace(run, status="cancelled"), "RUN_CANCELLED")
+    assert repository.get("linked", "user") == cancelled
+    assert (cancelled.task_id, cancelled.task_version) == ("waiting-task", 3)
+
+
+def test_runtime_copies_command_task_link(repository):
+    from backend.agent.tasks.contracts import TaskRef
+
+    class Workflow:
+        async def execute(self, command, context):
+            return AgentResult("answer", "chat", {}, {}, (), "mock")
+
+    runtime = AgentRuntime(repository=repository)
+    outcome = runtime.execute_sync(AgentCommand("chat", "q", "user", task_ref=TaskRef("task", 4)), Workflow())
+    run = repository.get(outcome.run_id, "user")
+    assert (run.task_id, run.task_version) == ("task", 4)
+
+
 def test_invalid_payload_and_terminal_updates_never_append(repository):
     from backend.agent.persistence import InvalidTransition
     run = repository.create(AgentRunSnapshot("run", "request", "user", "chat", "accepted"))
@@ -87,6 +111,24 @@ def test_failure_is_durable_and_redacted(repository):
     assert run.failure_stage == "planner"
     assert repository.events(run.run_id, "user")[-1].payload["internal_error_id"] == run.internal_error_id
     assert "private" not in repr(run) + repr(repository.events(run.run_id, "user"))
+
+
+def test_task_budget_exhaustion_is_a_controlled_linked_run_failure(repository):
+    from backend.agent.tasks.contracts import TaskRef, task_error
+    from backend.domain.errors import ApplicationError
+
+    class Workflow:
+        async def execute(self, command, context):
+            raise task_error("TASK_BUDGET_EXHAUSTED")
+
+    runtime = AgentRuntime(repository=repository)
+    with pytest.raises(ApplicationError) as raised:
+        runtime.execute_sync(AgentCommand("chat", "question", "user", task_ref=TaskRef("waiting-task", 3)), Workflow())
+    run = repository.get(raised.value.run_id, "user")
+    assert run.status == "failed"
+    assert run.public_error_code == "TASK_BUDGET_EXHAUSTED"
+    assert (run.task_id, run.task_version) == ("waiting-task", 3)
+    assert repository.events(run.run_id, "user")[-1].payload["error_code"] == "TASK_BUDGET_EXHAUSTED"
 
 
 def test_checkpoint_metadata_is_separate_and_survives_reopen(tmp_path):

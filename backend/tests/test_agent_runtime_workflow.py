@@ -86,7 +86,7 @@ def test_explicit_workflow_runs_steps_in_order_and_skips_unrequested_retrieval()
     context = RuntimeContext()
     workflow = FitLifeWorkflow(FileFitnessRepository(), Gateway(needs_retrieval=False))
 
-    asyncio.run(workflow.execute(AgentCommand("chat", "hello", None), context))
+    asyncio.run(workflow.execute(AgentCommand("chat", "fitness advice", None), context))
 
     assert context.completed_steps == [
         "input_guard",
@@ -110,13 +110,13 @@ def test_explicit_workflow_includes_retriever_when_planner_requests_it():
         retriever=lambda query, top_k: [{"source": "test.md", "text": query}],
     )
 
-    result = asyncio.run(workflow.execute(AgentCommand("evaluation", "hello", None), context))
+    result = asyncio.run(workflow.execute(AgentCommand("evaluation", "fitness advice", None), context))
 
     # Asserted by relative order rather than by index, so adding a step does not
     # make this fail for an unrelated reason.
     steps = context.completed_steps
     assert steps.index("data_analyzer") < steps.index("retriever") < steps.index("writer")
-    assert result.sources == ({"source": "test.md", "text": "hello"},)
+    assert result.sources == ({"source": "test.md", "text": "fitness advice"},)
 
 
 def test_reused_workflow_gives_each_run_an_independent_nested_context_snapshot():
@@ -135,8 +135,8 @@ def test_reused_workflow_gives_each_run_an_independent_nested_context_snapshot()
     workflow = FitLifeWorkflow(FileFitnessRepository(), gateway, context_metadata=metadata)
     metadata["preferences"]["language"] = "externally-mutated"
 
-    asyncio.run(workflow.execute(AgentCommand("chat", "first", None), RuntimeContext()))
-    asyncio.run(workflow.execute(AgentCommand("chat", "second", None), RuntimeContext()))
+    asyncio.run(workflow.execute(AgentCommand("chat", "Explain fitness recovery", None), RuntimeContext()))
+    asyncio.run(workflow.execute(AgentCommand("chat", "Explain nutrition recovery", None), RuntimeContext()))
 
     assert gateway.observed_languages == ["zh-CN", "zh-CN"]
 

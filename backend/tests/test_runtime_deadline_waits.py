@@ -185,7 +185,7 @@ def test_lazy_gateway_initialization_is_bounded(monkeypatch):
     runtime = AgentRuntime(policy=RuntimePolicy(deadline_seconds=0.03))
     started = time.monotonic()
     with pytest.raises(RunTimedOut):
-        runtime.execute_sync(AgentCommand("chat", "hello", "u"), workflow)
+        runtime.execute_sync(AgentCommand("chat", "How is my protein intake?", "u"), workflow)
     assert time.monotonic() - started < 0.2
 
 

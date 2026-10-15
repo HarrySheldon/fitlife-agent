@@ -54,7 +54,8 @@ async def collect_review(
         return ReviewObservation(mode=mode, status="disabled")
 
     adapter = StructuredReviewAdapter(gateway=gateway)
-    input_text = json.dumps({"question": question, "draft": draft}, ensure_ascii=False)
+    from backend.agent.tasks.input_contracts import build_review_input
+    input_text = build_review_input(question=question, draft=draft).model_dump_json()
     # Charged before the call, like every other model input, so a run that cannot
     # afford the review does not make the request.
     context.consume_context(input_text)
