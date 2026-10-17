@@ -39,5 +39,7 @@ Files:
 ## Task 3: Finish synchronization and cleanup
 
 - [x] Verify administrator cleanup log contains `CLEANUP_OK` and the retired worktree directory is absent. Git must report main as the sole local branch and worktree.
-- [ ] Check staged paths explicitly exclude databases/backups/credentials; commit the repair and docs after fresh tests.
+- [x] Check staged paths explicitly exclude databases/backups/credentials; commit the repair and docs after fresh tests. Implementation and live acceptance committed as `f7e2318`.
 - [ ] Fetch and compare remote, push main without force, and delete only fully merged remote development branches using expected-ref checks. Re-read actual remote heads and require main/origin-main equality before reporting remote completion; report any genuine network blocker separately.
+
+Remote cleanup is complete: all 12 merged development branches were deleted with expected-ref guards and actual heads re-read as main only. Publication of this repair remains unverified: subsequent ordinary, HTTP/1.1, and IPv4 push attempts failed with connection reset/timeout. Cached origin/main remains `120f7ca`; do not report release-ready or synchronization until a fresh remote check succeeds.

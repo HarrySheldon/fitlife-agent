@@ -44,7 +44,9 @@ The preceding pre-implementation backup has the same checksum. Backups remain ig
 
 ## Scope and operational cleanup
 
-The old worktree's user data was explicitly discarded by the user. Its scoped administrator cleanup logged `CLEANUP_OK`; the directory is absent and Git lists only main and the primary worktree. Twelve fully merged remote development branches were removed with expected-ref guards, and actual remote heads were re-read to confirm main was the only branch. Final source publication is verified from Git after committing this acceptance record; this document does not claim an unperformed future push.
+The old worktree's user data was explicitly discarded by the user. Its scoped administrator cleanup logged `CLEANUP_OK`; the directory is absent and Git lists only main and the primary worktree. Twelve fully merged remote development branches were removed with expected-ref guards, and actual remote heads were re-read to confirm main was the only branch.
+
+Implementation and live acceptance are committed locally as `f7e2318`. The subsequent final publication attempts failed with GitHub connection resets/timeouts, including ordinary HTTPS, a temporary HTTP/1.1 override, and IPv4. Source publication is not confirmed; cached origin/main remains `120f7ca`. Local deployment is complete, but remote-complete/release-ready must not be claimed until a successful push and fresh ref comparison. No persistent network configuration was changed and no force push was used.
 
 Agent-created copies containing retained user data were removed after successful validation: `.tmp/catalog-release-rehearsal/` and `.tmp/retained-catalog-diagnosis-20261017.sqlite3` (including any sidecars). The formal database and verified recovery backups remain; synthetic test outputs do not represent additional active user databases.
 
