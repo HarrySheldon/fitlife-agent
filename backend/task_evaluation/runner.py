@@ -119,19 +119,55 @@ def _render_path(path: str, variables: dict[str, object]) -> str:
 def _capture(payload: dict, fields: dict[str, str], variables: dict[str, object]) -> dict[str, object]:
     captured: dict[str, object] = {}
     for variable, field_path in fields.items():
-        value = payload
-        for key in field_path.split("."):
-            if not isinstance(value, dict) or key not in value:
-                raise CaseError(
-                    f"Capture path {field_path!r} not present in response for {variable!r}"
-                )
-            value = value[key]
+        value = _response_value(payload, field_path)
         captured[variable] = value
         variables[variable] = value
     return captured
 
 
-def execute_scenario(scenario, client, *, headers_factory, observer=None, before_step=None, progress_metrics=None) -> CaseResult:
+def _response_value(payload, path):
+    parts = path.split(".")
+    if len(parts) > 20:
+        raise CaseError("Response path exceeds maximum depth")
+    value = payload
+    for key in parts:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        elif isinstance(value, list) and key.isascii() and key.isdecimal() and len(key) <= 3 and int(key) < len(value):
+            value = value[int(key)]
+        else:
+            raise CaseError("Response path is missing or invalid")
+    return value
+
+
+def _observe_response(payload, mapping):
+    """Only closed business metadata can enter a desensitized report."""
+    import re
+    integers = (r"data\.(version|remaining_draft_version)",
+                r"data\.payload\.interaction\.clarification_rounds",
+                r"data\.payload\.interaction\.items\.[0-9]{1,3}\.revision")
+    enums = {
+        r"data\.payload\.interaction\.status": {'collecting', 'awaiting_clarification', 'awaiting_confirmation', 'partially_saved', 'completed', 'cancelled', 'expired'},
+        r"data\.payload\.interaction\.items\.[0-9]{1,3}\.state": {'needs_clarification', 'ready', 'saved', 'discarded'},
+        r"data\.(item_commits|commits)\.[0-9]{1,3}\.record_state": {'unchanged', 'changed', 'deleted'},
+    }
+    result = {}
+    for key, path in mapping.items():
+        value = _response_value(payload, path)
+        if any(re.fullmatch(pattern, path) for pattern in integers):
+            valid = type(value) is int and 0 <= value <= 1_000_000
+        elif path == 'data.replayed':
+            valid = type(value) is bool
+        else:
+            allowed = next((values for pattern, values in enums.items() if re.fullmatch(pattern, path)), None)
+            valid = allowed is not None and isinstance(value, str) and value in allowed
+        if not valid:
+            raise CaseError("Response observation is not allowed metadata")
+        result[key] = value
+    return result
+
+
+def execute_scenario(scenario, client, *, headers_factory, observer=None, before_step=None, progress_metrics=None, supported_capabilities=frozenset()) -> CaseResult:
     """Run one scenario's steps in-process against a TestClient.
 
     ``headers_factory`` returns the auth headers for the scenario's user. The runner
@@ -149,6 +185,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
     valid_candidates = {}
     confirmations = {}
     response_ready_ms = None
+    snapshots = {}
     def incomplete(status, failures):
         if observer:
             observed.update(observer())
@@ -156,7 +193,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
                           failures=failures, steps=tuple(steps), metrics={"processing_ms": processing_ms,
                           "candidate_ms": candidate_ms, "first_candidate": first_candidate, "confirmed_candidate": confirmed_candidate,
                           "candidate_reason": "no_verified_candidate" if candidate_ms is None else "validated_candidate"})
-    if scenario.requires:
+    if not set(scenario.requires).issubset(supported_capabilities):
         return CaseResult(scenario.id, scenario.version, "unsupported", failures=("requires",))
 
     for step in scenario.steps:
@@ -164,6 +201,20 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
         if before_step:
             before_step(step)
         body = _resolve(step.body or {}, variables)
+        if step.answer_by_field and path.endswith('/interaction/answers'):
+            resource_path = path.removesuffix('/interaction/answers')
+            snapshot = snapshots.get((step.actor, resource_path))
+            groups = snapshot.get('payload', {}).get('interaction', {}).get('question_groups', []) if snapshot else []
+            pending = [group for group in groups if group.get('answered') is False]
+            if len(pending) != 1:
+                return incomplete('unexpected_question', ('no_pending_questions',))
+            group = pending[0]
+            scripted = _resolve(step.answer_by_field, variables)
+            if any(question['field'] not in scripted for question in group['questions']):
+                return incomplete('unexpected_question', ('unscripted_field',))
+            body = {'expected_version': snapshot['version'], 'question_group_id': group['group_id'],
+                    'answers': [{'item_id': question['item_id'], 'field': question['field'],
+                                 'value': scripted[question['field']]} for question in group['questions']]}
         try:
             headers = dict(headers_factory(step.actor))
         except TypeError:
@@ -184,6 +235,8 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
         captured = {}
         payload = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        if response.status_code == 200 and isinstance(data.get('id'), str) and isinstance(data.get('payload'), dict):
+            snapshots[(step.actor, '/api/v1/smart-entry-drafts/' + data['id'])] = data
         candidates = data.get("payload", {}).get("candidates", []) if isinstance(data.get("payload"), dict) else []
         if response.status_code == 200 and candidates:
             from backend.infrastructure.repositories.sqlite_smart_entry_repository import _candidate, _validate_selected_candidates
@@ -234,7 +287,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
             names = [item.get("name", item.get("field")) if isinstance(item, dict) else item for item in missing]
             status = "unexpected_question" if any(name not in step.answer_by_field for name in names) else "unsupported"
             return incomplete(status, ("missing_fields",))
-        if step.answer_by_field:
+        if step.answer_by_field and not path.endswith('/interaction/answers'):
             return incomplete("unsupported", ("answer_flow",))
         steps.append(StepResult(path=step.path, status=response.status_code))
         if step.expected_status is not None and response.status_code != step.expected_status:
@@ -242,7 +295,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
         if step.capture:
             _capture(payload, step.capture, variables)
         if step.observe:
-            raise CaseError("Response observations are not supported; use persisted state")
+            observed.update(_observe_response(payload, step.observe))
 
     if observer:
         observed.update(observer())

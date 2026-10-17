@@ -24,6 +24,35 @@ beforeEach(() => {
 })
 
 describe('smart entry API client', () => {
+  it('sends revision-bound selections, answer nulls, and only correction fields', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => success({}))
+    const { smartEntryApi } = await import('./smartEntryApi')
+    await smartEntryApi.answerInteraction('draft/1', 4, 'key-a', 'group-2', [{ item_id: 'food-1', field: 'amount', value: null }])
+    await smartEntryApi.correctInteraction('draft/1', 5, 'key-b', 'food-1', 2, { amount: 100, intake_ratio: 0.5, interaction: { active: true } } as Parameters<typeof smartEntryApi.correctInteraction>[5])
+    await smartEntryApi.confirmItems('draft/1', 6, 'key-c', [{ item_id: 'food-1', item_revision: 3 }], [{ item_id: 'food-1', item_revision: 3 }])
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/smart-entry-drafts/draft%2F1/interaction/answers')
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ expected_version: 4, question_group_id: 'group-2', answers: [{ item_id: 'food-1', field: 'amount', value: null }] })
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ expected_version: 5, item_id: 'food-1', item_revision: 2, updates: { amount: 100, intake_ratio: 0.5 } })
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ expected_version: 6, selections: [{ item_id: 'food-1', item_revision: 3 }], accepted_estimates: [{ item_id: 'food-1', item_revision: 3 }] })
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('Idempotency-Key')).toBe('key-c')
+  })
+
+  it('reads server capabilities and posts only whitelisted interaction command fields', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => success({}))
+    const { smartEntryApi } = await import('./smartEntryApi')
+    await smartEntryApi.capabilities()
+    await smartEntryApi.startInteraction('draft-1', 2, 'command-key')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/smart-entry-drafts/capabilities')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/smart-entry-drafts/draft-1/interaction/start')
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ expected_version: 2 })
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('Idempotency-Key')).toBe('command-key')
+    await smartEntryApi.updateDraft('draft-1', 2, {
+      ...payload,
+      interaction: { active: true },
+    } as SmartEntryDraftPayload)
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual(payload)
+  })
+
   it('uses optimistic-lock and idempotency headers for explicit commands', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockImplementation(async () => success({}))

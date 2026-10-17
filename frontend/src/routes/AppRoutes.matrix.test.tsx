@@ -42,7 +42,7 @@ vi.mock('../services/api', async (importOriginal) => {
 })
 vi.mock('../services/mealApi', () => ({ mealApi: { searchFoods: vi.fn(), setFavorite: vi.fn(), createCustomFood: vi.fn(), createDraft: vi.fn(), getDraft: vi.fn(), updateDraft: vi.fn(), deleteDraft: vi.fn(), confirmDraft: vi.fn() } }))
 vi.mock('../services/workoutApi', () => ({ workoutApi: { searchExercises: vi.fn(), setFavorite: vi.fn(), createCustomExercise: vi.fn(), createDraft: vi.fn(), findLatestDraft: vi.fn(), getDraft: vi.fn(), updateDraft: vi.fn(), deleteDraft: vi.fn(), confirmDraft: vi.fn() } }))
-vi.mock('../services/smartEntryApi', () => ({ smartEntryApi: { createDraft: vi.fn(), findLatestDraft: vi.fn(), getDraft: vi.fn(), updateDraft: vi.fn(), deleteDraft: vi.fn(), analyzeDraft: vi.fn(), confirmDraft: vi.fn() } }))
+vi.mock('../services/smartEntryApi', () => ({ smartEntryApi: { capabilities: vi.fn(), createDraft: vi.fn(), findLatestDraft: vi.fn(), getDraft: vi.fn(), updateDraft: vi.fn(), deleteDraft: vi.fn(), analyzeDraft: vi.fn(), confirmDraft: vi.fn() } }))
 
 const taskRoutes = [
   { path: '/today/meal/new?date=2026-08-26', heading: 'Add a meal', back: 'Back to Today', role: 'button', expectedBack: '/' },
@@ -81,6 +81,7 @@ beforeEach(async () => {
   vi.mocked(workoutApi.searchExercises).mockResolvedValue([])
   vi.mocked(workoutApi.findLatestDraft).mockResolvedValue(null)
   vi.mocked(smartEntryApi.findLatestDraft).mockResolvedValue(null)
+  vi.mocked(smartEntryApi.capabilities).mockResolvedValue({ interactive_entry_enabled: false, entry_task_ttl_days: 30 })
   await i18n.changeLanguage('en-US')
 })
 

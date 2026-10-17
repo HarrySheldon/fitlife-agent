@@ -25,11 +25,19 @@ from backend.application.use_cases.smart_entry import (
     SmartEntryService,
     SmartEntryServiceError,
 )
+from backend.application.use_cases.interactive_entry import InteractiveEntryService, project_resumed_draft
+from backend.api.smart_entry_schemas import (
+    InteractionStartRequest, InteractionAnswersRequest, InteractionCorrectionRequest,
+    InteractionConfirmRequest, ConfirmedEntryItemsResponse, InteractiveCapabilitiesResponse,
+)
+from backend.domain.entry_resolution import catalog_signature
+from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
 from backend.config import get_settings
 from backend.domain.smart_entry import CatalogChoice, ResolvedCandidate
 from backend.infrastructure.model_gateway.factory import (
     resolve_user_model_gateway,
 )
+from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
     SQLiteExerciseCatalogRepository,
 )
@@ -61,7 +69,42 @@ def get_smart_entry_service() -> SmartEntryService:
             user_id,
         ),
         gateway_resolver=resolve_user_model_gateway,
+        entry_task_ttl_days=get_settings().entry_task_ttl_days,
     )
+
+
+def get_interactive_entry_service() -> InteractiveEntryService:
+    database = get_database()
+    settings = get_settings()
+    def model_available(user):
+        # Metadata admission only. Runtime resolves and decrypts after its guards.
+        connection = FileModelConnectionRepository(settings.data_dir).get(user)
+        return bool(connection and connection.enabled and connection.encrypted_api_key)
+    return InteractiveEntryService(
+        SQLiteSmartEntryRepository(database), SQLiteFoodCatalogRepository(database),
+        SQLiteTaskBudgetRepository(database), enabled=settings.interactive_entry_enabled,
+        gateway_resolver=resolve_user_model_gateway, model_available=model_available,
+        mutation_scope=lambda user: user_lifecycle_guard(settings.data_dir, user),
+    )
+
+
+def _interaction_response(service, user, draft):
+    result = asdict(draft)
+    result['item_commits'] = [asdict(item) for item in service.repository.list_entry_item_commits(user, draft.id)]
+    result['dependency_validity'] = []
+    for dependency in draft.payload.interaction.dependencies:
+        food = service.food_catalog.get_visible_food(user, dependency.catalog_id)
+        result['dependency_validity'].append({'item_id': dependency.item_id,
+            'catalog_id': dependency.catalog_id,
+            'valid': food is not None and catalog_signature(food) == dependency.signature})
+    return result
+
+
+@router.get('/capabilities', response_model=ApiResponse[InteractiveCapabilitiesResponse])
+def interactive_capabilities(user: AuthenticatedUser = Depends(require_current_user)):
+    settings = get_settings()
+    return ok({'interactive_entry_enabled': settings.interactive_entry_enabled,
+               'entry_task_ttl_days': settings.entry_task_ttl_days}, processing_mode='deterministic')
 
 
 @router.post("", response_model=ApiResponse[SmartEntryDraftResponse])
@@ -84,13 +127,15 @@ def find_latest_draft(
     log_date: date = Query(alias="date"),
     user: AuthenticatedUser = Depends(require_current_user),
     service: SmartEntryService = Depends(get_smart_entry_service),
+    interaction_service: InteractiveEntryService = Depends(get_interactive_entry_service),
 ):
     draft = service.find_latest_draft(
         user.user_id,
         log_date.isoformat(),
     )
     return ok(
-        asdict(draft) if draft is not None else None,
+        _interaction_response(interaction_service, user.user_id,
+            interaction_service.resume(user.user_id, draft.id)) if draft is not None else None,
         processing_mode="deterministic",
     )
 
@@ -99,12 +144,52 @@ def find_latest_draft(
 def get_draft(
     draft_id: str,
     user: AuthenticatedUser = Depends(require_current_user),
-    service: SmartEntryService = Depends(get_smart_entry_service),
+    service: InteractiveEntryService = Depends(get_interactive_entry_service),
 ):
-    draft = service.get_draft(user.user_id, draft_id)
-    if draft is None:
-        raise SmartEntryServiceError("DRAFT_NOT_FOUND", status_code=404)
-    return ok(asdict(draft), processing_mode="deterministic")
+    draft = service.resume(user.user_id, draft_id)
+    return ok(_interaction_response(service, user.user_id, draft), processing_mode="deterministic")
+
+
+@router.post('/{draft_id}/interaction/start', response_model=ApiResponse[SmartEntryDraftResponse])
+def start_interaction(draft_id: str, payload: InteractionStartRequest,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    user: AuthenticatedUser = Depends(require_current_user),
+    service: InteractiveEntryService = Depends(get_interactive_entry_service)):
+    draft = service.start(user.user_id, draft_id, expected_version=payload.expected_version,
+                          key=_idempotency_key(idempotency_key))
+    return ok(_interaction_response(service, user.user_id, draft),
+        processing_mode='agent' if draft.payload.interaction.run_ids else 'deterministic')
+
+
+@router.post('/{draft_id}/interaction/answers', response_model=ApiResponse[SmartEntryDraftResponse])
+def answer_interaction(draft_id: str, payload: InteractionAnswersRequest,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    user: AuthenticatedUser = Depends(require_current_user),
+    service: InteractiveEntryService = Depends(get_interactive_entry_service)):
+    draft = service.answer(user.user_id, draft_id, **payload.model_dump(),
+                           key=_idempotency_key(idempotency_key))
+    return ok(_interaction_response(service, user.user_id, draft), processing_mode='deterministic')
+
+
+@router.post('/{draft_id}/interaction/corrections', response_model=ApiResponse[SmartEntryDraftResponse])
+def correct_interaction(draft_id: str, payload: InteractionCorrectionRequest,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    user: AuthenticatedUser = Depends(require_current_user),
+    service: InteractiveEntryService = Depends(get_interactive_entry_service)):
+    values = payload.model_dump()
+    values['updates'] = payload.updates.model_dump(exclude_unset=True)
+    draft = service.correct(user.user_id, draft_id, **values, key=_idempotency_key(idempotency_key))
+    return ok(_interaction_response(service, user.user_id, draft), processing_mode='deterministic')
+
+
+@router.post('/{draft_id}/confirm-items', response_model=ApiResponse[ConfirmedEntryItemsResponse])
+def confirm_interaction_items(draft_id: str, payload: InteractionConfirmRequest,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
+    user: AuthenticatedUser = Depends(require_current_user),
+    service: InteractiveEntryService = Depends(get_interactive_entry_service)):
+    result = service.confirm_items(user.user_id, draft_id, **payload.model_dump(),
+        key=_idempotency_key(idempotency_key), timezone_name=preferences_for(user).timezone)
+    return ok(asdict(result), processing_mode='deterministic')
 
 
 @router.patch("/{draft_id}", response_model=ApiResponse[SmartEntryDraftResponse])
@@ -114,6 +199,7 @@ def update_draft(
     if_match: str | None = Header(default=None, alias="If-Match"),
     user: AuthenticatedUser = Depends(require_current_user),
     service: SmartEntryService = Depends(get_smart_entry_service),
+    interaction_service: InteractiveEntryService = Depends(get_interactive_entry_service),
 ):
     draft = service.update_draft(
         user.user_id,
@@ -122,7 +208,11 @@ def update_draft(
         payload=_payload(payload),
         weight_kg=_weight(user.user_id),
     )
-    return ok(asdict(draft), processing_mode="deterministic")
+    result = (_interaction_response(interaction_service, user.user_id,
+                project_resumed_draft(draft, lambda catalog_id:
+                    interaction_service.food_catalog.get_visible_food(user.user_id, catalog_id)))
+              if draft.payload.interaction.active else asdict(draft))
+    return ok(result, processing_mode="deterministic")
 
 
 @router.delete(

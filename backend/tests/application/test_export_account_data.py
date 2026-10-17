@@ -22,6 +22,41 @@ def make_data_dir() -> Path:
     return Path(".tmp") / "pytest-account-export" / uuid4().hex
 
 
+def test_export_includes_injected_read_only_entry_task_source():
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register('entry-export', None, None, 'password123', 'Entry')
+
+    class EntryTasks:
+        def export_entry_tasks(self, user_id, *, max_bytes):
+            assert user_id == user.user_id
+            assert 0 < max_bytes <= export_module.MAX_SOURCE_BYTES
+            return b'{"drafts": [], "budgets": [], "commits": []}'
+
+    archive = ExportAccountData(data_dir, identities, entry_tasks=EntryTasks()).execute(user.user_id)
+    with ZipFile(io.BytesIO(archive)) as exported:
+        assert json.loads(exported.read('entry-drafts.json')) == {'drafts': [], 'budgets': [], 'commits': []}
+
+
+@pytest.mark.parametrize('aggregate', [False, True])
+def test_entry_export_source_counts_towards_source_and_aggregate_limits(monkeypatch, aggregate):
+    data_dir = make_data_dir()
+    identities = FileIdentityRepository(data_dir)
+    user = identities.register('entry-limit', None, None, 'password123', 'Entry')
+
+    class OversizedTasks:
+        def export_entry_tasks(self, user_id, *, max_bytes):
+            return b'x' * (max_bytes + 1)
+
+    if aggregate:
+        monkeypatch.setattr(export_module, 'MAX_EXPORT_BYTES', (data_dir / 'users.json').stat().st_size + 10)
+    else:
+        monkeypatch.setattr(export_module, 'MAX_SOURCE_BYTES', 1024)
+    with pytest.raises(ApplicationError) as error:
+        ExportAccountData(data_dir, identities, entry_tasks=OversizedTasks()).execute(user.user_id)
+    assert_export_failed(error.value)
+
+
 def assert_export_failed(error: ApplicationError) -> None:
     assert error.code == "ACCOUNT_EXPORT_FAILED"
     assert error.message == "Account data could not be exported. Please try again."

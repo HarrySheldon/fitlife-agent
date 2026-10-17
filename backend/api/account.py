@@ -20,6 +20,7 @@ from backend.infrastructure.repositories.sqlite_profile_target_repository import
 )
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.repositories.sqlite_entry_task_lifecycle import SQLiteEntryTaskLifecycleRepository
 from backend.schemas import (
     AccountDeleteRequest,
     AccountPasswordChangeRequest,
@@ -67,6 +68,7 @@ def export_account_data(
         settings.data_dir,
         FileIdentityRepository(settings.data_dir),
         FileModelConnectionRepository(settings.data_dir),
+        entry_tasks=SQLiteEntryTaskLifecycleRepository(get_database()),
     ).execute(principal.user.user_id)
     return Response(
         content=archive,

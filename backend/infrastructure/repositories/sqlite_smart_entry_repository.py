@@ -15,7 +15,9 @@ from backend.application.ports.smart_entry_repository import (
     SmartEntryDraftPayload,
     SmartEntryRepositoryError,
 )
-from backend.domain.smart_entry import CatalogChoice, ResolvedCandidate
+from backend.domain.smart_entry import CatalogChoice, ResolvedCandidate, is_training_only_update
+from backend.domain.entry_interaction import (EntryInteraction, EntryItem, EntryQuestion,
+    EntryQuestionGroup, CatalogDependency, project_interaction)
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.repositories.sqlite_daily_log import (
     ensure_daily_log,
@@ -33,6 +35,23 @@ _CONFIRM_OPERATION = "smart_entry_confirm"
 
 
 class SQLiteSmartEntryRepository:
+    def list_entry_item_commits(self, user_id, draft_id):
+        from backend.infrastructure.repositories.sqlite_entry_item_commits import _facts
+        with self.database.connection() as connection:
+            _require_draft(connection, user_id, draft_id, expected_version=None, now=self._clock())
+            rows = connection.execute(
+                'SELECT item_id, item_revision FROM entry_item_commits WHERE user_id=? AND draft_id=? ORDER BY item_id, item_revision',
+                (user_id, draft_id)).fetchall()
+            return _facts(connection, user_id, draft_id,
+                          tuple((row['item_id'], row['item_revision']) for row in rows))
+
+    def confirm_items(self, user_id, draft_id, **arguments):
+        from backend.infrastructure.repositories.sqlite_entry_item_commits import confirm_items
+        try:
+            return confirm_items(self, user_id, draft_id, **arguments)
+        except sqlite3.Error:
+            raise SmartEntryRepositoryError('SMART_ENTRY_CONFIRM_FAILED') from None
+
     def __init__(
         self,
         database: SQLiteDatabase,
@@ -44,6 +63,83 @@ class SQLiteSmartEntryRepository:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._id_factory = id_factory or (lambda: uuid4().hex)
 
+    def read_interaction_draft(self, user_id: str, draft_id: str) -> SmartEntryDraft:
+        """Owner-bound read which distinguishes expired drafts from missing ones."""
+        with self.database.connection() as connection:
+            row = _require_draft(connection, user_id, draft_id,
+                                 expected_version=None, now=self._clock())
+            return _draft(row)
+
+    def get_interaction_command_result(
+        self, user_id: str, draft_id: str, *, idempotency_key: str,
+        request_fingerprint: str,
+    ) -> SmartEntryDraft | None:
+        """Read a receipt without preparing a command or granting write authority."""
+        with self.database.connection() as connection:
+            _require_draft(connection, user_id, draft_id,
+                           expected_version=None, now=self._clock())
+            receipt = connection.execute(
+                'SELECT request_fingerprint, response_json FROM entry_interaction_commands WHERE draft_id = ? AND idempotency_key = ?',
+                (draft_id, idempotency_key),
+            ).fetchone()
+            if receipt is None:
+                return None
+            if receipt['request_fingerprint'] != request_fingerprint:
+                raise SmartEntryRepositoryError('IDEMPOTENCY_KEY_REUSED')
+            return _command_snapshot(receipt['response_json'], user_id, draft_id)
+
+    def execute_interaction_command(
+        self, user_id: str, draft_id: str, *, expected_version: int,
+        idempotency_key: str, request_fingerprint: str,
+        transform: Callable[[SmartEntryDraft], SmartEntryDraftPayload],
+    ) -> SmartEntryDraft:
+        """Commit a trusted, pure application transform and its replay snapshot atomically.
+
+        Model calls must finish before entering this seam. The supplied version
+        then prevents a stale model result overwriting an intervening edit.
+        """
+        if type(expected_version) is not int or expected_version < 1:
+            raise SmartEntryRepositoryError('DRAFT_VERSION_INVALID')
+        if (not isinstance(idempotency_key, str) or not idempotency_key.strip()
+                or len(idempotency_key) > 200 or not isinstance(request_fingerprint, str)
+                or not request_fingerprint.strip() or len(request_fingerprint) > 200):
+            raise SmartEntryRepositoryError('INTERACTION_COMMAND_INVALID')
+        with self.database.transaction() as connection:
+            now = self._clock()
+            previous = _require_draft(connection, user_id, draft_id, expected_version=None, now=now)
+            receipt = connection.execute(
+                'SELECT request_fingerprint, response_json FROM entry_interaction_commands WHERE draft_id = ? AND idempotency_key = ?',
+                (draft_id, idempotency_key),
+            ).fetchone()
+            if receipt is not None:
+                if receipt['request_fingerprint'] != request_fingerprint:
+                    raise SmartEntryRepositoryError('IDEMPOTENCY_KEY_REUSED')
+                return _command_snapshot(receipt['response_json'], user_id, draft_id)
+            if previous['version'] != expected_version:
+                raise SmartEntryRepositoryError('DRAFT_VERSION_CONFLICT')
+            current = _draft(previous)
+            payload = transform(current)
+            _protect_terminal_interaction(payload, current.payload)
+            serialized = _payload_json(payload)
+            # Decode with the same closed storage validator before persisting.
+            check = dict(previous)
+            check.update(payload_json=serialized, schema_version=2)
+            _draft(check)
+            connection.execute(
+                'UPDATE record_drafts SET payload_json = ?, schema_version = 2, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ? AND version = ?',
+                (serialized, _timestamp(now), draft_id, user_id, expected_version),
+            )
+            row = connection.execute('SELECT * FROM record_drafts WHERE id = ?', (draft_id,)).fetchone()
+            result = _draft(row)
+            snapshot = _json(dict(row))
+            if len(snapshot.encode('utf-8')) > 288 * 1024:
+                raise SmartEntryRepositoryError('INTERACTION_RESPONSE_TOO_LARGE')
+            connection.execute(
+                'INSERT INTO entry_interaction_commands (draft_id, idempotency_key, request_fingerprint, response_json) VALUES (?, ?, ?, ?)',
+                (draft_id, idempotency_key, request_fingerprint, snapshot),
+            )
+            return result
+
     def create_draft(
         self,
         user_id: str,
@@ -51,6 +147,8 @@ class SQLiteSmartEntryRepository:
         *,
         expires_at: str,
     ) -> SmartEntryDraft:
+        _payload_json(payload)
+        payload = _storage_payload(payload)
         serialized = _payload_json(payload)
         now_value = self._clock()
         now = _timestamp(now_value)
@@ -64,7 +162,7 @@ class SQLiteSmartEntryRepository:
                     agent_status, agent_metadata_json, expires_at,
                     created_at, updated_at
                 ) VALUES (
-                    ?, ?, 'smart_entry', 1, ?, 1,
+                    ?, ?, 'smart_entry', 2, ?, 1,
                     'not_requested', '{}', ?, ?, ?
                 )
                 """,
@@ -121,21 +219,28 @@ class SQLiteSmartEntryRepository:
         expected_version: int,
         payload: SmartEntryDraftPayload,
     ) -> SmartEntryDraft:
-        serialized = _payload_json(payload)
+        _payload_json(payload)
         with self.database.transaction() as connection:
             now_value = self._clock()
             now = _timestamp(now_value)
-            _require_draft(
+            previous = _require_draft(
                 connection,
                 user_id,
                 draft_id,
                 expected_version=expected_version,
                 now=now_value,
             )
+            old_payload = _draft(previous).payload
+            _protect_terminal(payload, old_payload)
+            if old_payload.interaction.active:
+                payload = _training_storage_payload(payload, old_payload)
+            else:
+                payload = _storage_payload(payload, old_payload.interaction)
+            serialized = _payload_json(payload)
             cursor = connection.execute(
                 """
                 UPDATE record_drafts
-                SET payload_json = ?, version = version + 1,
+                SET payload_json = ?, schema_version = 2, version = version + 1,
                     agent_status = 'not_requested',
                     agent_prompt_version = NULL,
                     agent_model = NULL,
@@ -244,17 +349,21 @@ class SQLiteSmartEntryRepository:
         with self.database.transaction() as connection:
             now_value = self._clock()
             now = _timestamp(now_value)
-            _require_draft(
+            previous = _require_draft(
                 connection,
                 user_id,
                 draft_id,
                 expected_version=expected_version,
                 now=now_value,
             )
+            old_payload = _draft(previous).payload
+            next_payload = old_payload if payload_json is None else _payload_from_json(payload_json)
+            _protect_terminal(next_payload, old_payload)
+            payload_json = _payload_json(_storage_payload(next_payload, old_payload.interaction))
             cursor = connection.execute(
                 """
                 UPDATE record_drafts
-                SET payload_json = COALESCE(?, payload_json),
+                SET payload_json = ?, schema_version = 2,
                     version = version + 1,
                     agent_status = ?,
                     agent_prompt_version = ?,
@@ -331,6 +440,12 @@ class SQLiteSmartEntryRepository:
                 selected = tuple(
                     item for item in draft.payload.candidates if item.selected
                 )
+                active = draft.payload.interaction.active and any(
+                    candidate.kind == 'food' for candidate in draft.payload.candidates)
+                if active:
+                    selected = tuple(item for item in selected if item.kind != 'food')
+                    if not selected:
+                        raise SmartEntryRepositoryError('INTERACTION_CONFIRM_ITEMS_REQUIRED')
                 _validate_selected_candidates(selected)
                 ensure_daily_log(
                     connection,
@@ -406,13 +521,17 @@ class SQLiteSmartEntryRepository:
                         now,
                     ),
                 )
-                connection.execute(
-                    """
-                    DELETE FROM record_drafts
-                    WHERE id = ? AND user_id = ? AND kind = 'smart_entry'
-                    """,
-                    (draft_id, user_id),
-                )
+                if active:
+                    consumed = {item.id for item in selected}
+                    payload = replace(draft.payload, candidates=tuple(
+                        item for item in draft.payload.candidates if item.id not in consumed))
+                    connection.execute('UPDATE record_drafts SET payload_json=?, version=version+1, updated_at=? WHERE id=? AND user_id=?',
+                                       (_payload_json(payload), now, draft_id, user_id))
+                else:
+                    connection.execute(
+                        "DELETE FROM record_drafts WHERE id = ? AND user_id = ? AND kind = 'smart_entry'",
+                        (draft_id, user_id),
+                    )
             return confirmed
         except sqlite3.Error:
             raise SmartEntryRepositoryError(
@@ -702,6 +821,143 @@ def _payload_json(payload: SmartEntryDraftPayload) -> str:
     return serialized
 
 
+def _protect_terminal(payload: SmartEntryDraftPayload, previous: SmartEntryDraftPayload) -> None:
+    old_candidates = {candidate.id: candidate for candidate in previous.candidates}
+    candidates = {candidate.id: candidate for candidate in payload.candidates}
+    for item in previous.interaction.items:
+        if item.state in ('saved', 'discarded') and candidates.get(item.item_id) != old_candidates[item.item_id]:
+            raise SmartEntryRepositoryError('ITEM_NOT_EDITABLE')
+
+
+def _protect_terminal_interaction(payload: SmartEntryDraftPayload, previous: SmartEntryDraftPayload) -> None:
+    _protect_terminal(payload, previous)
+    items = {item.item_id: item for item in payload.interaction.items}
+    for item in previous.interaction.items:
+        if item.state in ('saved', 'discarded') and items.get(item.item_id) != item:
+            raise SmartEntryRepositoryError('ITEM_NOT_EDITABLE')
+
+
+def _command_snapshot(serialized: str, user_id: str, draft_id: str) -> SmartEntryDraft:
+    try:
+        if not isinstance(serialized, str) or len(serialized.encode('utf-8')) > 288 * 1024:
+            raise ValueError
+        row = json.loads(serialized)
+        fields = {'id', 'user_id', 'kind', 'schema_version', 'payload_json', 'version',
+                  'agent_status', 'agent_prompt_version', 'agent_model',
+                  'agent_metadata_json', 'expires_at', 'created_at', 'updated_at'}
+        if (not isinstance(row, dict) or set(row) != fields
+                or row.get('id') != draft_id or row.get('user_id') != user_id
+                or row.get('kind') != 'smart_entry' or type(row.get('version')) is not int
+                or row['version'] < 1 or type(row.get('schema_version')) is not int
+                or row['schema_version'] != 2):
+            raise ValueError
+        if row['agent_status'] not in ('not_requested', 'running', 'completed', 'failed'):
+            raise ValueError
+        for key in ('agent_model', 'agent_prompt_version'):
+            if row[key] is not None and not isinstance(row[key], str):
+                raise ValueError
+        for key in ('expires_at', 'created_at', 'updated_at', 'payload_json', 'agent_metadata_json'):
+            if not isinstance(row[key], str) or not row[key].strip():
+                raise ValueError
+        expiry = datetime.fromisoformat(row['expires_at'].replace('Z', '+00:00'))
+        if expiry.tzinfo is None:
+            raise ValueError
+        return _draft(row)
+    except (ValueError, TypeError, KeyError, RecursionError):
+        raise SmartEntryRepositoryError('IDEMPOTENCY_RESPONSE_CORRUPT') from None
+
+
+def _training_storage_payload(payload: SmartEntryDraftPayload, previous: SmartEntryDraftPayload) -> SmartEntryDraftPayload:
+    if ((payload.log_date, payload.raw_text, payload.parser_version)
+            != (previous.log_date, previous.raw_text, previous.parser_version)
+            or payload.interaction != previous.interaction
+            or not is_training_only_update(previous.candidates, payload.candidates)):
+        raise SmartEntryRepositoryError('INTERACTION_ACTIVE')
+    foods = {item.id: item for item in previous.candidates if item.kind == 'food'}
+    return replace(payload, interaction=previous.interaction,
+        candidates=tuple(foods.get(item.id, item) for item in payload.candidates))
+
+
+def _storage_payload(payload: SmartEntryDraftPayload, previous: EntryInteraction | None = None) -> SmartEntryDraftPayload:
+    interaction = previous or payload.interaction or project_interaction(payload.candidates)
+    if previous is not None and previous.active:
+        raise SmartEntryRepositoryError('INTERACTION_ACTIVE')
+    projected = project_interaction(payload.candidates, schema_version=2)
+    old_items = {item.item_id: item for item in interaction.items}
+    candidates = {candidate.id: candidate for candidate in payload.candidates if candidate.kind == 'food'}
+    for item in interaction.items:
+        if item.state in ('saved', 'discarded'):
+            candidate = candidates.get(item.item_id)
+            if candidate is None or candidate.values != item.values:
+                raise SmartEntryRepositoryError('ITEM_NOT_EDITABLE')
+    items = []
+    for item in projected.items:
+        old = old_items.get(item.item_id)
+        if old is not None:
+            if old.values == item.values:
+                item = old
+            else:
+                item = replace(item, revision=old.revision + 1)
+        items.append(item)
+    return replace(payload, interaction=replace(interaction, schema_version=2, items=tuple(items)))
+
+
+def _interaction(value: object, candidates: tuple[ResolvedCandidate, ...]) -> EntryInteraction:
+    if value is None:
+        return project_interaction(candidates)
+    required = {'schema_version', 'clarification_rounds', 'items', 'active'}
+    optional = {'status', 'question_groups', 'dependencies', 'run_ids'}
+    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - optional:
+        raise TypeError
+    if not isinstance(value['items'], list):
+        raise TypeError
+    items = []
+    for data in value['items']:
+        if not isinstance(data, dict) or set(data) != {'item_id', 'revision', 'state', 'values', 'sources', 'missing_fields', 'assumptions'}:
+            raise TypeError
+        if not isinstance(data['values'], dict) or not isinstance(data['sources'], dict):
+            raise TypeError
+        for key in ('missing_fields', 'assumptions'):
+            if not isinstance(data[key], list) or any(not isinstance(item, str) for item in data[key]):
+                raise TypeError
+        items.append(EntryItem(**{**data, 'missing_fields': tuple(data['missing_fields']), 'assumptions': tuple(data['assumptions'])}))
+    groups = []
+    for data in value.get('question_groups', []):
+        if not isinstance(data, dict) or set(data) != {'group_id', 'asked_at', 'expected_version', 'questions', 'answered'}:
+            raise TypeError
+        questions = []
+        for question in data['questions']:
+            if not isinstance(question, dict) or set(question) != {'item_id', 'field', 'portion_options'}:
+                raise TypeError
+            if not isinstance(question['portion_options'], list):
+                raise TypeError
+            questions.append(EntryQuestion(**{**question, 'portion_options': tuple(question['portion_options'])}))
+        groups.append(EntryQuestionGroup(**{**data, 'questions': tuple(questions)}))
+    dependencies = []
+    for data in value.get('dependencies', []):
+        if not isinstance(data, dict) or set(data) != {'item_id', 'catalog_id', 'signature'}:
+            raise TypeError
+        dependencies.append(CatalogDependency(**data))
+    for key in ('question_groups', 'dependencies', 'run_ids'):
+        if key in value and not isinstance(value[key], list):
+            raise TypeError
+    interaction = EntryInteraction(**{**value, 'items': tuple(items),
+        'question_groups': tuple(groups), 'dependencies': tuple(dependencies),
+        'run_ids': tuple(value.get('run_ids', ()))})
+    food_candidates = {candidate.id: candidate for candidate in candidates if candidate.kind == 'food'}
+    if len(food_candidates) != len(interaction.items) or {item.item_id for item in interaction.items} != set(food_candidates):
+        raise TypeError
+    if any(item.values != food_candidates[item.item_id].values for item in interaction.items):
+        raise TypeError
+    return interaction
+
+
+def _payload_from_json(serialized: str) -> SmartEntryDraftPayload:
+    data = json.loads(serialized)
+    candidates = tuple(_candidate(item) for item in data['candidates'])
+    return SmartEntryDraftPayload(data['log_date'], data['raw_text'], data['parser_version'], candidates)
+
+
 def _metadata_json(value: dict[str, object]) -> str:
     if not isinstance(value, dict):
         raise SmartEntryRepositoryError("SMART_ENTRY_AGENT_METADATA_INVALID")
@@ -902,6 +1158,10 @@ def _replay_confirmation(
 
 def _draft(row) -> SmartEntryDraft:
     try:
+        if not isinstance(row['payload_json'], str):
+            raise TypeError
+        if len(row['payload_json'].encode('utf-8')) > _MAX_JSON_BYTES:
+            raise ValueError
         payload_data = json.loads(row["payload_json"])
         metadata = json.loads(row["agent_metadata_json"])
         if not isinstance(payload_data, dict) or not isinstance(metadata, dict):
@@ -914,7 +1174,10 @@ def _draft(row) -> SmartEntryDraft:
             raw_text=payload_data["raw_text"],
             parser_version=payload_data["parser_version"],
             candidates=candidates,
+            interaction=_interaction(payload_data.get('interaction'), candidates),
         )
+        if row['schema_version'] == 2 and (payload_data.get('interaction') is None or payload.interaction.schema_version != 2):
+            raise ValueError
         _payload_json(payload)
     except (
         JSONDecodeError,
@@ -922,6 +1185,7 @@ def _draft(row) -> SmartEntryDraft:
         TypeError,
         SmartEntryRepositoryError,
         ValueError,
+        RecursionError,
     ):
         raise SmartEntryRepositoryError("SMART_ENTRY_DRAFT_CORRUPT") from None
     return SmartEntryDraft(
@@ -941,6 +1205,8 @@ def _draft(row) -> SmartEntryDraft:
 
 def _candidate(value: object) -> ResolvedCandidate:
     if not isinstance(value, dict):
+        raise TypeError
+    if not isinstance(value.get('values'), dict) or not isinstance(value.get('provenance'), dict):
         raise TypeError
     data = dict(value)
     data["catalog_choices"] = tuple(

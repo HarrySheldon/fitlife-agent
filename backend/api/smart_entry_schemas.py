@@ -4,7 +4,8 @@ from datetime import date
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from backend.domain.entry_interaction import EntryInteraction
 
 
 class SmartEntryCreateRequest(BaseModel):
@@ -71,7 +72,82 @@ class SmartEntryDraftMutationRequest(BaseModel):
 
 
 class SmartEntryDraftPayloadResponse(SmartEntryDraftMutationRequest):
-    pass
+    interaction: EntryInteraction
+
+
+class EntryItemCommitResponse(BaseModel):
+    item_id: str
+    item_revision: int
+    meal_id: str
+    meal_item_id: str
+    record_state: Literal['unchanged', 'changed', 'deleted']
+
+
+class DependencyValidityResponse(BaseModel):
+    item_id: str
+    catalog_id: str
+    valid: bool
+
+
+class InteractionStartRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    expected_version: StrictInt = Field(ge=1)
+
+
+class InteractionAnswerValue(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    item_id: str = Field(min_length=1, max_length=100)
+    field: Literal['name', 'selected_catalog_id', 'amount', 'unit', 'intake_ratio',
+                   'calories', 'carbs', 'protein', 'fat', 'basis_type']
+    value: str | float | None
+
+
+class InteractionAnswersRequest(InteractionStartRequest):
+    question_group_id: str = Field(min_length=1, max_length=100)
+    answers: list[InteractionAnswerValue] = Field(max_length=100)
+
+
+class InteractionUpdates(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    name: str | None = None
+    selected_catalog_id: str | None = None
+    amount: float | None = None
+    unit: str | None = None
+    intake_ratio: float | None = None
+    calories: float | None = None
+    carbs: float | None = None
+    protein: float | None = None
+    fat: float | None = None
+    basis_type: Literal['per_100g', 'per_100ml', 'per_serving'] | None = None
+
+
+class InteractionCorrectionRequest(InteractionStartRequest):
+    item_id: str = Field(min_length=1, max_length=100)
+    item_revision: StrictInt = Field(ge=1)
+    updates: InteractionUpdates
+
+
+class InteractionSelection(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    item_id: str = Field(min_length=1, max_length=100)
+    item_revision: StrictInt = Field(ge=1)
+
+
+class InteractionConfirmRequest(InteractionStartRequest):
+    selections: list[InteractionSelection] = Field(min_length=1, max_length=100)
+    accepted_estimates: list[InteractionSelection] = Field(default_factory=list, max_length=100)
+
+
+class ConfirmedEntryItemsResponse(BaseModel):
+    draft_id: str
+    commits: list[EntryItemCommitResponse]
+    remaining_draft_version: int
+    replayed: bool
+
+
+class InteractiveCapabilitiesResponse(BaseModel):
+    interactive_entry_enabled: bool
+    entry_task_ttl_days: int
 
 
 class SmartEntryDraftResponse(BaseModel):
@@ -91,6 +167,8 @@ class SmartEntryDraftResponse(BaseModel):
     expires_at: str
     created_at: str
     updated_at: str
+    item_commits: list[EntryItemCommitResponse] = Field(default_factory=list)
+    dependency_validity: list[DependencyValidityResponse] = Field(default_factory=list)
 
 
 class ConfirmedSmartEntryResponse(BaseModel):

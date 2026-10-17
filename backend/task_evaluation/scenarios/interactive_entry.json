@@ -1,0 +1,1004 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "interactive-sufficient",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "早餐：S2wholemealOats 100g"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000001"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_ready": "data.payload.interaction.items.0.state",
+            "api_rounds": "data.payload.interaction.clarification_rounds"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/confirm-items",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000002"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "selections": [
+              {
+                "item_id": {
+                  "$ref": "item"
+                },
+                "item_revision": {
+                  "$ref": "rev"
+                }
+              }
+            ]
+          },
+          "capture": {
+            "v": "data.remaining_draft_version"
+          },
+          "observe": {
+            "api_saved_version": "data.remaining_draft_version"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_ready": "ready",
+        "api_rounds": 0,
+        "api_saved_version": 3,
+        "confirmed_meals": 1,
+        "item_commit_count": 1,
+        "saved_item_count": 1,
+        "item_states": [
+          "saved"
+        ],
+        "draft_versions": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "interactive-ambiguous",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7,
+              "aliases": [
+                "S2shared"
+              ]
+            },
+            {
+              "source_record_id": "s2-oats-other",
+              "name": "S2otherOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7,
+              "aliases": [
+                "S2shared"
+              ]
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "早餐：S2shared 100g"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000003"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision",
+            "choice": "data.payload.candidates.0.catalog_choices.0.id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/answers",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000004"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "answer_by_field": {
+            "name": null,
+            "selected_catalog_id": {
+              "$ref": "choice"
+            },
+            "amount": null,
+            "unit": null,
+            "intake_ratio": null,
+            "calories": null,
+            "carbs": null,
+            "protein": null,
+            "fat": null,
+            "basis_type": null
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_ready": "data.payload.interaction.items.0.state"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/confirm-items",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000005"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "selections": [
+              {
+                "item_id": {
+                  "$ref": "item"
+                },
+                "item_revision": {
+                  "$ref": "rev"
+                }
+              }
+            ]
+          },
+          "capture": {
+            "v": "data.remaining_draft_version"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_ready": "ready",
+        "confirmed_meals": 1,
+        "item_commit_count": 1,
+        "item_states": [
+          "saved"
+        ]
+      }
+    },
+    {
+      "id": "interactive-unknownportion",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "早餐：S2wholemealOats"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000006"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/answers",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000007"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "answer_by_field": {
+            "name": null,
+            "selected_catalog_id": null,
+            "amount": null,
+            "unit": null,
+            "intake_ratio": null,
+            "calories": null,
+            "carbs": null,
+            "protein": null,
+            "fat": null,
+            "basis_type": null
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_rounds": "data.payload.interaction.clarification_rounds"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/corrections",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000008"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "item_id": {
+              "$ref": "item"
+            },
+            "item_revision": {
+              "$ref": "rev"
+            },
+            "updates": {
+              "amount": 100,
+              "unit": "g"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_ready": "data.payload.interaction.items.0.state"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_rounds": 2,
+        "api_ready": "ready",
+        "max_clarification_rounds": 2,
+        "confirmed_meals": 0,
+        "item_commit_count": 0,
+        "item_states": [
+          "ready"
+        ]
+      }
+    },
+    {
+      "id": "interactive-tworoundlimit",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "午餐：S2mysteryMilk"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000009"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/answers",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000010"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "answer_by_field": {
+            "name": null,
+            "selected_catalog_id": null,
+            "amount": null,
+            "unit": null,
+            "intake_ratio": null,
+            "calories": null,
+            "carbs": null,
+            "protein": null,
+            "fat": null,
+            "basis_type": null
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_rounds": "data.payload.interaction.clarification_rounds"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/answers",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000011"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "answer_by_field": {
+            "name": null,
+            "selected_catalog_id": null,
+            "amount": null,
+            "unit": null,
+            "intake_ratio": null,
+            "calories": null,
+            "carbs": null,
+            "protein": null,
+            "fat": null,
+            "basis_type": null
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_rounds": "data.payload.interaction.clarification_rounds"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000012"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_rounds": "data.payload.interaction.clarification_rounds",
+            "api_state": "data.payload.interaction.items.0.state"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_rounds": 2,
+        "api_state": "needs_clarification",
+        "max_clarification_rounds": 2,
+        "question_group_count": 2,
+        "confirmed_meals": 0,
+        "item_commit_count": 0
+      }
+    },
+    {
+      "id": "interactive-partialsave",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "早餐：S2wholemealOats 100g\n午餐：S2mysteryMilk"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000013"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/confirm-items",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000014"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "selections": [
+              {
+                "item_id": {
+                  "$ref": "item"
+                },
+                "item_revision": {
+                  "$ref": "rev"
+                }
+              }
+            ]
+          },
+          "capture": {
+            "v": "data.remaining_draft_version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/confirm-items",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000015"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "selections": [
+              {
+                "item_id": {
+                  "$ref": "item"
+                },
+                "item_revision": {
+                  "$ref": "rev"
+                }
+              }
+            ]
+          },
+          "capture": {},
+          "expected_status": 200,
+          "observe": {"api_repeat_replayed": "data.replayed"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/smart-entry-drafts/{draft}",
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_saved": "data.payload.interaction.items.0.state",
+            "api_unsaved": "data.payload.interaction.items.1.state",
+            "api_commit": "data.item_commits.0.record_state"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_repeat_replayed": true,
+        "api_saved": "saved",
+        "api_unsaved": "needs_clarification",
+        "api_commit": "unchanged",
+        "confirmed_meals": 1,
+        "item_commit_count": 1,
+        "item_states": [
+          "saved",
+          "needs_clarification"
+        ],
+        "saved_item_count": 1
+      }
+    },
+    {
+      "id": "interactive-localcorrection",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "早餐：S2wholemealOats 100g\n午餐：S2mysteryMilk"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000016"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision",
+            "otherrev": "data.payload.interaction.items.1.revision"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/corrections",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000017"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "item_id": {
+              "$ref": "item"
+            },
+            "item_revision": {
+              "$ref": "rev"
+            },
+            "updates": {
+              "amount": 50
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_first_revision": "data.payload.interaction.items.0.revision",
+            "api_other_revision": "data.payload.interaction.items.1.revision"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_first_revision": 2,
+        "api_other_revision": 1,
+        "item_revisions": [
+          2,
+          1
+        ],
+        "confirmed_meals": 0,
+        "item_commit_count": 0
+      }
+    },
+    {
+      "id": "interactive-reconnect",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "早餐：S2wholemealOats 100g\n午餐：S2mysteryMilk"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000018"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/answers",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000019"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "answer_by_field": {
+            "name": null,
+            "selected_catalog_id": null,
+            "amount": null,
+            "unit": null,
+            "intake_ratio": null,
+            "calories": null,
+            "carbs": null,
+            "protein": null,
+            "fat": null,
+            "basis_type": null
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_rounds": "data.payload.interaction.clarification_rounds"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/confirm-items",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000020"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "selections": [
+              {
+                "item_id": {
+                  "$ref": "item"
+                },
+                "item_revision": {
+                  "$ref": "rev"
+                }
+              }
+            ]
+          },
+          "capture": {
+            "v": "data.remaining_draft_version"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/smart-entry-drafts/{draft}",
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_version": "data.version",
+            "api_rounds": "data.payload.interaction.clarification_rounds",
+            "api_saved": "data.payload.interaction.items.0.state",
+            "api_commit": "data.item_commits.0.record_state"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_version": 4,
+        "api_rounds": 2,
+        "api_saved": "saved",
+        "api_commit": "unchanged",
+        "draft_versions": [
+          4
+        ],
+        "max_clarification_rounds": 2,
+        "item_states": [
+          "saved",
+          "needs_clarification"
+        ],
+        "confirmed_meals": 1,
+        "item_commit_count": 1
+      }
+    },
+    {
+      "id": "interactive-foreign",
+      "version": 1,
+      "requires": [
+        "interactive_entry"
+      ],
+      "initial_state": {
+        "catalog": {
+          "foods": [
+            {
+              "source_record_id": "s2-oats",
+              "name": "S2wholemealOats",
+              "calories": 380,
+              "carbs": 60,
+              "protein": 13,
+              "fat": 7
+            }
+          ]
+        },
+        "authorization": {
+          "additional_users": [
+            "foreign"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-10-16",
+            "raw_text": "早餐：S2wholemealOats 100g"
+          },
+          "capture": {
+            "draft": "data.id",
+            "v": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000021"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          }
+        },
+        {
+          "method": "GET",
+          "actor": "foreign",
+          "path": "/api/v1/smart-entry-drafts/{draft}",
+          "expected_status": 404
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/interaction/start",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000022"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            }
+          },
+          "actor": "foreign",
+          "expected_status": 404,
+          "capture": {}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts/{draft}/confirm-items",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-0000-0000-000000000023"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v"
+            },
+            "selections": [
+              {
+                "item_id": {
+                  "$ref": "item"
+                },
+                "item_revision": {
+                  "$ref": "rev"
+                }
+              }
+            ]
+          },
+          "capture": {},
+          "actor": "foreign",
+          "expected_status": 404
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/smart-entry-drafts/{draft}",
+          "capture": {
+            "v": "data.version",
+            "item": "data.payload.interaction.items.0.item_id",
+            "rev": "data.payload.interaction.items.0.revision"
+          },
+          "observe": {
+            "api_version": "data.version",
+            "api_ready": "data.payload.interaction.items.0.state"
+          }
+        }
+      ],
+      "expected": {
+        "confirmed_workouts": 0,
+        "api_version": 2,
+        "api_ready": "ready",
+        "draft_versions": [
+          2
+        ],
+        "confirmed_meals": 0,
+        "item_commit_count": 0,
+        "actor.foreign.draft_count": 0,
+        "actor.foreign.confirmed_meals": 0,
+        "actor.foreign.item_commit_count": 0
+      }
+    }
+  ]
+}

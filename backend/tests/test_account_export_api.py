@@ -13,6 +13,7 @@ from backend.config import get_settings
 from backend.domain.model_connection import ModelConnection
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.main import create_app
+from backend.infrastructure.sqlite.runtime import initialize_database
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +25,9 @@ def reset_settings_cache():
 def build_client(monkeypatch) -> tuple[TestClient, Path]:
     data_dir = Path(".tmp") / "pytest-account-export-api" / uuid4().hex
     monkeypatch.setenv("DATA_DIR", str(data_dir))
+    monkeypatch.setenv('SQLITE_DATABASE_PATH', str(data_dir / 'records.sqlite3'))
     get_settings.cache_clear()
+    initialize_database()
     return TestClient(create_app()), data_dir
 
 
@@ -80,6 +83,12 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
         ),
     )
     archives_before = list(data_dir.rglob("*.zip"))
+    # Registration performs the normal legacy cutover once the test DB exists.
+    assert len(archives_before) == 2
+    assert {path.parent for path in archives_before} == {
+        current_root / 'legacy-backups', other_root / 'legacy-backups',
+    }
+    assert all(path.name.startswith('legacy_csv_v1-') for path in archives_before)
 
     response = client.get(
         f"/account/export?user_id={other_id}",
@@ -97,6 +106,7 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
     assert "current-export-user" not in disposition
     with ZipFile(io.BytesIO(response.content)) as exported:
         assert exported.namelist() == [
+            "entry-drafts.json",
             "identity.json",
             "model-connection.json",
             "preferences.json",
@@ -111,7 +121,7 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
     assert b"other-user-secret" not in contents
     assert b"encrypted-secret" not in contents
     assert b"api_key_hint" not in contents
-    assert list(data_dir.rglob("*.zip")) == archives_before == []
+    assert list(data_dir.rglob("*.zip")) == archives_before
 
 
 @pytest.mark.parametrize(

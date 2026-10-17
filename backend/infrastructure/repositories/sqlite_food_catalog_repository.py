@@ -229,6 +229,13 @@ class SQLiteFoodCatalogRepository:
         user_id: str,
         food_id: str,
     ) -> FoodCatalogItem | None:
+        return self.get_visible_food(user_id, food_id)
+
+    def get_visible_food(
+        self,
+        user_id: str,
+        food_id: str,
+    ) -> FoodCatalogItem | None:
         with self.database.connection() as connection:
             row = connection.execute(
                 f"""

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, tokenStorage } from '../services/api'
+import { clearSmartEntryRecovery } from '../services/smartEntryRecovery'
 import type { AuthRequest, AuthSession, AuthenticatedUser } from '../types'
 
 interface AuthContextValue {
@@ -18,8 +19,11 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null)
   const [initializing, setInitializing] = useState(true)
+  const ownerRef = useRef<string | null>(null)
 
   const replaceSession = useCallback((session: AuthSession) => {
+    if (ownerRef.current && ownerRef.current !== session.user.user_id) clearSmartEntryRecovery(ownerRef.current)
+    ownerRef.current = session.user.user_id
     tokenStorage.set(session.access_token)
     setUser(session.user)
   }, [])
@@ -31,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .me()
-      .then(setUser)
+      .then((restored) => { ownerRef.current = restored.user_id; setUser(restored) })
       .catch(() => tokenStorage.clear())
       .finally(() => setInitializing(false))
   }, [])
@@ -47,6 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    if (ownerRef.current) clearSmartEntryRecovery(ownerRef.current)
+    ownerRef.current = null
     tokenStorage.clear()
     setUser(null)
   }

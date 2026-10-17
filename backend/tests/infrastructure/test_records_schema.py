@@ -994,6 +994,9 @@ def test_records_migration_can_be_run_twice(tmp_path):
         (1, "create_records_schema"),
         (2, "enforce_records_schema_invariants"),
         (3, "scope_data_migrations_by_user"),
+        (4, "persistent_task_budgets"),
+        (5, "entry_interaction_commands"),
+        (6, "entry_item_commits"),
     ]
     assert catalog_search_count == 1
 
@@ -1058,6 +1061,9 @@ def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
         (1, "create_records_schema"),
         (2, "enforce_records_schema_invariants"),
         (3, "scope_data_migrations_by_user"),
+        (4, "persistent_task_budgets"),
+        (5, "entry_interaction_commands"),
+        (6, "entry_item_commits"),
     ]
     assert tuple(food) == ("user-a", "Rice")
     assert tuple(search_row) == (42, "food-1")

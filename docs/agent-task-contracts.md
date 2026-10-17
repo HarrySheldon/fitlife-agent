@@ -1,6 +1,6 @@
 # S1：任务与模型输入边界
 
-状态：2026-10-15 S1 实现与离线验收完成，尚未提交或推送。最终后端 1719 项、前端 229 项测试通过，生产构建及六类离线基线通过。逐项证据见 `docs/superpowers/plans/2026-10-10-agent-task-s1-contracts.md`。
+状态：2026-10-15 S1 实现与离线验收完成，已提交为 `eff4527`，尚未推送。最终后端 1719 项、前端 229 项测试通过，生产构建及六类离线基线通过；提交前相关套件复验 129 项通过。逐项证据见 `docs/superpowers/plans/2026-10-10-agent-task-s1-contracts.md`。
 
 ## 任务不是一次模型请求
 
@@ -53,3 +53,11 @@ npm --prefix frontend run build
 ```
 
 测试不需要真实 Provider。Mock 及契约通过只证明这些受测边界，不提供真实模型质量、安全效果或性能提升百分比。
+
+## Entry task lifecycle and recovery
+
+`EntryTaskExportPort` is a read-only, owner-scoped bounded snapshot seam. The account API injects the configured SQLite adapter; application export code never discovers a database. `entry-drafts.json` contains business draft bodies (including expired bodies still present), item progress and typed field sources, aggregate spent/reserved task budget counters, and minimal item commit facts. Provider diagnostics, arbitrary provenance metadata, connection credentials, command replay bodies and idempotency request snapshots are excluded. The new source consumes the existing 5 MiB source and 20 MiB aggregate/entry/archive budgets. Construction without this port preserves the previous archive contract.
+
+`ExpireAgentTasks(repository, clock=..., mutation_scope=...)` requires an explicit owner and an aware cutoff no later than the server clock. `execute(user_id, cutoff=cutoff)` previews IDs/count only; `dry_run=False` applies within the caller's lifecycle mutation scope and one repository transaction. The SQLite adapter compares parsed UTC instants and removes only expired smart-entry draft bodies; command bodies cascade, while formal records, item maps, minimal confirmation receipts and task budget counters survive. Access expiry remains independent of physical cleanup. No production cleanup command is provided or executed. Operators must explicitly inject the configured repository and lifecycle scope when integrating maintenance.
+
+Recreating the repository/service against the same database restores the persisted task version, question rounds, item progress and commit mappings without provider calls on resume. Interactive entry defaults off (`INTERACTIVE_ENTRY_ENABLED=false`), with `ENTRY_TASK_TTL_DAYS=30`; Compose forwards explicit overrides for both settings.

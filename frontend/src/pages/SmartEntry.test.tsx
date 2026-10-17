@@ -114,6 +114,7 @@ function hookState(
   const draft = draftWith(candidates)
   return {
     draft,
+    draftSource: 'server' as const,
     confirmed: null,
     status: 'idle' as const,
     error: null,
@@ -129,6 +130,7 @@ function hookState(
       replayed: false,
     }),
     discard: vi.fn().mockResolvedValue(undefined),
+    startInteraction: vi.fn(), answerInteraction: vi.fn(), correctItem: vi.fn(), confirmItems: vi.fn(),
     ...overrides,
   }
 }

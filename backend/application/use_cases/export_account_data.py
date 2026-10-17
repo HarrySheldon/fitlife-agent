@@ -11,6 +11,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from backend.application.ports.identity_repository import IdentityRepository
+from backend.application.ports.entry_task_lifecycle import EntryTaskExportPort
 from backend.application.ports.model_connection_repository import ModelConnectionRepository
 from backend.application.ports.plan_repository import StoredPlan
 from backend.application.ports.report_repository import StoredWeeklyReport
@@ -108,10 +109,12 @@ class ExportAccountData:
         data_dir: Path,
         identities: IdentityRepository,
         model_connections: ModelConnectionRepository | None = None,
+        *, entry_tasks: EntryTaskExportPort | None = None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
         self.model_connections = model_connections
+        self.entry_tasks = entry_tasks
 
     def execute(self, user_id: str) -> bytes:
         try:
@@ -191,6 +194,14 @@ class ExportAccountData:
                             )
                         ),
                     )
+        if self.entry_tasks is not None:
+            remaining = max(0, MAX_EXPORT_BYTES - budget.source_bytes)
+            limit = min(MAX_SOURCE_BYTES, remaining)
+            snapshot = self.entry_tasks.export_entry_tasks(user_id, max_bytes=limit)
+            if not isinstance(snapshot, bytes) or len(snapshot) > limit:
+                raise ValueError('Entry task source exceeds the size limit')
+            budget.source_bytes += len(snapshot)
+            budget.add_entry(entries, 'entry-drafts.json', snapshot)
         archive = io.BytesIO()
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as exported:
             for path in sorted(entries):

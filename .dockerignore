@@ -1,5 +1,7 @@
 .git
 .worktrees
+.local-backups
+backups
 .venv
 .tmp
 **/.env*

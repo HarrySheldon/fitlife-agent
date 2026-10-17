@@ -46,7 +46,21 @@ $taskPython = 'D:\code\vibe-coding\fitlife-agent\.venv\Scripts\python.exe'
 - 请求按捕获的 ID/版本、结构化变量引用和 actor 认证回放。正式记录、幂等映射、草稿版本、账户归属和计划状态由隔离存储的只读观察判定，不用答案关键词替代保存成功。
 - 六类基线覆盖正常录入、幂等重放、跨用户拒绝、过期草稿、现有计划激活和范围内问答。Mock 验收证明的是执行契约与确定性不变量，不证明真实模型健康建议质量。
 
-版本化档案、结构化目录、记录和现有计划种子可用于 S0。旧版 profile 字段种子、多轮澄清/自动回答和未来 `requires` 能力明确记为 unsupported，不计作通过；脚本未定义的问题记为 unexpected_question。S0 不伪造 S2/S3 尚未存在的 API。
+版本化档案、结构化目录、记录和现有计划种子可用于 S0。旧版 profile 字段种子及未知 `requires` 能力明确记为 unsupported，不计作通过；脚本未定义的问题记为 unexpected_question。S0 当时没有多轮 API；S2 的显式能力见下节。
+
+## S2 交互录入契约
+
+`scenarios/interactive_entry.json` 声明八类独立合成案例，每例 `requires: ["interactive_entry"]`。默认 runner 不提供任何能力，worker 仅提供这个已实现能力并仅为声明该能力的案例启用交互开关；其他能力仍为 unsupported。生产 `INTERACTIVE_ENTRY_ENABLED` 默认 false。worker 的配置指纹包含实际交互开关与 TTL，继续使用独立账户、目录、SQLite、网络守卫、整批预算 RPC 和 deadline。案例 `llm_enabled=false` 且无用户模型连接，不需要 Provider。
+
+捕获支持点分隔字典键和有界非负数组索引（最多三位、必须在实际列表范围内），例如 `data.payload.interaction.items.0.item_id`。缺少键、负索引、非数字索引和越界均为 CaseError。数组位置仅用于取得真实 ID；命令使用捕获的 item_id 和 revision。`{"$ref":"v"}` 保留数值类型，可用于 `expected_version`，不通过字符串模拟数值。
+
+`answer_by_field` 仅对 `POST /api/v1/smart-entry-drafts/{id}/interaction/answers` 实现。runner 使用同 actor、同资源最近一次成功 create/GET/交互命令的草稿快照，找出唯一未答 question_group，以其真实 version、group_id、item_id 和 field 构造答案。脚本值可为 null 或结构化引用，不依赖问题措辞。问题字段未声明为 unexpected_question/unscripted_field；无唯一待答组为 unexpected_question/no_pending_questions。旧 `missing_fields` 自动答题流程仍为 unsupported。
+
+`observe` 与 `capture` 一样使用 `{观察键:响应路径}`。只准入整数 version、remaining_draft_version、clarification_rounds、item revision；闭合枚举 interaction status、item state、commit record_state；以及布尔 replayed。支持 item、item_commits/commits 的有界索引。正文、values、raw_text、任意嵌套数据及未知路径不能输出到报告；缺值不会被当作 null 通过。最终判分同时比较公开响应元数据和独立只读、按 user_id 过滤的 SQLite 事实：轮数、问题组数、item states/revisions、保存数、提交映射数、草稿版本与正式记录数。返回状态/轮数和存储不一致会失败，HTTP 200 本身不表示完成。
+
+恢复案例只执行 GET，验收另以同一数据库的新 Service 实例验证恢复；这不是后台队列或进程自动恢复。交互候选耗时未扩展为新的性能指标：未有可验证候选保持 null/原因，不把“处理中”视作合格候选。这些确定性案例不证明真实模型质量或 S4 性能提升。
+
+交互开始时仅对未解析食物检查当前用户模型连接的 enabled/密钥配置元数据；连接可用时交给 Runtime 在守卫与任务预算内解析。该用户配置不受历史全局 `LLM_ENABLED` 开关控制。无可用连接保留人工问答；GET 恢复不读取模型连接、不解密、不调用 Provider。
 
 ## 批次预算与异常
 

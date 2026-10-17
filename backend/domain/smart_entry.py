@@ -71,6 +71,22 @@ class ResolvedCandidate:
     agent_estimate_accepted: bool = False
 
 
+def is_training_only_update(previous, proposed) -> bool:
+    """Keep food and candidate identity immutable during the active food flow."""
+    if (len(previous) != len(proposed)
+            or not any(item.kind in ('strength', 'cardio') for item in previous)):
+        return False
+    identity = ('id', 'kind', 'raw_text', 'normalized_text', 'subject_text',
+                'meal_context', 'catalog_choices', 'assumptions')
+    for old, new in zip(previous, proposed):
+        if old.kind not in ('strength', 'cardio'):
+            if old != new:
+                return False
+        elif any(getattr(old, field) != getattr(new, field) for field in identity):
+            return False
+    return True
+
+
 _MEAL_LABELS: dict[str, MealContext] = {
     "\u65e9\u9910": "breakfast",
     "\u65e9\u996d": "breakfast",

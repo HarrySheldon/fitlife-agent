@@ -48,6 +48,8 @@ class NewCustomFood:
 
 @runtime_checkable
 class FoodCatalogRepository(Protocol):
+    def get_visible_food(self, user_id: str, food_id: str) -> FoodCatalogItem | None: ...
+
     def search(
         self,
         user_id: str,

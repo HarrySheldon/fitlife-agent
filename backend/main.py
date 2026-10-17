@@ -19,7 +19,7 @@ from backend.i18n import (
 )
 from backend.infrastructure.startup import run_startup
 from backend.schemas import ApiError, ApiResponse
-from backend.agent.runtime import BudgetExceeded, RunCancelled, RunTimedOut, RuntimeControlError
+from backend.agent.runtime import BudgetExceeded, TaskBudgetExceeded, RunCancelled, RunTimedOut, RuntimeControlError
 
 
 def _safe_language_for_request(request: Request) -> AppLanguage:
@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
     @app.exception_handler(RuntimeControlError)
     async def handle_runtime_control_error(request: Request, error: RuntimeControlError) -> JSONResponse:
         status_code, action, retryable = {
+            TaskBudgetExceeded: (409, "Start a new task or finish entering values manually.", False),
             BudgetExceeded: (429, "Reduce the request size or try again later.", False),
             RunTimedOut: (504, "Try again later.", True),
             RunCancelled: (409, "Start a new run if you still need the result.", False),

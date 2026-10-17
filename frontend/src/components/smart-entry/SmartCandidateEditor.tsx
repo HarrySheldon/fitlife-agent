@@ -18,9 +18,10 @@ import type {
 interface Props {
   candidate: SmartCandidate
   onChange: (candidate: SmartCandidate) => void
+  lockKind?: boolean
 }
 
-export function SmartCandidateEditor({ candidate, onChange }: Props) {
+export function SmartCandidateEditor({ candidate, onChange, lockKind = false }: Props) {
   const { t } = useTranslation()
   const source = String(
     candidate.provenance.source_name
@@ -104,6 +105,7 @@ export function SmartCandidateEditor({ candidate, onChange }: Props) {
           <select
             aria-label={`${t('smartEntry.kind')} ${candidate.raw_text}`}
             value={candidate.kind}
+            disabled={lockKind}
             onChange={(event) => setKind(event.target.value as SmartCandidateKind)}
           >
             {(['food', 'strength', 'cardio', 'unknown'] as const).map((kind) => (
@@ -418,7 +420,7 @@ function KindIcon({ kind }: { kind: SmartCandidateKind }) {
   return <Activity size={15} />
 }
 
-function normalizeCandidate(candidate: SmartCandidate): SmartCandidate {
+export function normalizeCandidate(candidate: SmartCandidate): SmartCandidate {
   const values = candidate.values
   const resolved = new Set<string>()
   if (candidate.kind === 'food' && completeFood(values)) {

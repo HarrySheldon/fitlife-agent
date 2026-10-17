@@ -13,6 +13,8 @@ BACKEND_ROOT = Path(__file__).resolve().parent
 class Settings(BaseSettings):
     app_env: str = "demo"
     llm_enabled: bool = False
+    interactive_entry_enabled: bool = False
+    entry_task_ttl_days: int = Field(default=30, gt=0)
     agent_runtime_policy: dict[str, object] = Field(default_factory=dict)
     # How the semantic review treats an answer. "off" makes no extra call, which is the
     # default because it costs one provider request per answer. "shadow" records what it

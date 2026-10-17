@@ -123,7 +123,7 @@ capabilities.py 同时要求认证上下文传入 owner，仓储查询必须含 
 
 ## 最终验收（2026-10-15）
 
-S1 四个任务完成，分任务规格/代码质量复核及最终跨模块集成审查通过，无剩余重要发现。工作树仍为 `.worktrees/agent-runtime-refactor`、分支 `codex/agent-runtime-refactor`；验证基线为 `e3027f6` 加本轮未提交变更，未修改 main，未调用真实 Provider。
+S1 四个任务完成，分任务规格/代码质量复核及最终跨模块集成审查通过，无剩余重要发现。工作树仍为 `.worktrees/agent-runtime-refactor`、分支 `codex/agent-runtime-refactor`；原验收基线为 `e3027f6` 加 S1 变更，2026-10-15 已提交为 `eff4527`，尚未推送。提交前追加复验任务契约、DTO、范围、权限、守卫、生命周期、结构化载荷与迁移套件，129 passed（3.96 秒，`.tmp/s1-precommit-20261015b`）。未修改 main，未调用真实 Provider。
 
 最终集成审查额外复现并修复了旧运行库并发初始化冲突：`BEGIN IMMEDIATE` 现在覆盖版本/表结构检查、旧主键迁移、新增列和版本写入，使用单条 DDL 执行以避免 `executescript` 提前提交。相同的 20 轮双构造器复现，修复前 20 次失败、修复后 0 次失败；新增 `id`、`run_id`、新库三类并发和重复初始化回归。原始风险绕过的审查推断经 Runtime 外层原文守卫核对后撤回，另补精确混合风险公开入口负例，未削弱任何守卫。
 

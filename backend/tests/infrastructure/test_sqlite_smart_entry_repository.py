@@ -67,6 +67,125 @@ def _cleanup(path: Path) -> None:
             target.unlink()
 
 
+def test_legacy_interaction_projection_reads_without_writing_and_upgrades_on_update():
+    import json
+    database, path = _database()
+    try:
+        repository = SQLiteSmartEntryRepository(database)
+        draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
+        with database.transaction() as connection:
+            legacy = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
+            legacy.pop('interaction', None)
+            connection.execute('UPDATE record_drafts SET schema_version = 1, payload_json = ? WHERE id = ?', (json.dumps(legacy), draft.id))
+        before = path.read_bytes()
+        projected = repository.get_draft('user-interaction', draft.id)
+        assert path.read_bytes() == before
+        assert projected.version == 1
+        assert projected.payload.interaction.schema_version == 1
+        assert projected.payload.interaction.items[0].item_id == 'segment-1'
+        upgraded = repository.update_draft('user-interaction', draft.id, expected_version=1, payload=projected.payload)
+        assert upgraded.payload.interaction.schema_version == 2
+        assert upgraded.payload.interaction.active is False
+        with database.connection() as connection:
+            assert connection.execute('SELECT schema_version FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0] == 2
+        with pytest.raises(SmartEntryRepositoryError, match='DRAFT_VERSION_CONFLICT'):
+            repository.update_draft('user-interaction', draft.id, expected_version=1, payload=projected.payload)
+    finally:
+        _cleanup(path)
+
+
+@pytest.mark.parametrize('corruption', ['unknown_field', 'bad_rounds', 'wrong_id'])
+def test_corrupt_persisted_interaction_is_rejected(corruption):
+    import json
+    database, path = _database()
+    try:
+        repository = SQLiteSmartEntryRepository(database)
+        draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
+        with database.transaction() as connection:
+            payload = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
+            if corruption == 'unknown_field':
+                payload['interaction']['owner'] = 'client'
+            elif corruption == 'bad_rounds':
+                payload['interaction']['clarification_rounds'] = True
+            else:
+                payload['interaction']['items'][0]['item_id'] = 'different'
+            connection.execute('UPDATE record_drafts SET payload_json = ? WHERE id = ?', (json.dumps(payload), draft.id))
+        with pytest.raises(SmartEntryRepositoryError, match='SMART_ENTRY_DRAFT_CORRUPT'):
+            repository.get_draft('user-interaction', draft.id)
+    finally:
+        _cleanup(path)
+
+
+@pytest.mark.parametrize('corruption', ['values_list', 'provenance_list', 'payload_blob'])
+def test_malformed_legacy_payload_shape_returns_bounded_corruption_error(corruption):
+    import json
+    database, path = _database()
+    try:
+        repository = SQLiteSmartEntryRepository(database)
+        draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
+        with database.transaction() as connection:
+            data = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
+            data.pop('interaction')
+            if corruption == 'values_list':
+                data['candidates'][0]['values'] = []
+            elif corruption == 'provenance_list':
+                data['candidates'][0]['provenance'] = []
+            serialized = b'{}' if corruption == 'payload_blob' else json.dumps(data)
+            connection.execute('UPDATE record_drafts SET schema_version = 1, payload_json = ? WHERE id = ?', (serialized, draft.id))
+        with pytest.raises(SmartEntryRepositoryError, match='SMART_ENTRY_DRAFT_CORRUPT'):
+            repository.get_draft('user-interaction', draft.id)
+    finally:
+        _cleanup(path)
+
+
+def test_deeply_nested_legacy_json_returns_bounded_corruption_error():
+    from backend.infrastructure.repositories.sqlite_smart_entry_repository import _draft
+
+    row = {'payload_json': '[' * 20_000 + '0' + ']' * 20_000, 'agent_metadata_json': '{}'}
+    with pytest.raises(SmartEntryRepositoryError, match='SMART_ENTRY_DRAFT_CORRUPT'):
+        _draft(row)
+
+
+def test_reordering_duplicate_food_names_preserves_item_ids_and_revisions():
+    database, path = _database()
+    try:
+        repository = SQLiteSmartEntryRepository(database)
+        first = _food_candidate('first', 'breakfast')
+        second = _food_candidate('second', 'breakfast')
+        payload = replace(_payload(), candidates=(first, second))
+        draft = repository.create_draft('user-interaction', payload, expires_at='2099-01-01T00:00:00Z')
+        updated = repository.update_draft('user-interaction', draft.id, expected_version=1, payload=replace(payload, candidates=(second, first), interaction=None))
+        assert [(item.item_id, item.revision) for item in updated.payload.interaction.items] == [('second', 1), ('first', 1)]
+        assert all(source == 'estimated' for item in updated.payload.interaction.items for source in item.sources.values())
+    finally:
+        _cleanup(path)
+
+
+@pytest.mark.parametrize('change', ['erase', 'rewrite', 'catalog'])
+def test_legacy_mutation_cannot_change_terminal_items(change):
+    import json
+    database, path = _database()
+    try:
+        repository = SQLiteSmartEntryRepository(database)
+        draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
+        with database.transaction() as connection:
+            data = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
+            data['interaction']['items'][0]['state'] = 'saved'
+            connection.execute('UPDATE record_drafts SET payload_json = ? WHERE id = ?', (json.dumps(data), draft.id))
+        payload = repository.get_draft('user-interaction', draft.id).payload
+        if change == 'erase':
+            candidates = (_cardio_candidate('workout'),)
+        elif change == 'rewrite':
+            candidates = (replace(payload.candidates[0], values={**payload.candidates[0].values, 'amount': 100}),)
+        else:
+            candidates = (replace(payload.candidates[0], selected_catalog_id='other-food'),)
+        with pytest.raises(SmartEntryRepositoryError, match='ITEM_NOT_EDITABLE'):
+            repository.update_draft('user-interaction', draft.id, expected_version=1, payload=replace(payload, candidates=candidates, interaction=None))
+        assert repository.get_draft('user-interaction', draft.id).version == 1
+    finally:
+        _cleanup(path)
+
+
 def _food_candidate(
     candidate_id: str,
     meal_context: str,

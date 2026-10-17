@@ -122,6 +122,15 @@ def test_compose_health_contract_uses_configurable_ports_and_dependency():
     assert "./backend/data:/app/backend/data" in compose
 
 
+def test_compose_exposes_disabled_by_default_entry_task_configuration():
+    compose = Path('docker-compose.yml').read_text(encoding='utf-8')
+    template = Path('.env.example').read_text(encoding='utf-8')
+    assert 'INTERACTIVE_ENTRY_ENABLED: ${INTERACTIVE_ENTRY_ENABLED:-false}' in compose
+    assert 'ENTRY_TASK_TTL_DAYS: ${ENTRY_TASK_TTL_DAYS:-30}' in compose
+    assert 'INTERACTIVE_ENTRY_ENABLED=false' in template
+    assert 'ENTRY_TASK_TTL_DAYS=30' in template
+
+
 def test_backend_build_uses_configurable_pip_network_settings():
     compose = Path("docker-compose.yml").read_text(encoding="utf-8")
     dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")

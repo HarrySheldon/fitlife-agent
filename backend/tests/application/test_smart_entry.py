@@ -229,6 +229,14 @@ def test_update_reloads_selected_catalog_values_instead_of_trusting_client():
         selected_catalog_id="oats-b",
         values={**candidate.values, "calories": 99_999},
     )
+    repository.read_interaction_draft.return_value = SmartEntryDraft(
+        id='draft-1', user_id='user-1', version=1,
+        payload=SmartEntryDraftPayload(log_date='2026-07-26', raw_text='早餐：燕麦 50g',
+            parser_version='smart-entry-parser-v1', candidates=(candidate,)),
+        agent_status='not_requested', agent_prompt_version=None, agent_model=None, agent_metadata={},
+        expires_at='2026-08-25T00:00:00Z', created_at='2026-07-26T00:00:00Z',
+        updated_at='2026-07-26T00:00:00Z',
+    )
     service = SmartEntryService(repository, foods, exercises)
 
     service.update_draft(

@@ -1,5 +1,6 @@
 """Read only final state, without copying record contents into reports."""
 import sqlite3
+import json
 from pathlib import Path
 
 
@@ -24,6 +25,18 @@ def observe_database(path, *, actors=None, data_dir=None):
                 result[name] = connection.execute(f'SELECT COUNT(*) FROM "{table}"{condition}', parameters).fetchone()[0]
                 if table == "record_drafts":
                     result["draft_versions"] = [row[0] for row in connection.execute(f'SELECT version FROM record_drafts{condition} ORDER BY created_at,id', parameters)]
+                    interactions = [json.loads(row[0]).get('interaction', {}) for row in connection.execute(
+                        f'SELECT payload_json FROM record_drafts{condition} ORDER BY created_at,id', parameters)]
+                    result['max_clarification_rounds'] = max((value.get('clarification_rounds', 0) for value in interactions), default=0)
+                    result['question_group_count'] = sum(len(value.get('question_groups', [])) for value in interactions)
+                    items = [item for value in interactions for item in value.get('items', [])]
+                    result['item_states'] = [item['state'] for item in items]
+                    result['item_revisions'] = [item['revision'] for item in items]
+                    result['saved_item_count'] = sum(item['state'] == 'saved' for item in items)
+            if 'entry_item_commits' in tables:
+                condition = ' WHERE user_id=?' if user_id is not None else ''
+                parameters = (user_id,) if user_id is not None else ()
+                result['item_commit_count'] = connection.execute('SELECT COUNT(*) FROM entry_item_commits' + condition, parameters).fetchone()[0]
             if data_dir is not None and user_id is not None:
                 user_root = Path(data_dir) / "users" / user_id
                 history = len(list((user_root / "plans").glob("*.json")))

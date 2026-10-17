@@ -91,7 +91,8 @@ def test_first_candidate_ready_survives_new_version_and_confirm(monkeypatch, val
 def test_exception_metrics_preserve_known_provenance_and_processing(tmp_path):
     from backend.task_evaluation.worker import collect_metrics
     from backend.task_evaluation.budget import MeteredMockGateway, BatchBudget
-    fixed = SimpleNamespace(llm_enabled=False, safety_review_mode="off", safety_grounding_mode="legacy")
+    fixed = SimpleNamespace(llm_enabled=False, safety_review_mode="off", safety_grounding_mode="legacy",
+                            interactive_entry_enabled=False, entry_task_ttl_days=30)
     gateway = MeteredMockGateway(BatchBudget(2))
     gateway._call(lambda: "synthetic")
     metrics = collect_metrics(tmp_path, fixed, gateway, {"processing_ms": 12})

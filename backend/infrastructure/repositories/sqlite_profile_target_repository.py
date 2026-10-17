@@ -472,6 +472,8 @@ class SQLiteProfileTargetRepository:
     def delete_user_data(self, user_id: str) -> None:
         with self.database.transaction() as connection:
             for statement in (
+                "DELETE FROM task_budget_operations WHERE user_id = ?",
+                "DELETE FROM task_budgets WHERE user_id = ?",
                 "DELETE FROM data_migrations WHERE user_id = ?",
                 "DELETE FROM meals WHERE user_id = ?",
                 "DELETE FROM training_sessions WHERE user_id = ?",
@@ -506,6 +508,7 @@ class SQLiteProfileTargetRepository:
                 "DELETE FROM food_catalog WHERE owner_user_id = ?",
                 (user_id,),
             )
+            connection.execute('DELETE FROM entry_item_commits WHERE user_id = ?', (user_id,))
             connection.execute(
                 "DELETE FROM exercise_catalog WHERE owner_user_id = ?",
                 (user_id,),

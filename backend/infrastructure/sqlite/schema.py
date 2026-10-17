@@ -926,4 +926,38 @@ RECORDS_MIGRATIONS = (
             "CREATE INDEX idx_data_migrations_user_status ON data_migrations(user_id, status)",
         ),
     ),
+    Migration(
+        version=4,
+        name="persistent_task_budgets",
+        statements=(
+            "CREATE TABLE task_budgets (user_id TEXT NOT NULL, task_id TEXT NOT NULL, call_limit INTEGER NOT NULL CHECK(call_limit>=0), token_limit INTEGER NOT NULL CHECK(token_limit>=0), PRIMARY KEY(user_id,task_id))",
+            "CREATE TABLE task_budget_operations (user_id TEXT NOT NULL, task_id TEXT NOT NULL, operation_id TEXT NOT NULL, calls INTEGER NOT NULL CHECK(calls>=0), tokens INTEGER NOT NULL CHECK(tokens>=0), actual_calls INTEGER, actual_tokens INTEGER, usage_known INTEGER CHECK(usage_known IN (0,1)), PRIMARY KEY(user_id,task_id,operation_id), FOREIGN KEY(user_id,task_id) REFERENCES task_budgets(user_id,task_id) ON DELETE CASCADE)",
+        ),
+    ),
+    Migration(
+        version=5,
+        name="entry_interaction_commands",
+        statements=(
+            """CREATE TABLE entry_interaction_commands (
+                draft_id TEXT NOT NULL REFERENCES record_drafts(id) ON DELETE CASCADE,
+                idempotency_key TEXT NOT NULL,
+                request_fingerprint TEXT NOT NULL,
+                response_json TEXT NOT NULL CHECK(json_valid(response_json) AND json_type(response_json) = 'object' AND length(CAST(response_json AS BLOB)) <= 294912),
+                PRIMARY KEY(draft_id, idempotency_key)
+            )""",
+        ),
+    ),
+    Migration(
+        version=6,
+        name='entry_item_commits',
+        statements=(
+            '''CREATE TABLE entry_item_commits (
+                user_id TEXT NOT NULL, draft_id TEXT NOT NULL, item_id TEXT NOT NULL,
+                item_revision INTEGER NOT NULL CHECK(item_revision > 0),
+                meal_id TEXT NOT NULL, meal_item_id TEXT NOT NULL, record_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(user_id, draft_id, item_id, item_revision)
+            )''',
+        ),
+    ),
 )

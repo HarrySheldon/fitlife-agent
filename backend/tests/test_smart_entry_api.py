@@ -82,6 +82,13 @@ def test_authenticated_smart_entry_contract_conflict_and_confirm(client):
         item["selected_catalog_id"]
         for item in draft["payload"]["candidates"]
     )
+    assert draft['payload']['interaction']['active'] is False
+    rejected = client.patch(
+        f"{endpoint}/{draft['id']}",
+        headers={**owner, 'If-Match': '1'},
+        json=draft['payload'],
+    )
+    assert rejected.status_code == 422
 
     latest = client.get(
         endpoint,
@@ -95,7 +102,7 @@ def test_authenticated_smart_entry_contract_conflict_and_confirm(client):
     conflict = client.patch(
         f"{endpoint}/{draft['id']}",
         headers={**owner, "If-Match": "2"},
-        json=draft["payload"],
+        json={key: value for key, value in draft['payload'].items() if key != 'interaction'},
     )
     assert conflict.status_code == 409
     assert conflict.json()["error"]["code"] == "DRAFT_VERSION_CONFLICT"

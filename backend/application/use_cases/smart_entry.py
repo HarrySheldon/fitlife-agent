@@ -32,6 +32,7 @@ from backend.application.ports.smart_entry_repository import (
 from backend.application.ports.structured_model_gateway import (
     StructuredModelGateway,
 )
+from backend.application.use_cases.interactive_entry import project_resumed_draft
 from backend.domain.errors import ApplicationError, model_gateway_error
 from backend.agent.runtime import RuntimeControlError
 from backend.domain.meals import (
@@ -44,6 +45,7 @@ from backend.domain.smart_entry import (
     ParsedEntry,
     ParsedSegment,
     ResolvedCandidate,
+    is_training_only_update,
     parse_entry_text,
 )
 from backend.domain.workouts import WorkoutDomainError, cardio_calories
@@ -73,6 +75,7 @@ class SmartEntryService:
         clock: Clock | None = None,
         mutation_scope: Callable[[str], AbstractContextManager] | None = None,
         gateway_resolver: GatewayResolver | None = None,
+        entry_task_ttl_days: int = 30,
     ) -> None:
         self.repository = repository
         self.food_catalog = food_catalog
@@ -80,6 +83,7 @@ class SmartEntryService:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._mutation_scope = mutation_scope or (lambda _user_id: nullcontext())
         self._gateway_resolver = gateway_resolver
+        self._entry_task_ttl_days = entry_task_ttl_days
 
     def create_draft(
         self,
@@ -102,7 +106,7 @@ class SmartEntryService:
                 weight_kg=weight_kg,
             ),
         )
-        expiry = _timestamp(self._clock() + timedelta(days=30))
+        expiry = _timestamp(self._clock() + timedelta(days=self._entry_task_ttl_days))
         with self._mutation_scope(user_id):
             try:
                 return self.repository.create_draft(
@@ -142,6 +146,25 @@ class SmartEntryService:
         payload: SmartEntryDraftPayload,
         weight_kg: float | None = None,
     ) -> SmartEntryDraft:
+        try:
+            current = self.repository.read_interaction_draft(user_id, draft_id)
+        except SmartEntryRepositoryError as error:
+            raise _service_error(error) from None
+        active = current.payload.interaction.active is True
+        if current.version != expected_version:
+            raise SmartEntryServiceError('DRAFT_VERSION_CONFLICT', status_code=409)
+        visible = project_resumed_draft(current,
+            lambda catalog_id: self.food_catalog.get_visible_food(user_id, catalog_id)) if active else current
+        if active and (
+            (payload.log_date, payload.raw_text, payload.parser_version)
+                != (current.payload.log_date, current.payload.raw_text, current.payload.parser_version)
+            or not is_training_only_update(visible.payload.candidates, payload.candidates)
+        ):
+            raise SmartEntryServiceError('INTERACTION_ACTIVE', status_code=422)
+        if active:
+            stored = {item.id: item for item in current.payload.candidates}
+            payload = replace(payload, candidates=tuple(stored[item.id] if item.kind == 'food' else item
+                                                       for item in payload.candidates))
         normalized = replace(
             payload,
             candidates=tuple(
@@ -149,10 +172,19 @@ class SmartEntryService:
                     user_id,
                     candidate,
                     weight_kg=weight_kg,
-                )
+                ) if not active or candidate.kind in ('strength', 'cardio') else candidate
                 for candidate in payload.candidates
             ),
         )
+        if active:
+            # The legacy PATCH cannot supply interaction state. Its food
+            # candidates were checked before normalization and stay canonical.
+            by_id = {item.id: item for item in current.payload.candidates}
+            normalized = replace(normalized, interaction=current.payload.interaction,
+                candidates=tuple(replace(item, catalog_choices=by_id[item.id].catalog_choices,
+                    assumptions=by_id[item.id].assumptions)
+                    if item.kind in ('strength', 'cardio') else by_id[item.id]
+                    for item in normalized.candidates))
         with self._mutation_scope(user_id):
             try:
                 return self.repository.update_draft(
@@ -245,6 +277,8 @@ class SmartEntryService:
         draft = self.get_draft(user_id, draft_id)
         if draft is None:
             raise SmartEntryServiceError("DRAFT_NOT_FOUND", status_code=404)
+        if draft.payload.interaction.active:
+            raise _agent_service_error('INTERACTION_ANALYZE_NOT_ALLOWED', status_code=409)
         if draft.version != expected_version:
             raise _agent_service_error(
                 "DRAFT_VERSION_CONFLICT",
@@ -858,6 +892,7 @@ def _service_error(error: SmartEntryRepositoryError) -> SmartEntryServiceError:
         "IDEMPOTENCY_KEY_REUSED": 409,
         "SMART_ENTRY_CONFIRM_FAILED": 500,
         "IDEMPOTENCY_RESPONSE_CORRUPT": 500,
+        "INTERACTION_CONFIRM_ITEMS_REQUIRED": 409,
     }.get(error.code, 422)
     return SmartEntryServiceError(error.code, status_code=status)
 

@@ -53,13 +53,17 @@ class BudgetExceeded(RuntimeControlError):
     code = "RUN_BUDGET_EXCEEDED"
 
 
+class TaskBudgetExceeded(BudgetExceeded):
+    code = "TASK_BUDGET_EXHAUSTED"
+
+
 async def _sleep(delay: float):
     await asyncio.sleep(delay)
 
 class RuntimeContext:
     def __init__(self, *, policy=None, clock=time.monotonic, sleeper=_sleep, random_value=random_module.random,
                  token_estimator=None, cancel_event=None, deadline_at=None, record=None, telemetry=None,
-                 checkpoint_store=None, run_id=None, user_id=None):
+                 checkpoint_store=None, run_id=None, user_id=None, task_budget_binding=None):
         self.policy = policy or RuntimePolicy()
         self.clock = clock
         self.sleeper = sleeper
@@ -79,6 +83,8 @@ class RuntimeContext:
         self.provider = self.model = None
         self.output_tokens = 0
         self.retry_count = 0
+        self.task_budget_binding = task_budget_binding
+        self._budget_operation_prefix = run_id or uuid4().hex
 
     def set_model_metadata(self, *, provider=None, model=None):
         self.raise_if_cancelled()
@@ -240,7 +246,7 @@ class RuntimeContext:
                 self.record("TOOL_STARTED" if is_tool else "STEP_STARTED", self, metadata)
                 if is_tool and name.endswith("_model"):
                     async with self.telemetry.span("fitlife.ai.request", {"attempt": attempt}):
-                        result = await self.call(operation)
+                        result = await self._budgeted_model_call(operation)
                 else:
                     result = await self.call(operation)
                 self.raise_if_cancelled()
@@ -269,9 +275,53 @@ class RuntimeContext:
                 self.raise_if_cancelled()
         raise AssertionError("unreachable")
 
+    async def _budgeted_model_call(self, operation):
+        binding = self.task_budget_binding
+        if binding is None:
+            return await self.call(operation)
+        operation_id = f"{self._budget_operation_prefix}:{self.model_calls}"
+        # Provider total usage includes input already counted by consume_context.
+        # Hold the full run ceiling per attempt, including that input and output.
+        tokens = self.policy.budget.max_tokens
+        binding.reserve(operation_id, 1, tokens)
+        try:
+            self.raise_if_cancelled()
+            result = await self.call(operation)  # sync worker checks again
+        except BaseException as original_error:
+            try:
+                binding.settle(operation_id, 1, tokens, False)
+            except Exception:
+                # Reservation already remains durable. Accounting IO must not
+                # replace cancellation/timeout or replay an attempted provider.
+                original_error._fitlife_no_replay = True
+            if not isinstance(original_error, (RunCancelled, RunTimedOut)):
+                self.raise_if_cancelled()
+            raise
+        usage = getattr(result, 'usage', None)
+        actual = None
+        if isinstance(usage, dict) and usage:
+            total = usage.get('total_tokens')
+            if type(total) is int and total >= 0:
+                actual = total
+            else:
+                for input_key, output_key in (('input_tokens', 'output_tokens'), ('prompt_tokens', 'completion_tokens')):
+                    pair = (usage.get(input_key), usage.get(output_key))
+                    if all(type(value) is int and value >= 0 for value in pair):
+                        actual = sum(pair)
+                        break
+        try:
+            binding.settle(operation_id, 1, actual if actual is not None else tokens, actual is not None)
+        except Exception as error:
+            # Accounting failure after provider entry must never replay it.
+            error._fitlife_no_replay = True
+            self.raise_if_cancelled()
+            raise
+        return result
+
 class AgentRuntime:
     def __init__(self, *, policy=None, clock=time.monotonic, sleeper=_sleep, random_value=random_module.random, token_estimator=None,
-                 repository=None, checkpoint_store=None, telemetry=None, resolver=None, limiter=None):
+                 repository=None, checkpoint_store=None, telemetry=None, resolver=None, limiter=None,
+                 task_budget_binding_factory=None):
         self.policy = policy or RuntimePolicy()
         self.resolver = resolver or ConfigurationResolver(environment=asdict(self.policy))
         self.limiter = limiter or ProcessRateLimiter(clock=clock)
@@ -285,6 +335,7 @@ class AgentRuntime:
         self.repository = repository or MemoryRunRepository()
         self.checkpoint_store = checkpoint_store or (MemoryCheckpointStore(self.repository) if isinstance(self.repository, MemoryRunRepository) else None)
         self.telemetry = SafeTelemetryContext(telemetry)
+        self.task_budget_binding_factory = task_budget_binding_factory
     @property
     def active_run_ids(self):
         with self._lock:
@@ -326,6 +377,11 @@ class AgentRuntime:
                 self._runs[run_id] = self.repository.update(replace(self._runs[run_id], status="running", started_at=utc_now()), "RUN_STARTED")
             if config_error:
                 raise config_error
+            if command.task_ref is not None and self.task_budget_binding_factory is not None:
+                binding = self.task_budget_binding_factory(command.user_id, command.task_ref)
+                if binding.user_id != command.user_id or binding.task_id != command.task_ref.task_id:
+                    raise ValueError('Task budget binding does not match trusted command')
+                context.task_budget_binding = binding
             lease = self.limiter.acquire(command.user_id, policy.rate_limit)
             def guard():
                 try:

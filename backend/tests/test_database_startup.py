@@ -71,7 +71,7 @@ def test_startup_initializes_database_without_breaking_csv_reads(isolated_runtim
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
 
-    assert [version for version, in versions] == [1, 2, 3]
+    assert [version for version, in versions] == [1, 2, 3, 4, 5, 6]
 
 
 def test_registration_after_startup_immediately_cuts_over_empty_user(isolated_runtime):

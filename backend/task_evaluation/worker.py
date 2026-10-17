@@ -16,7 +16,8 @@ def collect_metrics(root, fixed, gateway, progress):
         from backend.safety.gate import SAFETY_RULE_VERSION, default_pack
         metrics.update(rule_version=SAFETY_RULE_VERSION, rule_pack_version=default_pack().pack_version,
             safe_config_fingerprint=fingerprint({"llm_enabled": fixed.llm_enabled,
-                "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode}))
+                "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode,
+                "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days}))
     metrics.update(gateway_attempts=gateway.attempts if gateway else None,
         estimated_tokens=None if gateway is None or gateway.failed_attempts else gateway.estimated_tokens,
         known_estimated_tokens=gateway.estimated_tokens if gateway else None,
@@ -44,7 +45,8 @@ def worker_main(channel, declaration, temporary):
                 if key.lower() in Settings.model_fields or any(word in key.upper() for word in ("API_KEY", "SECRET", "TOKEN", "CREDENTIAL")):
                     os.environ.pop(key, None)
             Settings.settings_customise_sources = classmethod(lambda cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings: (init_settings,))
-            fixed = Settings(_env_file=None, data_dir=root, sqlite_database_path=root / "fitlife.sqlite3", auth_secret="synthetic-evaluation-only", llm_enabled=False)
+            fixed = Settings(_env_file=None, data_dir=root, sqlite_database_path=root / "fitlife.sqlite3", auth_secret="synthetic-evaluation-only", llm_enabled=False,
+                             interactive_entry_enabled='interactive_entry' in scenario.requires)
             get_settings.cache_clear()
             import backend.config as configuration
             configuration.get_settings = lambda: fixed
@@ -74,7 +76,8 @@ def worker_main(channel, declaration, temporary):
                         import sqlite3
                         with sqlite3.connect(fixed.database_path) as connection:
                             connection.execute("UPDATE record_drafts SET expires_at='2000-01-01T00:00:00Z'")
-                result = execute_scenario(scenario, client, headers_factory=lambda actor: headers[actor], observer=lambda: observe_database(fixed.database_path, actors=headers.user_ids, data_dir=root), before_step=before_step, progress_metrics=progress)
+                result = execute_scenario(scenario, client, headers_factory=lambda actor: headers[actor], observer=lambda: observe_database(fixed.database_path, actors=headers.user_ids, data_dir=root), before_step=before_step, progress_metrics=progress,
+                                          supported_capabilities={'interactive_entry'})
                 from dataclasses import replace
                 from backend.task_evaluation.metrics import runtime_metrics
                 from backend.safety.gate import SAFETY_RULE_VERSION, default_pack
@@ -86,7 +89,8 @@ def worker_main(channel, declaration, temporary):
                     metrics={**result.metrics, **collect_metrics(root, fixed, gateway, progress), **executed,
                     "rule_version": SAFETY_RULE_VERSION, "rule_pack_version": default_pack().pack_version,
                     "safe_config_fingerprint": fingerprint({"llm_enabled": fixed.llm_enabled,
-                        "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode}),
+                        "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode,
+                        "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days}),
                     "gateway_attempts": gateway.attempts, "estimated_tokens": None if gateway.failed_attempts else gateway.estimated_tokens,
                     "known_estimated_tokens": gateway.estimated_tokens, "failed_attempts": gateway.failed_attempts,
                     "provider_usage": None, "mock_usage_estimated": True,

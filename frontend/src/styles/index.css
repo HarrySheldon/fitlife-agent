@@ -3771,6 +3771,26 @@ pre {
   margin: 0 auto;
 }
 
+.smart-clarification, .smart-recovery-note, .smart-saved-note {
+  padding: 14px 18px;
+  border: 1px solid #deddd4;
+  border-radius: 12px;
+  background: #f7f5ef;
+}
+.smart-question, .smart-item-fields {
+  border: 0;
+  padding: 0;
+  margin: 12px 0;
+  min-width: 0;
+}
+.smart-question legend, .smart-item-fields legend { font-weight: 650; margin-bottom: 10px; }
+.smart-field-source, .smart-item-explanation, .smart-item-missing { color: #68756c; font-size: 0.83rem; }
+.smart-item-state { margin-left: auto; font-size: 0.78rem; padding: 4px 9px; border: 1px solid currentColor; border-radius: 20px; }
+.smart-item-state-saved { color: #3e6b52; }
+.smart-saved-note p { margin: 0 0 8px; }
+.smart-item-card fieldset:disabled { opacity: 0.8; }
+.smart-legacy-candidate { border: 0; padding: 0; margin: 0; min-width: 0; }
+
 .smart-entry-header {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) 180px;

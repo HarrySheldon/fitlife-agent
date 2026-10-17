@@ -13,6 +13,8 @@ from backend.agent.semantic_review import ObservationReviewer, ReviewMode, colle
 from backend.config import get_settings
 from backend.application.ports.structured_model_gateway import StructuredModelGateway, StructuredModelResult
 from backend.infrastructure.agent_runtime import factory
+from backend.agent.tasks.contracts import TaskRef
+from backend.application.ports.task_budget_repository import TaskBudgetBinding
 
 
 @dataclass(frozen=True)
@@ -30,8 +32,15 @@ class StructuredSuggestionWorkflow:
     # Set by the context guard; the writer sends this rather than the raw text.
     guarded_input_text: str = field(default="")
     review_mode: ReviewMode = "off"
+    task_budget_binding: TaskBudgetBinding | None = None
 
     async def execute(self, command, context) -> AgentResult:
+        if self.task_budget_binding is not None:
+            binding = self.task_budget_binding
+            if (command.task_ref is None or binding.user_id != command.user_id
+                    or binding.task_id != command.task_ref.task_id):
+                raise ValueError('Task budget binding does not match trusted command')
+            context.task_budget_binding = binding
         # The three guards run as named steps so verify_guard_steps can see them. They
         # used to be absent here: this workflow handed `input_text` - which carries
         # the user's own adjustment instructions and raw entry text - straight to the
@@ -127,11 +136,15 @@ def run_structured_agent(
     instructions: str, input_text: str, response_model: type[BaseModel],
     gateway_resolver: Callable[[], StructuredModelGateway], request_id: str | None = None,
     runtime=None,
+    task_ref: TaskRef | None = None, task_budget_binding: TaskBudgetBinding | None = None,
+    review_mode: ReviewMode | None = None,
 ) -> StructuredAgentResult:
-    command = AgentCommand(operation=operation, question=question, user_id=user_id, request_id=request_id)
+    command = AgentCommand(operation=operation, question=question, user_id=user_id, request_id=request_id,
+                           task_ref=task_ref)
     outcome = (runtime or factory.get_agent_runtime()).execute_sync(command, StructuredSuggestionWorkflow(
         instructions, input_text, response_model, gateway_resolver,
-        review_mode=get_settings().safety_review_mode,
+        review_mode=review_mode or get_settings().safety_review_mode,
+        task_budget_binding=task_budget_binding,
     ))
     result = outcome.result.tool_results["structured"]
     return StructuredAgentResult(result.output, result.model, result.usage, outcome.run_id, outcome.request_id)
