@@ -1,6 +1,6 @@
 # Catalog release migration
 
-Status: Approach approved in chat; written specification awaiting review.
+Status: Implemented, independently reviewed, and verified against the retained main database on 2026-10-17. Acceptance: `docs/evaluation/2026-10-17-catalog-release-migration.md`.
 
 ## Problem and scope
 
@@ -10,7 +10,7 @@ The retained main database contains completed upstream source/version imports. T
 
 Introduce an explicit optional `catalog_release` in the normalized catalog envelope. The first bundled release is `zh-CN.2026-10-17.1`. Upstream `dataset_version` in the envelope and every record remains unchanged. A small shared helper validates release labels and derives a release-qualified import-ledger version from the upstream version plus the declared release. Legacy payloads without the field retain their exact existing ledger keys and behavior. An explicitly present invalid value (including null, blank, non-string, or an unsafe label) fails before any mutation.
 
-The new ledger namespace must be unambiguous relative to legacy upstream keys and to other releases. Encode the pair structurally rather than automatically deriving a release from the checksum. Content changes within the same declared release remain errors. A new published release must be explicitly declared by the catalog author.
+Encode the upstream-version/release pair structurally under a reserved prefix rather than deriving a release from the checksum. Explicit pairs must be unambiguous and nested qualified upstream identities are invalid. Legacy inputs accept arbitrary nonblank version strings, so their existing namespace cannot be made universally disjoint without changing compatibility or the schema; preserve their exact keys and let the existing completed-ledger checksum guard fail closed on a conflicting key. The bundled upstream versions are ISO date strings. Content changes within the same declared release remain errors. A new published release must be explicitly declared by the catalog author.
 
 Both seed importers use the qualified version only for import-ledger identity. Their row validation, upstream provenance, content hashes, source-derived catalog IDs, source-partition transactions, and FTS maintenance remain unchanged. Old completed ledger entries remain available for audit. No schema migration, ledger deletion, blanket overwrite option, runtime translation, or user-record rewriting is introduced.
 

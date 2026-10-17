@@ -10,6 +10,7 @@ from backend.infrastructure.catalog.import_ledger import (
     CatalogImportLedger,
     CatalogMutationResult,
 )
+from backend.infrastructure.catalog.release import catalog_import_version
 from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
     _replace_search,
 )
@@ -48,6 +49,7 @@ def seed_exercise_payload(
     if payload.get("schema_version") != 1:
         raise ValueError("EXERCISE_SEED_SCHEMA_VERSION_UNSUPPORTED")
     dataset_version = _text(payload, "dataset_version")
+    import_version = catalog_import_version(payload, dataset_version)
     managed_sources = _text_list(payload.get("managed_sources"))
     raw_records = payload.get("exercises")
     if not isinstance(raw_records, list):
@@ -73,7 +75,7 @@ def seed_exercise_payload(
         identities = {str(record["source_record_id"]) for record in partition}
         run = ledger.run(
             source_name,
-            dataset_version,
+            import_version,
             checksum,
             lambda connection, source_name=source_name, partition=partition,
             identities=identities: _import_partition(

@@ -12,11 +12,16 @@ After `legacy_csv_v1:<user_id>` is completed, the record router always reads and
 
 ## Bundled Catalogs
 
-- Foods: `backend/data/catalog/foods.zh-CN.v1.json`, audited USDA FoodData Central records, `CC0-1.0`.
-- Strength exercises: the `free-exercise-db` partition in `backend/data/catalog/exercises.zh-CN.v1.json`, `Unlicense`.
-- Cardio activities: the 2024 Adult Compendium partition in the same file; attribution and source URLs are stored per record.
+- Foods: `backend/data/catalog/foods.zh-CN.v1.json`, 2,128 Taiwan FDA Food Nutrient Database records, `Taiwan Government Open Data License 1.0`.
+- Exercises: `backend/data/catalog/exercises.zh-CN.v1.json`, 750 strength and cardio records from `free-exercise-db`, `Unlicense`. Attribution and source details are stored per record.
 
 Runtime search uses local SQLite only. Each source partition is fully validated and canonically checksummed before mutation. A completed source/version rejects checksum drift, a repeat checksum is skipped, and a failed update rolls back catalog and FTS changes together.
+
+### Authoring Catalog Releases
+
+The bundled envelopes declare `catalog_release: "zh-CN.2026-10-17.1"`. This identifies our published localization separately from the upstream `dataset_version`. When changing published names, aliases, taxonomy, provenance, or other normalized content, bump `BUNDLED_CATALOG_RELEASE` in `backend/infrastructure/catalog/release.py`, regenerate both catalogs with `scripts/build_localized_catalogs.py`, and review the generated changes. Release labels must fully match `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`; do not reuse a completed release for changed content. Do not alter upstream dataset versions to disguise localization changes.
+
+Only the import ledger key is qualified: `catalog-release:` followed by a compact JSON pair `[upstream_version, release]`. Catalog records keep upstream versions and stable source identities, while historical meal/workout snapshots retain their recorded values. Explicit releases reject an upstream version already beginning with the reserved prefix, avoiding nested qualified identities. Raw receiver payloads without `catalog_release` retain the exact legacy import identity and checksum behavior. Since legacy versions accept arbitrary nonblank strings, a legacy value could resemble a qualified key; the unchanged ledger rejects checksum drift on any completed-key collision. Never delete or rewrite completed ledger rows to force an import.
 
 ## Legacy CSV Cutover
 

@@ -36,6 +36,7 @@ from backend.catalog_receiver.models import (
 from backend.catalog_receiver.projectors import project_source
 from backend.catalog_receiver.reporting import build_report
 from backend.catalog_receiver.validators import validate_records
+from backend.infrastructure.catalog.release import BUNDLED_CATALOG_RELEASE
 
 
 MAPPING_ROOT = PROJECT_ROOT / "backend" / "data" / "catalog" / "mappings"
@@ -231,6 +232,7 @@ def _render_catalogs(args: argparse.Namespace) -> tuple[str, str]:
     )
     food_payload = {
         "schema_version": 1,
+        "catalog_release": BUNDLED_CATALOG_RELEASE,
         "source_name": food_profile.source_name,
         "dataset_version": food_profile.dataset_version,
         "license": food_profile.license,
@@ -239,6 +241,7 @@ def _render_catalogs(args: argparse.Namespace) -> tuple[str, str]:
     }
     exercise_payload = {
         "schema_version": 1,
+        "catalog_release": BUNDLED_CATALOG_RELEASE,
         "dataset_version": exercise_profile.dataset_version,
         "managed_sources": [exercise_profile.source_name],
         "exercises": [record.model_dump(mode="json") for record in exercise_records],

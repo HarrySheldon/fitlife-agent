@@ -196,6 +196,8 @@ def test_build_is_sorted_and_byte_idempotent(tmp_path: Path) -> None:
     assert main(args) == 0
     first_food = food_catalog.read_bytes()
     first_exercise = exercise_catalog.read_bytes()
+    assert json.loads(first_food)["catalog_release"] == "zh-CN.2026-10-17.1"
+    assert json.loads(first_exercise)["catalog_release"] == "zh-CN.2026-10-17.1"
     foods = json.loads(first_food.decode("utf-8"))["foods"]
     exercises = json.loads(first_exercise.decode("utf-8"))["exercises"]
 

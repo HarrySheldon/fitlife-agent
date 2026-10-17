@@ -14,6 +14,7 @@ from backend.infrastructure.catalog.import_ledger import (
     CatalogImportLedger,
     CatalogMutationResult,
 )
+from backend.infrastructure.catalog.release import catalog_import_version
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 
 
@@ -50,6 +51,7 @@ def seed_food_payload(
         raise ValueError("FOOD_SEED_SCHEMA_VERSION_UNSUPPORTED")
     source_name = _required_text(payload, "source_name")
     dataset_version = _required_text(payload, "dataset_version")
+    import_version = catalog_import_version(payload, dataset_version)
     license_name = _required_text(payload, "license")
     attribution = _required_text(payload, "attribution")
     foods = payload.get("foods")
@@ -74,7 +76,7 @@ def seed_food_payload(
     checksum = _partition_checksum(source_name, dataset_version, records)
     run = CatalogImportLedger(database).run(
         source_name,
-        dataset_version,
+        import_version,
         checksum,
         lambda connection: _import_records(
             connection,
