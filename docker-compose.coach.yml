@@ -1,0 +1,30 @@
+# Demo override that turns on the unified coach conversation experience (C3/C4).
+#
+# The base configuration keeps both switches off on purpose: the C0 language fix
+# must not depend on adopting the new entry, and the old per-page coach drawer
+# stays available as a fallback. This file lets you try the new floating window
+# locally without changing any default.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.coach.yml up --build -d
+#
+# Notes:
+# - Both switches must move together. Enabling only the frontend opens the
+#   window, but every turn then fails with 409 COACH_CONVERSATIONS_DISABLED.
+# - VITE_* values are inlined at build time, so --build is required. Changing
+#   them at runtime has no effect.
+# - The coach window only mounts for a signed-in user; signed out still shows
+#   the plain layout.
+
+services:
+  backend:
+    environment:
+      COACH_CONVERSATIONS_ENABLED: "true"
+
+  frontend:
+    build:
+      args:
+        # Repeated here rather than relying on merge order, so this file stays
+        # correct on its own.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_V1_BASE_URL: ${VITE_API_V1_BASE_URL:-http://localhost:8000/api/v1}
+        VITE_COACH_CONVERSATIONS_ENABLED: "true"

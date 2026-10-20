@@ -35,6 +35,38 @@ PIP_DEFAULT_TIMEOUT=120
 PIP_RETRIES=5
 ```
 
+## Try the unified coach window
+
+The unified floating coach window (multi-chat, per-chat drafts, sources, collapsed trace, stop
+and retry) ships behind two switches that are **off by default**. They must move together: the
+window is compiled from `VITE_COACH_CONVERSATIONS_ENABLED`, while every conversation request is
+checked against `COACH_CONVERSATIONS_ENABLED`. Turning on only the frontend opens the window but
+every turn then fails with `409 COACH_CONVERSATIONS_DISABLED`.
+
+The demo override turns both on without changing any default:
+
+~~~powershell
+docker compose -f docker-compose.yml -f docker-compose.coach.yml up --build -d
+~~~
+
+`--build` is required because `VITE_*` values are inlined at build time; changing them at runtime
+has no effect. The window mounts for a signed-in user only.
+
+To enable it permanently instead, set both keys in the untracked `.env` and rebuild:
+
+~~~env
+COACH_CONVERSATIONS_ENABLED=true
+VITE_COACH_CONVERSATIONS_ENABLED=true
+~~~
+
+When running without Docker, note that Vite reads `.env` from `frontend/`, not from the repository
+root. Create `frontend/.env` containing `VITE_COACH_CONVERSATIONS_ENABLED=true`, and start the
+backend with `COACH_CONVERSATIONS_ENABLED=true` in its environment.
+
+Why off by default: the C0 language fix must not depend on adopting the new entry, and the old
+per-page coach drawer stays available as a fallback. See
+`docs/evaluation/2026-10-20-c0-c4-delivery-record.md`.
+
 ## Run without Docker
 
 Use an existing project virtual environment, or create one before installing dependencies:
