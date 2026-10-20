@@ -3,6 +3,7 @@
 **日期：** 2026-10-18
 **检查点：** `docs/superpowers/plans/2026-10-18-coach-conversation-experience.md` 的 C0
 **状态：** 离线实现与验收完成。**未提交、未推送、未部署，未调用真实模型。**
+（2026-10-20 更正：已随 `df6fd98` 提交并推送至 `origin/main`；仍未部署、未调用真实模型。）
 
 ---
 

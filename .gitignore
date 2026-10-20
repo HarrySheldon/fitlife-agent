@@ -9,6 +9,8 @@ dist/
 .worktrees/
 .local-backups/
 backups/
+.workbuddy-ai/
+.acl-recovery/
 .env
 backend/data/eval_results.json
 backend/data/eval_results.md
