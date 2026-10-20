@@ -37,6 +37,42 @@ def observe_database(path, *, actors=None, data_dir=None):
                 condition = ' WHERE user_id=?' if user_id is not None else ''
                 parameters = (user_id,) if user_id is not None else ()
                 result['item_commit_count'] = connection.execute('SELECT COUNT(*) FROM entry_item_commits' + condition, parameters).fetchone()[0]
+            if 'coach_messages' in tables:
+                condition = ' WHERE user_id=?' if user_id is not None else ''
+                parameters = (user_id,) if user_id is not None else ()
+                result['coach_messages'] = connection.execute('SELECT COUNT(*) FROM coach_messages' + condition, parameters).fetchone()[0]
+                result['coach_turns'] = connection.execute('SELECT COUNT(*) FROM coach_turns' + condition, parameters).fetchone()[0]
+                prefix = condition + (' AND ' if condition else ' WHERE ')
+                result['coach_unapproved_answers'] = connection.execute(
+                    "SELECT COUNT(*) FROM coach_messages" + prefix + "role='coach' AND review_status!='approved'", parameters).fetchone()[0]
+                result['coach_successes'] = connection.execute(
+                    "SELECT COUNT(*) FROM coach_turns" + prefix + "status='succeeded'", parameters).fetchone()[0]
+                result['coach_cancelled'] = connection.execute(
+                    "SELECT COUNT(*) FROM coach_turns" + prefix + "status='cancelled'", parameters).fetchone()[0]
+                result['coach_failed'] = connection.execute(
+                    "SELECT COUNT(*) FROM coach_turns" + prefix + "status='failed'", parameters).fetchone()[0]
+                result['coach_slot_holders'] = connection.execute(
+                    "SELECT COUNT(*) FROM coach_turns" + prefix + "status IN ('queued','running')", parameters).fetchone()[0]
+                from backend.domain.coach_answer import message_catalog
+                result['coach_boundary_replies'] = 0
+                result['coach_messages_with_sources'] = 0
+                owner_clause = ' AND m.user_id=?' if user_id is not None else ''
+                for body, receipt in connection.execute(
+                    "SELECT m.body,t.receipt_json FROM coach_messages m JOIN coach_turns t ON m.turn_id=t.turn_id "
+                    "AND m.user_id=t.user_id WHERE m.role='coach' AND m.review_status='approved'" + owner_clause, parameters):
+                    try:
+                        parsed = json.loads(receipt or '{}')
+                    except (TypeError, ValueError):
+                        continue
+                    if not isinstance(parsed, dict):
+                        continue
+                    context = parsed.get('context')
+                    language = context.get('language') if isinstance(context, dict) else None
+                    if language in {'zh-CN', 'en-US'} and body == message_catalog(language).out_of_scope:
+                        result['coach_boundary_replies'] += 1
+                    sources = parsed.get('sources')
+                    if isinstance(sources, list) and sources:
+                        result['coach_messages_with_sources'] += 1
             if data_dir is not None and user_id is not None:
                 user_root = Path(data_dir) / "users" / user_id
                 history = len(list((user_root / "plans").glob("*.json")))

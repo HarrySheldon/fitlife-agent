@@ -159,6 +159,9 @@ it('keeps a session task error isolated when navigating to the password task', a
 })
 
 it('labels the legacy archive scope and keeps deletion on its dedicated route', async () => {
+  // A real Response would hand back a Node Blob, which is not an instance of the
+  // jsdom Blob the download path is asserted against. Stub only the members the
+  // export request reads; the download assertions stay unchanged.
   const archive = new Blob(['zip-data'], { type: 'application/zip' })
   let resolveExport!: (response: Response) => void
   const fetchExport = vi.fn().mockReturnValue(new Promise((resolve) => { resolveExport = resolve }))
@@ -180,13 +183,15 @@ it('labels the legacy archive scope and keeps deletion on its dedicated route', 
   fireEvent.click(exportButton)
   expect(screen.getByRole('button', { name: 'Preparing archive...' })).toBeDisabled()
 
-  resolveExport(new Response(archive, {
+  resolveExport({
+    ok: true,
     status: 200,
-    headers: {
+    headers: new Headers({
       'Content-Type': 'application/zip',
       'Content-Disposition': 'attachment; filename="account-data-export.zip"',
-    },
-  }))
+    }),
+    blob: async () => archive,
+  } as Response)
 
   expect(await screen.findByRole('status')).toHaveTextContent('Legacy records archive downloaded')
   expect(fetchExport).toHaveBeenCalledWith('/api/account/export', expect.objectContaining({ headers: expect.any(Headers) }))

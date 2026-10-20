@@ -1,193 +1,150 @@
-import { ArrowLeft, CheckCircle2, FlaskConical, KeyRound, RefreshCw, Save, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, FlaskConical, RefreshCw, Save } from 'lucide-react'
+import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { useModelSettings } from '../../hooks/useModelSettings'
-import type { ModelProtocol, ModelProvider, ModelSettingsUpdate } from '../../types'
+import type { ModelConnectionInput, ModelProtocol } from '../../types'
+import { UnsavedModelChanges } from './UnsavedModelChanges'
+
+function Step({ number, title, children }: { number: number; title: string; children: ReactNode }) {
+  return <section className="settings-section model-setup-step">
+    <div className="settings-section-heading"><h2><span className="model-step-number">{number}</span>{title}</h2></div>
+    <div className="settings-section-control">{children}</div>
+  </section>
+}
 
 export function ModelSettings() {
   const { t } = useTranslation()
-  const {
-    settings,
-    models,
-    loading,
-    action,
-    feedback,
-    refresh,
-    save,
-    clearApiKey,
-    listModels,
-    testConnection,
-  } = useModelSettings()
-  const [provider, setProvider] = useState<ModelProvider>('openai')
-  const [protocol, setProtocol] = useState<ModelProtocol>('responses')
-  const [baseUrl, setBaseUrl] = useState('')
-  const [model, setModel] = useState('gpt-5.5')
-  const [apiKey, setApiKey] = useState('')
-  const [enabled, setEnabled] = useState(false)
-
-  useEffect(() => {
-    if (!settings) return
-    setProvider(settings.provider)
-    setProtocol(settings.protocol)
-    setBaseUrl(settings.base_url ?? '')
-    setModel(settings.model)
-    setEnabled(settings.enabled)
-  }, [settings])
-
+  const state = useModelSettings()
+  const { workspace, editing, providers, loading, dirty, action, feedback, patch } = state
   const busy = action !== null
-  const stateLabels = {
-    unconfigured: t('settingsModel.states.unconfigured'), disabled: t('settingsModel.states.disabled'),
-    untested: t('settingsModel.states.untested'), success: t('settingsModel.states.success'), failed: t('settingsModel.states.failed'),
+
+  if (loading && !workspace) return <div className="settings-loading">{t('settingsModel.loading')}…</div>
+  if (!workspace) return <div className="page-stack settings-page">
+    <Link to="/settings" className="secondary-button">{t('settingsModel.back')}</Link>
+    <h1>{t('settingsModel.title')}</h1><p role="alert">{feedback?.message ?? t('settingsModel.loadError')}</p>
+    <button className="secondary-button" onClick={() => void state.refresh()}>{t('common.tryAgain')}</button>
+  </div>
+
+  const preset = providers.find(item => item.id === editing.provider_id)
+  const source = editing.credential_mode === 'reuse_draft' ? workspace.draft : workspace.active
+  const credentialReady = editing.credential_mode === 'new' ? Boolean(editing.api_key?.trim()) : Boolean(source?.api_key_configured)
+  const connectionReady = Boolean(editing.provider_id && editing.base_url.trim() && credentialReady)
+  const testReady = connectionReady && Boolean(editing.model.trim())
+  const active = workspace.active
+
+  function load(slot: 'active' | 'draft') {
+    if (!dirty || window.confirm(t('settingsModel.flow.discard'))) state.load(slot)
+  }
+  function confirmAction(operation: () => Promise<void>) {
+    if (window.confirm(t('settingsModel.flow.confirmChange'))) void operation()
   }
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const payload: ModelSettingsUpdate = {
-      provider,
-      protocol,
-      base_url: provider === 'custom' ? baseUrl.trim() || null : null,
-      model: model.trim(),
-      enabled,
-    }
-    if (apiKey.trim()) payload.api_key = apiKey.trim()
-    const saved = await save(payload)
-    if (saved) setApiKey('')
-  }
+  return <div className="page-stack settings-page model-settings-page">
+    <UnsavedModelChanges dirty={dirty} />
+    <header className="settings-task-header">
+      <Link className="icon-button" to="/settings" aria-label={t('settingsModel.back')}><ArrowLeft size={20} /></Link>
+      <div className="page-header"><span>{t('settings.title')}</span><h1>{t('settingsModel.title')}</h1></div>
+      <span className="model-state">{t(dirty ? 'settingsModel.flow.unsaved' : 'settingsModel.flow.editing')}</span>
+    </header>
 
-  if (loading && !settings) {
-    return <div className="settings-loading">{t('settingsModel.loading')}...</div>
-  }
-
-  if (!settings) {
-    return (
-      <div className="page-stack settings-page">
-        <header className="page-header"><h1>{t('settingsModel.title')}</h1></header>
-        <div className="settings-loading settings-load-error">
-          <p>{feedback?.message ?? t('settingsModel.loadError')}</p>
-          <button className="secondary-button" type="button" onClick={() => void refresh()}>{t('common.tryAgain')}</button>
+    <section className="model-active-summary" aria-label={t('settingsModel.flow.current')}>
+      <h2>{t('settingsModel.flow.current')}</h2>
+      {active ? <>
+        <strong>{active.provider_id ?? active.provider} · {active.model}</strong>
+        <p className="model-endpoint">{active.base_url ?? providers.find(item => item.id === (active.provider_id ?? active.provider))?.default_base_url ?? t('settingsModel.flow.unspecifiedAddress')}</p>
+        <span className={`model-state ${active.enabled ? 'success' : 'disabled'}`}><span />{t(active.enabled ? 'settingsModel.flow.active' : 'settingsModel.states.disabled')}</span>
+        {active.enabled && (active.generation_status !== 'passed' || active.structured_status !== 'passed') ? <p>{t('settingsModel.flow.legacy')}</p> : null}
+        <div className="settings-actions">
+          <button type="button" className="secondary-button" disabled={busy} onClick={() => load('active')}>{t('settingsModel.flow.loadActive')}</button>
+          {active.enabled ? <button type="button" className="secondary-button" disabled={busy} onClick={() => confirmAction(state.disable)}>{t('settingsModel.flow.disable')}</button> : null}
+          {active.api_key_configured ? <button type="button" className="danger-button" disabled={busy} onClick={() => confirmAction(() => state.clearApiKey('active'))}>{t('settingsModel.flow.clearActive')}</button> : null}
         </div>
-      </div>
-    )
-  }
+      </> : <p>{t('settingsModel.flow.noActive')}</p>}
+      {workspace.draft ? <div className="settings-actions">
+        <span>{t('settingsModel.flow.draftAvailable', { model: workspace.draft.model })}</span>
+        <button type="button" className="secondary-button" disabled={busy} onClick={() => load('draft')}>{t('settingsModel.flow.loadDraft')}</button>
+        {workspace.draft.api_key_configured ? <button type="button" className="danger-button" disabled={busy} onClick={() => confirmAction(() => state.clearApiKey('draft'))}>{t('settingsModel.flow.clearDraft')}</button> : null}
+      </div> : null}
+    </section>
 
-  return (
-    <div className="page-stack settings-page model-settings-page">
-      <header className="settings-task-header">
-        <Link className="icon-button" to="/settings" aria-label={t('settingsModel.back')}><ArrowLeft size={20} /></Link>
-        <div className="page-header">
-          <span>{t('settings.title')}</span>
-          <h1>{t('settingsModel.title')}</h1>
+    <form className="settings-form" onSubmit={event => event.preventDefault()}>
+      <Step number={1} title={t('settingsModel.flow.chooseProvider')}>
+        <label className="settings-field" htmlFor="model-provider"><span>{t('settingsModel.providerLabel')}</span>
+          <select id="model-provider" value={editing.provider_id} disabled={busy} onChange={event => {
+            const next = providers.find(item => item.id === event.target.value)
+            patch({ provider_id: event.target.value, base_url: next?.default_base_url ?? '', model: '', protocol: next?.recommended_protocol ?? 'chat_completions' })
+          }}>
+            <option value="">{t('settingsModel.flow.chooseProvider')}</option>
+            {providers.map(item => <option key={item.id} value={item.id}>{item.id === 'custom' ? t('settingsModel.flow.custom') : item.display_name}</option>)}
+          </select>
+        </label>
+      </Step>
+
+      <Step number={2} title={t('settingsModel.flow.addressAndKey')}>
+        <label className="settings-field" htmlFor="model-base-url"><span>{t('settingsModel.baseUrl')}</span>
+          <input id="model-base-url" type="url" value={editing.base_url} disabled={busy || !preset} placeholder="https://models.example.com/v1" onChange={event => patch({ base_url: event.target.value })} />
+        </label>
+        <label className="settings-field" htmlFor="model-credential-mode"><span>{t('settingsModel.flow.credentialSource')}</span>
+          <select id="model-credential-mode" value={editing.credential_mode} disabled={busy || !preset} onChange={event => patch({ credential_mode: event.target.value as ModelConnectionInput['credential_mode'], api_key: '' })}>
+            <option value="new">{t('settingsModel.newKey')}</option>
+            {active?.api_key_configured ? <option value="reuse_active">{t('settingsModel.flow.reuseActive')}</option> : null}
+            {workspace.draft?.api_key_configured ? <option value="reuse_draft">{t('settingsModel.flow.reuseDraft')}</option> : null}
+          </select>
+        </label>
+        {editing.credential_mode === 'new' ? <label className="settings-field" htmlFor="model-api-key"><span>{t('settingsModel.apiKey')}</span>
+          <input id="model-api-key" type="password" value={editing.api_key ?? ''} autoComplete="new-password" disabled={busy || !preset} onChange={event => patch({ api_key: event.target.value })} />
+        </label> : <p>{t('settingsModel.savedKey', { hint: source?.api_key_hint ?? '' })}</p>}
+        <p>{t('settingsModel.apiKeyDescription')}</p>
+        <details><summary>{t('settingsModel.flow.advanced')}</summary>
+          <label className="settings-field" htmlFor="model-protocol"><span>{t('settingsModel.protocol')}</span>
+            <select id="model-protocol" value={editing.protocol} disabled={busy || !preset} onChange={event => patch({ protocol: event.target.value as ModelProtocol })}>
+              {(preset?.protocols ?? ['chat_completions', 'responses']).map(protocol => <option key={protocol} value={protocol}>{t(protocol === 'responses' ? 'settingsModel.responses' : 'settingsModel.chatCompletions')}</option>)}
+            </select>
+          </label><p>{t('settingsModel.protocolDescription')}</p>
+        </details>
+      </Step>
+
+      <Step number={3} title={t('settingsModel.flow.chooseModel')}>
+        <label className="settings-field" htmlFor="model-name"><span>{t('settingsModel.modelName')}</span>
+          <input id="model-name" list="model-options" value={editing.model} disabled={busy || !preset} onChange={event => patch({ model: event.target.value })} />
+          <datalist id="model-options">{state.models.map(model => <option key={model} value={model} />)}</datalist>
+        </label>
+        <button type="button" className="secondary-button" disabled={busy || !connectionReady} onClick={() => void state.listModels()}><RefreshCw size={16} />{t('settingsModel.getModels')}</button>
+        <p>{t('settingsModel.flow.listOptional')}</p>
+      </Step>
+
+      <Step number={4} title={t('settingsModel.flow.testCurrent')}>
+        <p>{t('settingsModel.flow.cost')}</p>
+        <p className="model-endpoint">{t('settingsModel.flow.destination', { url: editing.base_url || '—', model: editing.model || '—' })}</p>
+        <button type="button" className="secondary-button" disabled={busy || !testReady} onClick={() => void state.testConnection()}><FlaskConical size={16} />{t(action === 'test' ? 'settingsModel.testing' : 'settingsModel.flow.testCurrent')}</button>
+        <div className="model-probe-results" aria-live="polite">
+          <p>{t(state.probeResult ? state.probeResult.status === 'success'
+            ? 'settingsModel.flow.connectionSuccess' : state.probeResult.generation.status === 'passed'
+              ? 'settingsModel.flow.businessFailed' : 'settingsModel.flow.connectionFailed'
+            : 'settingsModel.flow.checkHelp')}</p>
         </div>
-        <div className={`model-state ${settings.state}`}>
-          <span aria-hidden="true" />
-          {stateLabels[settings.state]}
+        {state.probeResult ? <details>
+          <summary>{t('settingsModel.flow.checkDetails')}</summary>
+          {(['generation', 'structured'] as const).map(name => <div key={name} data-status={state.probeResult?.[name].status ?? 'not_run'}>
+            <strong>{t(`settingsModel.flow.${name}`)}</strong>
+            <span>{t(`settingsModel.flow.${state.probeResult?.[name].status ?? 'not_run'}`)}</span>
+            {state.probeResult?.[name].latency_ms !== undefined ? <small>{t('settingsModel.flow.latency', { count: state.probeResult[name].latency_ms })}</small> : null}
+            {state.probeResult?.[name].error_code ? <small>{state.probeResult[name].error_code}</small> : null}
+          </div>)}
+        </details> : null}
+      </Step>
+
+      <Step number={5} title={t('settingsModel.flow.saveAndEnable')}>
+        <p>{t('settingsModel.flow.saveHelp')}</p>
+        <div className="settings-actions">
+          <button type="button" className="secondary-button" disabled={busy || !testReady} onClick={() => void state.save(false)}>{t('settingsModel.flow.saveDraft')}</button>
+          <button type="button" className="primary-button" disabled={busy || !state.verificationToken} onClick={() => void state.save(true)}><Save size={16} />{t('settingsModel.flow.saveAndEnable')}</button>
         </div>
-      </header>
-
-      <form className="settings-form" onSubmit={(event) => void submit(event)}>
-        <section className="settings-section">
-          <div className="settings-section-heading">
-            <h2>{t('settingsModel.provider')}</h2>
-            <p>{t('settingsModel.providerDescription')}</p>
-          </div>
-          <div className="settings-section-control">
-            <div className="settings-segmented" role="group" aria-label={t('settingsModel.providerLabel')}>
-              <button type="button" className={provider === 'openai' ? 'active' : ''} aria-pressed={provider === 'openai'} onClick={() => setProvider('openai')}>OpenAI</button>
-              <button type="button" className={provider === 'custom' ? 'active' : ''} aria-pressed={provider === 'custom'} onClick={() => setProvider('custom')}>{t('settingsModel.custom')}</button>
-            </div>
-            {provider === 'custom' ? (
-              <label className="settings-field">
-                <span>{t('settingsModel.baseUrl')}</span>
-                <input type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://models.example.com/v1" required />
-              </label>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section-heading">
-            <h2>{t('settingsModel.protocol')}</h2>
-            <p>{t('settingsModel.protocolDescription')}</p>
-          </div>
-          <div className="settings-section-control">
-            <div className="settings-segmented" role="group" aria-label={t('settingsModel.protocolLabel')}>
-              <button type="button" className={protocol === 'responses' ? 'active' : ''} aria-pressed={protocol === 'responses'} onClick={() => setProtocol('responses')}>{t('settingsModel.responses')}</button>
-              <button type="button" className={protocol === 'chat_completions' ? 'active' : ''} aria-pressed={protocol === 'chat_completions'} onClick={() => setProtocol('chat_completions')}>{t('settingsModel.chatCompletions')}</button>
-            </div>
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section-heading">
-            <h2>{t('settingsModel.model')}</h2>
-            <p>{t('settingsModel.modelDescription')}</p>
-          </div>
-          <div className="settings-section-control settings-model-control">
-            <label className="settings-field">
-              <span>{t('settingsModel.modelName')}</span>
-              <input list="model-options" value={model} onChange={(event) => setModel(event.target.value)} required />
-              <datalist id="model-options">
-                {models.map((item) => <option key={item} value={item} />)}
-              </datalist>
-            </label>
-            <button className="secondary-button" type="button" disabled={busy || !settings.api_key_configured} onClick={() => void listModels()}>
-              <RefreshCw size={17} className={action === 'list' ? 'spin' : ''} />
-              {action === 'list' ? `${t('common.loading')}...` : t('settingsModel.getModels')}
-            </button>
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section-heading">
-            <h2>{t('settingsModel.apiKey')}</h2>
-            <p>{t('settingsModel.apiKeyDescription')}</p>
-          </div>
-          <div className="settings-section-control settings-key-control">
-            <label className="settings-field">
-              <span>{settings.api_key_configured ? t('settingsModel.savedKey', { hint: settings.api_key_hint ?? '' }) : t('settingsModel.newKey')}</span>
-              <span className="settings-input-with-icon">
-                <KeyRound size={17} aria-hidden="true" />
-                <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" placeholder={settings.api_key_configured ? t('settingsModel.keepKey') : t('settingsModel.enterKey')} />
-              </span>
-            </label>
-            {settings.api_key_configured ? (
-              <button className="danger-button" type="button" disabled={busy} onClick={() => void clearApiKey()}>
-                <Trash2 size={17} />
-                {action === 'clear' ? t('settingsModel.clearing') : t('settingsModel.clearKey')}
-              </button>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section-heading">
-            <h2>{t('settingsModel.availability')}</h2>
-            <p>{t('settingsModel.availabilityDescription')}</p>
-          </div>
-          <div className="settings-section-control">
-            <label className="settings-switch">
-              <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-              <span className="settings-switch-track" aria-hidden="true"><span /></span>
-              <span><strong>{t('settingsModel.enable')}</strong><small>{enabled ? t('settingsModel.availableAfterSaving') : t('settingsModel.disabled')}</small></span>
-            </label>
-          </div>
-        </section>
-
-        {feedback ? <div className={`settings-feedback ${feedback.kind}`} role="status">{feedback.kind === 'success' ? <CheckCircle2 size={18} /> : null}{feedback.message}</div> : null}
-
-        <footer className="settings-actions">
-          <button className="secondary-button" type="button" disabled={busy || !settings.api_key_configured} onClick={() => void testConnection()}>
-            <FlaskConical size={17} />
-            {action === 'test' ? t('settingsModel.testing') : t('settingsModel.test')}
-          </button>
-          <button className="primary-button" type="submit" disabled={busy}>
-            <Save size={17} />
-            {action === 'save' ? t('common.saving') : t('settingsModel.saveChanges')}
-          </button>
-        </footer>
-      </form>
-    </div>
-  )
+      </Step>
+    </form>
+    {feedback ? <div className={`settings-feedback ${feedback.kind}`} role="status">{feedback.message}</div> : null}
+    <button className="secondary-button" type="button" disabled={busy} onClick={() => void state.refresh()}>{t('settingsModel.flow.refresh')}</button>
+  </div>
 }

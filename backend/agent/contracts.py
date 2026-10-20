@@ -26,6 +26,15 @@ class AgentCommand:
     task_ref: TaskRef | None = None
     raw_coach_question: str | None = None
     trusted_page_intent: bool = False
+    # Already resolved by the caller: explicit request for this turn, then the
+    # account setting, then the app default. The workflow does not re-derive it from
+    # the question text, because the question may be an internal English prompt.
+    language: str | None = None
+    answer_mode: str | None = None
+    # The registered action name, when this run is a Coach quick action. The writer
+    # uses it to look up the per-action answer limits instead of guessing from prose.
+    coach_action: str | None = None
+    recent_history: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)

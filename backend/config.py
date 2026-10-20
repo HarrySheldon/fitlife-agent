@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     app_env: str = "demo"
     llm_enabled: bool = False
     interactive_entry_enabled: bool = False
+    # The conversation entry is its own switch. C0's answer contract ships on the
+    # legacy endpoint, so enabling it must not depend on this flag, and turning
+    # this on must not change any existing route.
+    coach_conversations_enabled: bool = False
     entry_task_ttl_days: int = Field(default=30, gt=0)
     agent_runtime_policy: dict[str, object] = Field(default_factory=dict)
     # How the semantic review treats an answer. "off" makes no extra call, which is the

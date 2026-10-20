@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, Request
 
 from backend.agent.graph import interpret_persisted_weekly_report
+from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.application.use_cases.reports import WeeklyReports
 from backend.application.use_cases.generate_weekly_report import GenerateWeeklyReport
+from backend.api.coach_conversations import coach_error, get_coach_admission_service
 from backend.api.dependencies import optional_current_user, require_current_user
 from backend.api.preference_context import preferences_for
 from backend.api.utils import ok, request_id_for
@@ -44,20 +46,40 @@ def generate_weekly_report(week: str, user: AuthenticatedUser = Depends(require_
 
 
 @router.post("/weekly/{week}/interpret")
-def interpret_weekly_report(week: str, request: Request, user: AuthenticatedUser = Depends(require_current_user)):
+def interpret_weekly_report(
+    week: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_current_user),
+    admission: CoachTurnService = Depends(get_coach_admission_service),
+):
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         stored = _reports().get(user.user_id, week)
         report_snapshot = stored.report.model_dump()
         preferences = preferences_for(user)
-    # Runtime operations use worker threads; never carry a thread-owned lock
-    # across model execution. Recheck deletion before returning private output.
-    result = interpret_persisted_weekly_report(
-        week=week,
-        report=report_snapshot,
-        user_id=user.user_id,
-        preferences=preferences,
-        request_id=request_id_for(request),
-    )
+
+    def produce() -> dict:
+        # Runtime operations use worker threads; never carry a thread-owned lock
+        # across model execution.
+        return interpret_persisted_weekly_report(
+            week=week,
+            report=report_snapshot,
+            user_id=user.user_id,
+            preferences=preferences,
+            request_id=request_id_for(request),
+        )
+
+    try:
+        result = admission.run_legacy(
+            user.user_id,
+            question=f"Interpret the weekly report for {week}",
+            action="explain_weekly_report",
+            surface="review",
+            produce=produce,
+        )
+    except Exception as error:
+        raise coach_error(error) from None
+
+    # Recheck deletion before returning private output.
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         response = CoachActionResponse(
             surface="review",

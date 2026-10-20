@@ -960,4 +960,96 @@ RECORDS_MIGRATIONS = (
             )''',
         ),
     ),
+    Migration(
+        version=7,
+        name='coach_conversations',
+        statements=(
+            """
+            CREATE TABLE coach_conversations (
+                conversation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                title TEXT CHECK (title IS NULL OR length(trim(title)) > 0),
+                status TEXT NOT NULL CHECK (status IN ('active', 'deleted')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT,
+                UNIQUE (conversation_id, user_id)
+            )
+            """,
+            """
+            CREATE INDEX idx_coach_conversations_owner
+            ON coach_conversations (user_id, status, updated_at DESC)
+            """,
+            """
+            CREATE TABLE coach_turns (
+                turn_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL CHECK (length(trim(idempotency_key)) > 0),
+                request_fingerprint TEXT NOT NULL
+                    CHECK (length(trim(request_fingerprint)) > 0),
+                status TEXT NOT NULL CHECK (status IN (
+                    'queued', 'running', 'awaiting_user', 'succeeded',
+                    'failed', 'cancelled', 'interrupted', 'expired'
+                )),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (user_id, conversation_id, idempotency_key),
+                FOREIGN KEY (conversation_id, user_id)
+                    REFERENCES coach_conversations (conversation_id, user_id)
+                    ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE TABLE coach_messages (
+                message_id TEXT PRIMARY KEY,
+                turn_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('user', 'coach')),
+                body TEXT NOT NULL CHECK (length(body) > 0),
+                review_status TEXT NOT NULL
+                    CHECK (review_status IN ('pending', 'approved', 'rejected')),
+                created_at TEXT NOT NULL,
+                UNIQUE (turn_id, role),
+                FOREIGN KEY (turn_id) REFERENCES coach_turns (turn_id) ON DELETE CASCADE,
+                FOREIGN KEY (conversation_id, user_id)
+                    REFERENCES coach_conversations (conversation_id, user_id)
+                    ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE INDEX idx_coach_messages_round
+            ON coach_messages (user_id, conversation_id, created_at)
+            """,
+        ),
+    ),
+    Migration(
+        version=8,
+        name='coach_turn_execution',
+        statements=(
+            # Cancellation intent is deliberately separate from status: a stopping
+            # turn is still 'running', so it keeps the single execution slot until
+            # the transport closes. Encoding it as a status would free the slot too
+            # early and let a second model call start.
+            "ALTER TABLE coach_turns ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE coach_turns ADD COLUMN cancel_requested_at TEXT",
+            "ALTER TABLE coach_turns ADD COLUMN started_at TEXT",
+            "ALTER TABLE coach_turns ADD COLUMN finished_at TEXT",
+            "ALTER TABLE coach_turns ADD COLUMN slot_released_at TEXT",
+            # Which process owns execution. A restarted process may only mark the
+            # turns of other leases as interrupted; it can never resume them.
+            "ALTER TABLE coach_turns ADD COLUMN lease_id TEXT",
+            "ALTER TABLE coach_turns ADD COLUMN receipt_json TEXT",
+            "ALTER TABLE coach_turns ADD COLUMN error_code TEXT",
+            # Legacy quick actions run through the same single-slot admission, but
+            # they are not chats the user opened. 'system' conversations hold those
+            # turns and are never listed or exported.
+            "ALTER TABLE coach_conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'",
+            """
+            CREATE INDEX idx_coach_turns_slot
+            ON coach_turns (user_id, status)
+            """,
+        ),
+    ),
 )

@@ -17,6 +17,7 @@ import { LoadingState } from '../components/LoadingState'
 import { TargetProgress } from '../components/TargetProgress'
 import { usePreferences } from '../hooks/usePreferences'
 import { useToday } from '../hooks/useToday'
+import { useCoach } from '../hooks/useCoach'
 import type { NutritionValues, TargetProgress as TargetProgressType } from '../types'
 
 export function Today() {
@@ -24,6 +25,7 @@ export function Today() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { localDate } = usePreferences()
+  const coach = useCoach()
   const [selectedDate, setSelectedDate] = useState(
     () => validDate(params.get('date')) ?? localDate(),
   )
@@ -178,10 +180,10 @@ export function Today() {
               </section>
             ) : null}
           </div>
-          <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" onClick={() => setCoachOpen(true)}>
+          {coach ? <div className="coach-actions">{coachActions.map(item => <button key={item.action} type="button" disabled={coach.sending || coach.active !== null} onClick={() => void coach.send({ question: `${item.label} · ${selectedDate}`, action: item.action, surface: 'today', date: selectedDate })}>{item.label}</button>)}</div> : <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" onClick={() => setCoachOpen(true)}>
             <Bot size={17} />{t('coach.open')}
-          </button>
-          <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="today" date={selectedDate} actions={coachActions} />
+          </button>}
+          {!coach ? <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="today" date={selectedDate} actions={coachActions} /> : null}
         </div>
       ) : null}
     </div>

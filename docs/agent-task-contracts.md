@@ -61,3 +61,27 @@ npm --prefix frontend run build
 `ExpireAgentTasks(repository, clock=..., mutation_scope=...)` requires an explicit owner and an aware cutoff no later than the server clock. `execute(user_id, cutoff=cutoff)` previews IDs/count only; `dry_run=False` applies within the caller's lifecycle mutation scope and one repository transaction. The SQLite adapter compares parsed UTC instants and removes only expired smart-entry draft bodies; command bodies cascade, while formal records, item maps, minimal confirmation receipts and task budget counters survive. Access expiry remains independent of physical cleanup. No production cleanup command is provided or executed. Operators must explicitly inject the configured repository and lifecycle scope when integrating maintenance.
 
 Recreating the repository/service against the same database restores the persisted task version, question rounds, item progress and commit mappings without provider calls on resume. Interactive entry defaults off (`INTERACTIVE_ENTRY_ENABLED=false`), with `ENTRY_TASK_TTL_DAYS=30`; Compose forwards explicit overrides for both settings.
+
+## M：模型连接与任务执行解耦（2026-10-18）
+
+每用户模型配置以 schema 2 JSON envelope 保存 `revision/active/draft`，不是新增业务数据库表。Runtime 和 S2 可用性只读取 active；保存停用草稿不切换运行模型。旧 JSON 无副作用映射为 revision 0，历史已启用连接不被自动停用，但旧工具测试不被伪造成基础生成已通过。
+
+设置页预览使用当前表单和明确的 `new/reuse_active/reuse_draft` 凭据选择。跨 provider_id／地址复用已保存密钥须前后端明确确认。探测最多两次生成、整体 30 秒、单次最多 128 输出 token，失败不自动重试；列表请求 15 秒，最多展示 200 项，可手填。预览共享独立的进程内每用户每分钟 6 次／并发 1 限制，不占用或伪造业务任务预算。
+
+设置探测的 DNS／SDK／网络读取在短生命周期 spawn 子进程中执行，父进程截止后终止进程并有界清理，避免连续慢流绕过读超时。IPC 只携带解析后的必要连接字段和所选凭据，响应是限长 JSON 和脱敏错误；子进程不读取业务数据，禁 SDK 日志及标准输出。该隔离不用于业务 Agent，不提供持久恢复。取消浏览器等待不是上游费用撤销保证。
+
+基础生成和最小业务解析均通过后，后端签发 15 分钟 HMAC 凭证，签名覆盖配置 canonical 摘要、用户、revision、实际凭据的 keyed fingerprint 与探测版本。版本为 `generation-structured-v2`，旧 `generation-tool-v1` 凭证拒绝。部署密钥经不同 HKDF info 分别派生签名／指纹密钥。凭证不含密钥原文、密文、健康信息或完整配置。修改、过期、清密钥、另一个标签页更新、换用户均不能复用；后端 CAS 验证后才更新 active，旧 PUT 同样不能绕过。新 active 记录 generation_status/structured_status=passed，不把未检测的 tool_status 伪造成 passed；tool_status 仅保留旧记录历史。没有读取时迁移或自动停用旧 active。
+
+设置页只提供一个「测试连接」动作和整体结果；分阶段耗时／脱敏错误码放在默认折叠的详情。内部第二次请求提取固定合成输入 `oats 40 g`，本地严格校验字段、类型及值。失败不签发凭证，生成失败不继续解析。没有原生工具调用请求，不发送业务档案、记录、自由提示词或运行历史；通过不代表完整业务质量、安全充分或医疗正确性。
+
+自定义兼容端点的探测与 Planner／parse_structured 共用普通 JSON 文本生成和本地 Pydantic 校验，不要求供应商支持原生 strict JSON Schema，不做猜测修复、额外请求或协议自动回退；官方真实端点保持既有原生解析。DeepSeek 精确 hostname 的 Chat Completions 探测使用 max_tokens。正式业务继续遵循每个模型的类型及业务校验规则、安全审核和 Runtime 配置快照／预算；这不是放宽数据写入门槛。测试 schema 的严格类型规则不代表所有历史业务模型都改成 strict=True。
+
+账户导出继续使用受限快照和字段白名单；有草稿时另输出 `model-connection-draft.json`，不导出密钥 hint、密文、验证凭证或指纹。删除账户清除用户配置目录并撤销认证，迟到激活不能重建目录。本阶段没有运行真实 Provider 验收，也没有修改保留的正式数据。
+
+## C4：教练离线回放接线（2026-10-20）
+
+评估器的 `Step.wait_for_turn` 仅允许GET教练Turn状态，最多100次追加读取，不重发生成POST；未知状态和未结束均不能作为完成。批次父进程仍有整体期限及预算。失败路径也计入实际处理耗时。场景按owner认证，数据库计数来自独立临时业务库，报告只新增允许的非负整数，不承载聊天正文或原始receipt。
+
+当前 manifest 有 16 个场景：中英文确定性边界、幂等/跨 owner 拒绝、缺失保存计划拒绝生成、中文快捷解释、账户语言与显式语言覆盖、超长输出拒绝、同聊天多轮、跨聊天隔离、跨标签页单槽冲突、停止清理、90 天读取窗口、聊天删除、账户删除、来源可见。模型解释类场景会产生 2 或 4 次 Mock 调用；边界与拒绝类场景仍要求零调用。故障注入（慢回答、超长回答、消息回拨）只在评估 worker 内生效，不改部署默认值。
+
+`business_task_ref={kind, task_id}` 已作为只读展示字段投影到消息元数据：仅保留受长度与字符集约束的 kind/task_id，候选、预算与权限不进入聊天；当前没有 S3 生产者，因此不构成聊天内的第二确认入口。范围及未覆盖项见[教练验收记录](evaluation/coach-conversation-acceptance.md)。

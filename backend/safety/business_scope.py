@@ -26,6 +26,31 @@ def is_auxiliary_request(question: str) -> bool:
                 or re.search(r"(?:FitLife).*(?:使用|功能|help)|(?:怎么|如何)使用(?:这个应用|FitLife)", question, re.I))
 
 
+def is_closed_followup(question: str) -> bool:
+    return bool(re.fullmatch(r"(?:为什么|为什麼|再详细一点|详细解释一下|继续解释|why|more detail(?:s)?|explain more)[？?。. !]*", question.strip(), re.I))
+
+
+def followup_policy_question(question: str, history: tuple[dict, ...]) -> str:
+    """Resolve only closed, non-actionable continuation forms, never new goals.
+
+    This reuses an independently admitted prior user request, not the model's
+    answer. New/mixed/out-of-scope instructions cannot borrow its permission.
+    """
+    if not is_closed_followup(question):
+        return question
+    for message in reversed(history):
+        if message.get("role") == "user":
+            if message.get("admitted_scope") is True:
+                return "Explain fitness"
+            previous = message.get("body", "")
+            if isinstance(previous, str) and decide_business_scope(previous).scope == "in_scope":
+                return previous
+            if isinstance(previous, str) and is_closed_followup(previous):
+                continue
+            break
+    return question
+
+
 _HEALTH = r"健身|训练|訓練|运动|運動|饮食|飲食|蛋白|热量|熱量|减脂|減脂|久坐|睡眠|fitness|workouts?|nutrition|exercise|protein|calorie|diet|training|meals?|sleep"
 # Commit each token before trying the next one: 我的 must never be repartitioned
 # as 我 + 的 repeatedly when the eventual health noun does not match.

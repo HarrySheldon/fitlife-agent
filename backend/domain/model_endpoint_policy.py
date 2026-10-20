@@ -16,8 +16,23 @@ class ModelEndpointPolicy:
         self.resolver = resolver
 
     def validate_base_url(self, url: str) -> str:
+        canonical = self.canonical_base_url(url)
+        self._validate_addresses(self._parse(canonical, allow_query=False))
+        return canonical
+
+    def canonical_base_url(self, url: str) -> str:
+        """Structural checks only; callers must validate DNS before sending HTTP.
+
+        Preview resolution runs DNS inside its killable transport worker, not
+        on the request thread before the total deadline starts.
+        """
         parsed = self._parse(url, allow_query=False)
-        self._validate_addresses(parsed)
+        host = parsed.hostname or ""
+        if host.lower() == "localhost" or host.lower().endswith(".localhost"):
+            raise invalid_model_endpoint_error()
+        literal = _ip_address(host)
+        if literal is not None:
+            _require_public_address(literal)
         path = parsed.path.rstrip("/")
         return urlunsplit(("https", _normalized_netloc(parsed), path, "", ""))
 

@@ -190,6 +190,10 @@ export type ModelTestStatus = 'untested' | 'success' | 'failed'
 export type ModelConnectionState = 'unconfigured' | 'disabled' | 'untested' | 'success' | 'failed'
 
 export interface ModelConnectionSettings {
+  provider_id?: string | null
+  generation_status?: ProbeStatus
+  tool_status?: ProbeStatus
+  structured_status?: ProbeStatus
   provider: ModelProvider
   protocol: ModelProtocol
   base_url: string | null
@@ -218,6 +222,37 @@ export interface ModelConnectionTestResult {
   protocol: ModelProtocol
   model: string
   latency_ms: number
+  tested_at: string
+}
+
+export type ProbeStatus = 'passed' | 'failed' | 'not_run'
+export interface ModelProviderPreset {
+  id: string
+  display_name: string
+  default_base_url: string | null
+  protocols: ModelProtocol[]
+  recommended_protocol: ModelProtocol
+}
+export interface ModelWorkspace {
+  revision: number
+  active: ModelConnectionSettings | null
+  draft: ModelConnectionSettings | null
+}
+export interface ModelConnectionInput {
+  provider_id: string
+  protocol: ModelProtocol
+  base_url: string
+  model: string
+  expected_revision: number
+  credential_mode: 'new' | 'reuse_active' | 'reuse_draft'
+  api_key?: string
+  confirm_credential_reuse?: boolean
+}
+export interface ModelProbeResult {
+  status: 'success' | 'failed'
+  generation: { status: ProbeStatus; latency_ms?: number; error_code?: string; usage?: Record<string, number> | null }
+  structured: { status: ProbeStatus; latency_ms?: number; error_code?: string; usage?: Record<string, number> | null }
+  verification_token: string | null
   tested_at: string
 }
 

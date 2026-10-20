@@ -2,13 +2,39 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from backend.agent.tasks.input_contracts import build_chat_input, sanitize_stage_input, ChatInput
+from backend.domain.coach_answer import DEFAULT_LANGUAGE
+
+
+def answer_language_for(state: Mapping[str, object]) -> str:
+    """The language this run must answer in.
+
+    Order: the resolved value the workflow stored, then the account preference that
+    travelled in `context_metadata`, then the app default. Never the question text.
+    """
+    explicit = state.get("answer_language")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    metadata = state.get("context_metadata")
+    if isinstance(metadata, Mapping):
+        account = metadata.get("language")
+        if isinstance(account, str) and account:
+            return account
+    return DEFAULT_LANGUAGE
+
+
+def answer_mode_for(state: Mapping[str, object]) -> str:
+    mode = state.get("answer_mode")
+    return mode if mode in ("brief", "detailed") else "brief"
+
 
 def writer_payload(state: Mapping[str, object]) -> dict[str, object]:
     return build_chat_input(current_question=state.get("user_query", ""),
         approved_intent=state.get("intent", ""), context_metadata=state.get("context_metadata", {}),
         nutrient_targets_and_restrictions=state.get("profile", {}),
         analysis_summaries=state.get("tool_results", {}), sources=state.get("retrieved_docs", []),
-        validation=state.get("validation_result", {}), sanitize=False).model_dump()
+        validation=state.get("validation_result", {}), sanitize=False,
+        answer_language=answer_language_for(state),
+        answer_mode=answer_mode_for(state), recent_history=[{"role": item["role"], "body": item["body"]} for item in state.get("recent_history", ())]).model_dump()
 
 def incremental_writer_payload(state: Mapping[str, object], initial_results: Mapping[str, object]) -> dict[str, object]:
     # Providers are stateless: unchanged initial facts still belong in every call.

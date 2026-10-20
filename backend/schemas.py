@@ -193,12 +193,16 @@ class AccountDeleteRequest(BaseModel):
 
 
 class ModelSettingsUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     provider: ModelProvider
     protocol: ModelProtocol
     base_url: str | None = Field(default=None, max_length=2048)
     model: str = Field(min_length=1, max_length=200)
     enabled: bool
     api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    expected_revision: int | None = Field(default=None, ge=0)
+    verification_token: str | None = Field(default=None, max_length=4096)
+    confirm_credential_reuse: bool = False
 
 
 class UserPreferencesUpdateRequest(BaseModel):
@@ -275,6 +279,9 @@ class CoachActionRequest(BaseModel):
     action: CoachAction
     date: str | None = None
     question: str | None = Field(default=None, max_length=1000)
+    # An explicit request covers this turn only; it does not change the account setting.
+    language: AppLanguage | None = None
+    answer_mode: Literal["brief", "detailed"] | None = None
 
 
 class CoachActionResponse(BaseModel):

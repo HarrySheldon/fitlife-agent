@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.domain.errors import ApplicationError
@@ -225,6 +225,11 @@ class ReviewInput(StageInput):
     evidence: list[dict] = Field(default_factory=list)
 
 
+class HistoryMessage(StageInput):
+    role: Literal["user", "coach"]
+    body: str = Field(max_length=4000)
+
+
 class ChatInput(StageInput):
     user_query: str
     intent: str
@@ -233,6 +238,11 @@ class ChatInput(StageInput):
     tool_results: dict
     retrieved_docs: list[dict]
     validation_result: dict
+    # Controlled metadata, not a hint. The writer instructions treat this as the
+    # authoritative answer language; `context_metadata.language` is only the UI locale.
+    answer_language: str = "en-US"
+    answer_mode: str = "brief"
+    recent_history: list[HistoryMessage] = Field(default_factory=list, max_length=12)
 
 
 _SCHEMAS = {
@@ -244,7 +254,8 @@ _SCHEMAS = {
     "TrainingInput": {"training_fragment": TRAINING, "execution_summary": WORKOUT_SUMMARY},
     "DietInput": {"diet_fragment": DIET, "computed_nutrient_targets": TARGETS},
     "ReviewInput": {"evidence": SOURCE},
-    "ChatInput": {"context_metadata": {"language": None}, "profile": PROFILE,
+    "ChatInput": {"context_metadata": {"language": None}, "answer_language": None,
+                  "answer_mode": None, "profile": PROFILE,
                   "tool_results": TOOLS, "retrieved_docs": SOURCE, "validation_result": VALIDATION},
 }
 
@@ -332,7 +343,8 @@ def build_review_input(*, question, draft, evidence=()) -> ReviewInput:
 
 
 def build_chat_input(*, current_question, approved_intent, context_metadata, nutrient_targets_and_restrictions,
-                     analysis_summaries, sources, validation, sanitize=True) -> ChatInput:
+                     analysis_summaries, sources, validation, sanitize=True,
+                     answer_language="en-US", answer_mode="brief", recent_history=()) -> ChatInput:
     selected = dict(TOOLS)
     if approved_intent == "meal_analysis":
         selected = {"meal_analysis": MEAL_SUMMARY}
@@ -346,5 +358,6 @@ def build_chat_input(*, current_question, approved_intent, context_metadata, nut
     result = ChatInput(user_query=current_question, intent=approved_intent,
         context_metadata=project(context_metadata, {"language": None}),
         profile=project(nutrient_targets_and_restrictions, profile_schema), tool_results=project(analysis_summaries, selected),
-        retrieved_docs=project(sources, SOURCE), validation_result=project(validation, VALIDATION))
+        retrieved_docs=project(sources, SOURCE), validation_result=project(validation, VALIDATION),
+        answer_language=answer_language, answer_mode=answer_mode, recent_history=list(recent_history))
     return sanitize_stage_input(result) if sanitize else result

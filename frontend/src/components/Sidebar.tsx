@@ -42,7 +42,7 @@ export function Sidebar() {
           <strong>{user?.display_name}</strong>
           <span>{identity}</span>
         </div>
-        <button type="button" onClick={logout} aria-label={t('navigation.logout')}>
+        <button type="button" onClick={() => logout()} aria-label={t('navigation.logout')}>
           <LogOut size={18} />
         </button>
       </div>

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 
 import { CoachDrawer } from '../../components/CoachDrawer'
+import { useCoach } from '../../hooks/useCoach'
 import { ErrorState } from '../../components/ErrorState'
 import { LoadingState } from '../../components/LoadingState'
 import { ReportViewer } from '../../components/ReportViewer'
@@ -11,6 +12,7 @@ import { api } from '../../services/api'
 import type { CoachActionResponse, StoredWeeklyReport } from '../../types'
 
 export function WeeklyReview() {
+  const coach = useCoach()
   const { t } = useTranslation()
   const { week = '' } = useParams()
   const validWeek = isIsoWeekKey(week)
@@ -107,8 +109,8 @@ export function WeeklyReview() {
     </header>
     {error ? <ErrorState message={error} /> : null}
     {loading ? <LoadingState label={t('review.loadingReport')} /> : null}
-    {stored ? <div className="review-layout"><div className="review-main"><ReportViewer report={stored.report} /></div><button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" disabled={generating} onClick={() => { if (activeOperationRef.current?.kind !== 'generating') setCoachOpen(true) }}><Bot size={17} />{t('coach.open')}</button></div> : null}
-    <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="review" question={`ISO week: ${week}`} requestAction={interpret} actionsDisabled={generating || interpreting} actions={[{ action: 'explain_weekly_report', label: t('review.explain') }]} />
+    {stored ? <div className="review-layout"><div className="review-main"><ReportViewer report={stored.report} /></div><button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" disabled={generating || Boolean(coach?.active || coach?.sending)} onClick={() => { if (activeOperationRef.current?.kind !== 'generating') { if (coach) void coach.send({ question: `${t('review.explain')} · ${week}`, action: 'explain_weekly_report', surface: 'review', report_week: week }); else setCoachOpen(true) } }}><Bot size={17} />{coach ? t('review.explain') : t('coach.open')}</button></div> : null}
+    {!coach ? <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="review" question={`ISO week: ${week}`} requestAction={interpret} actionsDisabled={generating || interpreting} actions={[{ action: 'explain_weekly_report', label: t('review.explain') }]} /> : null}
   </div>
 }
 

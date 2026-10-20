@@ -71,7 +71,7 @@ def test_startup_initializes_database_without_breaking_csv_reads(isolated_runtim
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
 
-    assert [version for version, in versions] == [1, 2, 3, 4, 5, 6]
+    assert [version for version, in versions] == [1, 2, 3, 4, 5, 6, 7, 8]
 
 
 def test_registration_after_startup_immediately_cuts_over_empty_user(isolated_runtime):
@@ -115,3 +115,39 @@ def test_startup_refuses_to_run_with_a_broken_safety_pack(isolated_runtime, monk
 
     with pytest.raises(ValueError):
         startup_module.run_startup()
+
+
+def test_startup_interrupts_turns_a_restart_cannot_resume(isolated_runtime):
+    """A new process owns no inference: saying so beats pretending it still runs."""
+    _, database_path = isolated_runtime
+    startup_module.run_startup()
+
+    from datetime import datetime, timezone
+
+    from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
+        SQLiteCoachConversationRepository,
+    )
+    from backend.infrastructure.sqlite.database import SQLiteDatabase
+
+    database = SQLiteDatabase(database_path)
+    repository = SQLiteCoachConversationRepository(database)
+    now = datetime.now(timezone.utc)
+    repository.create_conversation(
+        "alice", conversation_id="c1", title="Today", created_at=now
+    )
+    repository.accept_turn(
+        "alice",
+        "c1",
+        turn_id="t1",
+        idempotency_key="k1",
+        request_fingerprint="fp",
+        created_at=now,
+    )
+    repository.claim_turn("alice", "t1", lease_id="worker-before-restart", started_at=now)
+
+    startup_module.run_startup()
+
+    turn = repository.get_turn("alice", "t1")
+    assert turn.status == "interrupted"
+    assert turn.error_code is None
+    assert repository.active_turn("alice") is None

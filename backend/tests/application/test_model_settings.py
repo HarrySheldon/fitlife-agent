@@ -53,7 +53,7 @@ def update(**changes) -> ModelSettingsUpdate:
         protocol="responses",
         base_url=None,
         model="gpt-5.5",
-        enabled=True,
+        enabled=False,
     )
     return replace(defaults, **changes)
 
@@ -93,13 +93,19 @@ def test_save_without_key_retains_existing_key_and_test_state():
         tested_at="2026-07-12T01:02:03+00:00",
     )
 
-    result = SaveModelSettings(repository, None).execute("user-a", update(enabled=True))
+    result = SaveModelSettings(repository, None).execute("user-a", update(enabled=False))
 
     stored = repository.connections["user-a"]
     assert stored.encrypted_api_key == "existing-ciphertext"
     assert stored.api_key_hint == "********ting"
     assert stored.test_status == "success"
-    assert result.enabled is True
+    assert result.enabled is False
+
+
+def test_legacy_save_cannot_enable_without_verified_workspace_activation():
+    with pytest.raises(ApplicationError) as rejected:
+        SaveModelSettings(MemoryRepository(), None).execute("user-a", update(enabled=True))
+    assert rejected.value.code == "MODEL_VERIFICATION_REQUIRED"
 
 
 @pytest.mark.parametrize("field,value", [("model", "gpt-new"), ("protocol", "chat_completions")])

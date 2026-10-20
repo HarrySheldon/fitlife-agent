@@ -2,6 +2,7 @@
 import json
 
 from backend.agent.persistence import Checkpoint, InvalidTransition, TERMINAL_STATUSES, safe_checkpoint
+from backend.infrastructure.sqlite.database import write_lock_for
 
 
 class SQLiteCheckpointStore:
@@ -14,7 +15,7 @@ class SQLiteCheckpointStore:
 
     def save(self, run_id, user_id, name, state):
         state = safe_checkpoint(state)
-        with self.repository.connect() as connection:
+        with write_lock_for(self.repository.path), self.repository.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             run = self.repository._get(connection, run_id, user_id)
             if run.status in TERMINAL_STATUSES:

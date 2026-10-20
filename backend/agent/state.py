@@ -6,12 +6,15 @@ from typing import TypedDict
 class AgentState(TypedDict, total=False):
     operation: str
     messages: list[dict]
+    recent_history: list[dict]
     user_query: str
     current_user_id: str | None
     surface: str | None
     coach_action: str | None
     context_date: str | None
     context_metadata: dict
+    answer_language: str
+    answer_mode: str
     intent: str
     profile: dict
     writer_payload: dict

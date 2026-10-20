@@ -18,7 +18,15 @@ from backend.main import create_app
 
 def test_startup_orders_schema_catalogs_then_per_user_cutover(tmp_path, monkeypatch, caplog):
     events = []
-    monkeypatch.setattr(startup, "run_migrations", lambda *_: events.append("schema"))
+    real_run_migrations = startup.run_migrations
+
+    def record_schema(database, migrations):
+        # Record the ordering, but really create the schema: startup also recovers
+        # interrupted turns, which needs the tables to exist.
+        events.append("schema")
+        real_run_migrations(database, migrations)
+
+    monkeypatch.setattr(startup, "run_migrations", record_schema)
     monkeypatch.setattr(startup, "_source_identity", lambda _path: ("v1", "a" * 64))
     result = SimpleNamespace(
         skipped=False, inserted_count=1, updated_count=0,

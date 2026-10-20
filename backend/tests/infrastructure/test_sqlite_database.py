@@ -55,6 +55,16 @@ def test_connection_closes_when_pragma_setup_fails(tmp_path, monkeypatch):
     assert tracking_connection.closed is True
 
 
+class _Probe:
+    """What ``PRAGMA journal_mode`` returns before the mode is switched."""
+
+    def __init__(self, mode: str) -> None:
+        self._mode = mode
+
+    def fetchone(self):
+        return (self._mode,)
+
+
 def test_locked_wal_setup_retries_after_setting_busy_timeout(monkeypatch):
     class TrackingConnection:
         def __init__(self):
@@ -65,10 +75,13 @@ def test_locked_wal_setup_retries_after_setting_busy_timeout(monkeypatch):
 
         def execute(self, statement):
             self.calls.append(statement)
+            if statement == "PRAGMA journal_mode":
+                return _Probe("delete")
             if statement == "PRAGMA journal_mode = WAL":
                 self.wal_attempts += 1
                 if self.wal_attempts == 1:
                     raise sqlite3.OperationalError("database is locked")
+            return None
 
         def close(self):
             self.closed = True
@@ -83,10 +96,51 @@ def test_locked_wal_setup_retries_after_setting_busy_timeout(monkeypatch):
     assert tracking_connection.calls == [
         "PRAGMA busy_timeout = 5000",
         "PRAGMA foreign_keys = ON",
+        "PRAGMA journal_mode",
         "PRAGMA journal_mode = WAL",
+        # The retry re-reads the mode first: another process may have switched it
+        # while this one was waiting for the lock.
+        "PRAGMA journal_mode",
         "PRAGMA journal_mode = WAL",
     ]
     assert tracking_connection.closed is True
+
+
+def test_a_database_already_in_wal_is_never_written_to_on_connect(monkeypatch):
+    """Asking first is what removed the concurrent-writer failure.
+
+    ``PRAGMA journal_mode = WAL`` needs a lock even when the mode is already WAL,
+    and SQLite reports that contention as "attempt to write a readonly database".
+    """
+
+    class TrackingConnection:
+        def __init__(self):
+            self.calls = []
+            self.closed = False
+            self.row_factory = None
+
+        def execute(self, statement):
+            self.calls.append(statement)
+            if statement == "PRAGMA journal_mode":
+                return _Probe("wal")
+            return None
+
+        def close(self):
+            self.closed = True
+
+    tracking_connection = TrackingConnection()
+    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
+    database = SQLiteDatabase(Path("unused.db"))
+
+    with database.connection():
+        pass
+
+    assert "PRAGMA journal_mode = WAL" not in tracking_connection.calls
+    assert tracking_connection.calls == [
+        "PRAGMA busy_timeout = 5000",
+        "PRAGMA foreign_keys = ON",
+        "PRAGMA journal_mode",
+    ]
 
 
 def test_non_lock_wal_setup_error_does_not_retry_and_closes(monkeypatch):
@@ -99,9 +153,12 @@ def test_non_lock_wal_setup_error_does_not_retry_and_closes(monkeypatch):
             self.wal_attempts = 0
 
         def execute(self, statement):
+            if statement == "PRAGMA journal_mode":
+                return _Probe("delete")
             if statement == "PRAGMA journal_mode = WAL":
                 self.wal_attempts += 1
                 raise setup_error
+            return None
 
         def close(self):
             self.closed = True

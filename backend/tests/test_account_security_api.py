@@ -21,6 +21,12 @@ def build_client(monkeypatch) -> TestClient:
     data_dir = Path(".tmp") / "pytest-account-security-api" / uuid4().hex
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     get_settings.cache_clear()
+    # These endpoints now stop account-owned Coach work. Like the production
+    # lifespan, this no-lifespan fixture must initialize all records tables.
+    from backend.infrastructure.sqlite.runtime import get_database
+    from backend.infrastructure.sqlite.migrations import run_migrations
+    from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+    run_migrations(get_database(), RECORDS_MIGRATIONS)
     return TestClient(create_app())
 
 

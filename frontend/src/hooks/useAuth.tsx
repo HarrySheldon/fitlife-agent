@@ -11,7 +11,7 @@ interface AuthContextValue {
   login: (payload: AuthRequest) => Promise<void>
   register: (payload: AuthRequest) => Promise<void>
   replaceSession: (session: AuthSession) => void
-  logout: () => void
+  logout: (options?: { stopCoach?: boolean }) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -50,7 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     replaceSession(session)
   }
 
-  function logout() {
+  function logout(options?: { stopCoach?: boolean }) {
+    // request() captures the old Authorization header before local state clears.
+    // Offline logout still clears private UI state; the server deadline bounds
+    // any request for which cancellation could not be delivered.
+    if (options?.stopCoach !== false && tokenStorage.get()) void api.logout().catch(() => {})
     if (ownerRef.current) clearSmartEntryRecovery(ownerRef.current)
     ownerRef.current = null
     tokenStorage.clear()

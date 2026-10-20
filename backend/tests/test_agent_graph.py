@@ -47,9 +47,14 @@ def test_run_contextual_coach_action_adds_context_to_prompt_and_trace(monkeypatc
         user_id="user-1",
     )
 
-    assert "Create a plan for next week" in str(captured["question"])
-    assert "2026-07-09" in str(captured["question"])
-    assert "Keep it simple." in str(captured["question"])
+    prompt = str(captured["question"])
+    # C0 decoupled "explain the plan" from "generate a plan draft": the action
+    # prompt must only ask for an explanation of the deterministic result.
+    assert "deterministic next-week plan draft" in prompt
+    assert "Do not create, change, activate or save a plan." in prompt
+    assert "Create a plan" not in prompt
+    assert "2026-07-09" in prompt
+    assert "Keep it simple." in prompt
     assert captured["user_id"] == "user-1"
     assert result["answer_markdown"] == "Contextual model answer"
     assert result["trace"]["surface"] == "plan"

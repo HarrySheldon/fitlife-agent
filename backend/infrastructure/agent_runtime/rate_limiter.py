@@ -53,6 +53,10 @@ class ProcessRateLimiter:
         self._lock = RLock()
         self._buckets = {}
 
+    def clear_user(self, user_id):
+        with self._lock:
+            self._buckets.pop(("user", user_id), None)
+
     def acquire(self, user_id, policy, *, concurrent=True):
         # Tuple keys prevent a real username from colliding with anonymous traffic.
         key = ("user", user_id) if user_id else ("anonymous", None)

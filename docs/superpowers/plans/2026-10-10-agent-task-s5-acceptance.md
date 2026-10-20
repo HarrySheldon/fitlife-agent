@@ -13,6 +13,8 @@
 
 ## 执行边界与前提
 
+按 [主计划](2026-10-10-agent-task-system-plan.md) 收口C/S2/S3/S4，不另给C提前安排一轮真实模型／生产启用。本文原2个任务保留；追加zh/en受控回答、90天会话到期／导出／删除、悬浮跨页面连续性、单请求及取消清理的场景与人工标注。C/S2/S3分业务报告，不能用连接测试通过替代真实业务验收。当前仍未执行live或部署。
+
 本计划可先完成离线准入检查、标注模板、报告和运行手册。付费Provider调用、正式数据导入与生产启用分别需要对应明确授权；授权前用Mock验证这些路径。
 依赖S0–S4验收记录，明确Provider/model版本、安全模式、单任务/批次调用与token上限。当前默认safety_review_mode=off、grounding_mode=legacy，不能声称已经启用全套保护；实验配置必须显式记录，reference与optimized使用相同值。
 采用先小样本探查费用/失败类型，再在已授权总预算内扩大样本。数量由baseline方差与预算决定，不预设足够样本的假象。
@@ -32,8 +34,8 @@
 PowerShell初始化：
 
 ```powershell
-Set-Location -LiteralPath 'D:\code\vibe-coding\fitlife-agent\.worktrees\agent-runtime-refactor'
-$taskPython = 'D:\code\vibe-coding\fitlife-agent\.venv\Scripts\python.exe'
+Set-Location -LiteralPath 'D:\code\vibe-coding\fitlife-agent'
+$taskPython = (Resolve-Path -LiteralPath '.venv\Scripts\python.exe').Path
 & $taskPython -m pytest --version
 ```
 

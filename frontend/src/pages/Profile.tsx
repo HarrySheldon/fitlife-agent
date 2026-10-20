@@ -9,10 +9,12 @@ import { LoadingState } from '../components/LoadingState'
 import { cmToFeetInches, displayWeight, weightUnit } from '../domain/units'
 import { usePreferences } from '../hooks/usePreferences'
 import { useProfileSetup } from '../hooks/useProfileSetup'
+import { useCoach } from '../hooks/useCoach'
 
 export function Profile() {
   const { t } = useTranslation()
   const { preferences } = usePreferences()
+  const coach = useCoach()
   const { setup, loading, error } = useProfileSetup()
   const [coachOpen, setCoachOpen] = useState(false)
   const coachTriggerRef = useRef<HTMLButtonElement>(null)
@@ -37,17 +39,17 @@ export function Profile() {
         <Summary label={t('profile.dailyProtein')} value={`${target.protein} g`} />
       </dl>
       <p>{t('profile.coachAdviceOnly')}</p>
-      <button ref={coachTriggerRef} className="secondary-button" type="button" onClick={() => setCoachOpen(true)}>
+      <button ref={coachTriggerRef} className="secondary-button" type="button" disabled={Boolean(coach?.sending || coach?.active)} onClick={() => coach ? void coach.send({ question: t('profile.askCoachAdvice'), action: 'suggest_targets', surface: 'profile' }) : setCoachOpen(true)}>
         <Bot size={17} />{t('profile.askCoachAdvice')}
       </button>
     </main>
-    <CoachDrawer
+    {!coach ? <CoachDrawer
       open={coachOpen}
       onClose={() => setCoachOpen(false)}
       returnFocusRef={coachTriggerRef}
       surface="profile"
       actions={[{ action: 'suggest_targets', label: t('profile.askCoachAdvice') }]}
-    />
+    /> : null}
   </div>
 }
 

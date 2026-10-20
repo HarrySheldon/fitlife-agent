@@ -99,15 +99,25 @@ def review_output(
     *,
     reviewer: SafetyReviewer | None = None,
     supporting_values: tuple[float, ...] | None = None,
+    boundary_language: str | None = None,
 ) -> tuple[str, SafetyDecision]:
     """Review a draft answer; returns the text to ship and the decision.
 
     ``supporting_values`` are the figures the answer was allowed to state. Passing
     them turns on the groundedness check; omitting them leaves it off.
     """
-    result = _review_output(
-        question, draft, reviewer=reviewer, supporting_values=supporting_values
-    )
+    presentation = {}
+    if boundary_language in {'zh-CN', 'en-US'}:
+        # Only trusted fixed business-boundary replies supply this language.
+        # Change presentation of the same concern, never detection or policy.
+        from backend.domain.coach_answer import message_catalog
+        from backend.safety.gate import default_pack
+        from backend.safety.models import Messages
+        messages = default_pack().messages
+        presentation['messages'] = Messages(locale=messages.locale,
+            notices={**messages.notices, 'out_of_scope': message_catalog(boundary_language).out_of_scope})
+    result = _review_output(question, draft, reviewer=reviewer,
+        supporting_values=supporting_values, **presentation)
     return result.text, decision_for(result.verdict)
 
 

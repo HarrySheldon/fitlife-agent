@@ -59,6 +59,12 @@ The development frontend is at http://127.0.0.1:5173. Do not regenerate sample d
 
 Deterministic records, calculations and plan validation work without a model. For Agent features, sign in and open **Settings > Model connection** to configure and enable your own provider connection.
 
+Follow the five steps: choose a provider, enter its HTTPS address and credential, discover or manually enter a model ID, explicitly test the current form, then save and enable. The single **Test connection** action checks generation and a minimal synthetic business-data parsing task; native tool calling is not an activation requirement. The page shows one overall result with collapsed technical details. Discovery is optional; a provider without a model-list endpoint can still be tested with a manually entered ID.
+
+Saving a disabled draft preserves the active connection. Previewing or testing never saves configuration. Changing the address, protocol, model or credential invalidates the previous test; activation is also enforced by the backend with a short-lived configuration-bound receipt. Tests send at most two bounded synthetic requests and may incur provider charges; they never send your profile or health records. Loading settings and starting the application do not run these tests automatically.
+
+Provider presets and protocol adapters are separate: another compatible provider can use the custom connection or a new preset without changing Agent workflows. This version supports the existing Responses and Chat Completions protocols, not every provider's native API. Custom connections use schema-guided JSON text and local Pydantic validation for both the parsing test and structured business calls, without requiring native strict-schema support. The actual official OpenAI connection preserves its native parsing path. DeepSeek Chat Completions uses `max_tokens` for bounded probes; no URL/model switching or automatic fallback is performed. Endpoints must be public HTTPS addresses; local/loopback model servers are not enabled by this change. Existing enabled connections remain usable, but enabling them again requires the current connection test. Old tool-check receipts cannot enable under the new rules. Passing a small sample does not guarantee full business quality; every business result is still validated. Configuration writes currently assume the existing single-process backend; multi-worker deployment needs transactional or cross-process configuration coordination first.
+
 API keys are encrypted at rest. Keep the deployment's SETTINGS_ENCRYPTION_KEY stable and backed up securely; losing or rotating it without migration makes saved credentials unreadable. Never commit .env or print user API keys. The Windows launcher manages the deployment key; manual installations must set it before saving credentials.
 
 Authenticated requests use only the signed-in user's enabled connection, with no fallback to a deployment key. The unauthenticated demo path can use the deployment's explicitly enabled model settings. Connection checks occur only when requested. Custom endpoints must satisfy the endpoint security policy.
@@ -74,6 +80,20 @@ Authenticated requests use only the signed-in user's enabled connection, with no
 7. Use **Profile** and **Settings** for personal preferences and account/model settings.
 
 The developer **Evaluation** page is separate from ordinary product navigation. Explicit offline Mock and provider-backed Live evaluation, their limits and report formats are documented in the [Agent Runtime guide](docs/AGENT_RUNTIME.md#evaluation).
+
+The new multi-chat floating Coach is behind two independent, default-off flags:
+`COACH_CONVERSATIONS_ENABLED=true` on the backend and
+`VITE_COACH_CONVERSATIONS_ENABLED=true` when building the frontend. Both must
+agree; changing a Vite flag requires rebuilding the frontend image/bundle, not
+just restarting it. Keep them off for the legacy UI. Before running code that
+applies new database migrations to retained data, follow the verified backup
+and isolation rules in AGENTS.md. Current implementation, offline evidence and
+remaining manual acceptance checks are recorded in the
+[C3 Coach report](docs/evaluation/2026-10-19-c3-coach-experience.md).
+
+The initial Coach offline replay suite and its explicit coverage limits are in
+[Coach acceptance](docs/evaluation/coach-conversation-acceptance.md). These Mock
+cases do not authorize provider-backed tests or production activation.
 
 ## Data and backups
 

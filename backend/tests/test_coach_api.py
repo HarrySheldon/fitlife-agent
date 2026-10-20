@@ -1,13 +1,28 @@
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.agent import graph as agent_graph
 from backend.agent.planner import PlannerRoute
 from backend.api import dependencies
-from backend.main import app
+from backend.config import get_settings
+from backend.main import app, create_app
 from backend.schemas import AuthenticatedUser
 
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def live_client(monkeypatch):
+    """A client whose lifespan ran: the quick action now takes the shared slot."""
+    monkeypatch.setenv("DATA_DIR", str(Path(".tmp") / "pytest-coach-api" / uuid4().hex))
+    get_settings.cache_clear()
+    with TestClient(create_app()) as test_client:
+        yield test_client
+    get_settings.cache_clear()
 
 
 class FakeGateway:
@@ -20,7 +35,7 @@ class FakeGateway:
         return "## Personalized today interpretation\nPrioritize the largest remaining gap."
 
 
-def test_authenticated_coach_uses_user_gateway(monkeypatch):
+def test_authenticated_coach_uses_user_gateway(monkeypatch, live_client):
     monkeypatch.setattr(
         dependencies,
         "user_from_token",
@@ -33,7 +48,7 @@ def test_authenticated_coach_uses_user_gateway(monkeypatch):
         lambda: (_ for _ in ()).throw(AssertionError("deployment gateway must be ignored")),
     )
 
-    response = client.post(
+    response = live_client.post(
         "/coach/action",
         headers={"Authorization": "Bearer valid-user-token"},
         json={"surface": "today", "action": "explain_today", "date": "2026-07-09"},

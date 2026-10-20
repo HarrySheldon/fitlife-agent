@@ -5,12 +5,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { ErrorState } from '../../components/ErrorState'
 import { CoachDrawer } from '../../components/CoachDrawer'
+import { useCoach } from '../../hooks/useCoach'
 import { LoadingState } from '../../components/LoadingState'
 import { PlanCard } from '../../components/PlanCard'
 import { api } from '../../services/api'
 import type { PlanDraft, StoredPlan } from '../../types'
 
 export function PlanDetail() {
+  const coach = useCoach()
   const { t } = useTranslation()
   const { planId = '' } = useParams()
   const navigate = useNavigate()
@@ -77,7 +79,7 @@ export function PlanDetail() {
     {error ? <ErrorState message={error} /> : null}
     {loading ? <LoadingState label={t('plan.loadingPlan')} /> : null}
     {stored ? <PlanCard plan={stored.plan} /> : null}
-    {stored ? <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" onClick={() => setCoachOpen(true)}><Bot size={17} />{t('coach.open')}</button> : null}
+    {stored ? <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" disabled={Boolean(coach?.active || coach?.sending)} onClick={() => coach ? void coach.send({ question: `${t('coachConversation.explainPlan')} · ${planId}`, action: 'adjust_next_plan', surface: 'plan', plan_id: planId }) : setCoachOpen(true)}><Bot size={17} />{t('coachConversation.explainPlan')}</button> : null}
     {stored ? <section className="content-panel">
       <label htmlFor="plan-adjustment">{t('plan.instructions')}</label>
       <textarea id="plan-adjustment" value={instructions} placeholder={t('plan.instructionsPlaceholder')} onChange={(event) => setInstructions(event.target.value)} />
@@ -86,6 +88,6 @@ export function PlanDetail() {
     {draft ? <section className="page-stack"><h2>{t('plan.adjustmentDraft')}</h2><PlanCard plan={draft.plan} />
       <button className="primary-button" type="button" onClick={() => void activate()} disabled={working || !draft.plan.validation.passed}>{t('plan.confirmAdjustment')}</button>
     </section> : null}
-    <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="plan" requestAction={interpret} actionsDisabled={!stored} actions={[{ action: 'adjust_next_plan', label: t('plan.generateAdjustment') }]} />
+    {!coach ? <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="plan" requestAction={interpret} actionsDisabled={!stored} actions={[{ action: 'adjust_next_plan', label: t('coachConversation.explainPlan') }]} /> : null}
   </div>
 }

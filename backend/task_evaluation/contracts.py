@@ -48,8 +48,16 @@ class AuthorizationSeeds(BaseModel):
 class FaultSeeds(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     expire_drafts: bool = False
+    # Backdate stored chat messages immediately before the Nth step runs, so the
+    # 90-day read window can be replayed without waiting three months.
+    expire_coach_messages_at_step: int = Field(default=0, strict=True, ge=0, le=100)
     crash_worker: bool = False
     sleep_seconds: float = Field(default=0, ge=0, le=30)
+    # Deterministic slow answer: cancellation and the single slot can only be
+    # replayed reliably if generation does not finish before the next request.
+    slow_coach_answer_seconds: float = Field(default=0, ge=0, le=10)
+    # Deterministic output that breaks the answer length contract.
+    oversize_coach_answer: bool = False
 
 
 class ProfileSeed(BaseModel):
@@ -147,6 +155,8 @@ class Step(BaseModel):
     # variables, so a version or id captured earlier can feed If-Match/Idempotency-Key.
     headers: dict[str, str | dict[str, str]] = Field(default_factory=dict)
     expected_status: int = Field(default=200, strict=True, ge=100, le=599)
+    # Bounded GET-only polling, never retry an accepted generation POST.
+    wait_for_turn: bool = Field(default=False, strict=True)
     # maps a returned field to a variable name, e.g. {"record_ids": "data.record_ids"}
     capture: dict[str, str] = Field(default_factory=dict)
     # maps a returned field to an observed key, feeding the final expected comparison
@@ -167,6 +177,10 @@ class Step(BaseModel):
 
     @model_validator(mode="after")
     def valid_data(self):
+        if self.wait_for_turn and (self.method != "GET" or self.expected_status != 200
+                or not re.fullmatch(r"/api/v1/coach/turns/[A-Za-z0-9_{}-]+", self.path)
+                or self.body):
+            raise ValueError("Turn waiting requires a read-only successful status request")
         def inspect(value, depth=0):
             if depth > 30:
                 raise ValueError("Scenario data exceeds maximum nesting")

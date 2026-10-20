@@ -77,6 +77,11 @@ def credential_store_unavailable_error(
     )
 
 
+def model_verification_required_error() -> ApplicationError:
+    return ApplicationError(code="MODEL_VERIFICATION_REQUIRED",
+        message="Test this configuration successfully before enabling it.", status_code=409)
+
+
 def invalid_model_endpoint_error() -> ApplicationError:
     return ApplicationError(
         code="INVALID_MODEL_ENDPOINT",

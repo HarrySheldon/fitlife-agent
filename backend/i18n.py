@@ -20,6 +20,14 @@ REQUEST_LANGUAGE_STATE_KEY = "public_message_language"
 QUALITY_VALUE_PATTERN = re.compile(r"(?:0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?)\Z")
 
 PUBLIC_MESSAGES: dict[str, dict[AppLanguage, str]] = {
+    "MODEL_VERIFICATION_REQUIRED": {"en-US": "Test this configuration successfully before enabling it.", "zh-CN": "请先让此配置通过连接测试，再保存启用。"},
+    "MODEL_CONFIGURATION_CONFLICT": {"en-US": "The model configuration changed. Reload its revision before saving.", "zh-CN": "模型配置已变化，请刷新配置版本并重新测试后保存。"},
+    "MODEL_PROVIDER_UNSUPPORTED": {"en-US": "Choose a supported provider and protocol.", "zh-CN": "请选择支持的服务商和 API 协议。"},
+    "MODEL_NAME_REQUIRED": {"en-US": "Enter a model ID.", "zh-CN": "请填写模型 ID。"},
+    "MODEL_CREDENTIAL_REQUIRED": {"en-US": "Provide a model credential.", "zh-CN": "请填写或明确选择要保留的模型密钥。"},
+    "MODEL_CREDENTIAL_REUSE_CONFIRMATION_REQUIRED": {"en-US": "Confirm sending the saved credential to the new provider address.", "zh-CN": "服务商或地址已变化，请确认是否将已保存密钥发送到新目标。"},
+    "MODEL_LIST_UNAVAILABLE": {"en-US": "Model discovery is unavailable. Enter a model ID manually.", "zh-CN": "此连接暂不支持获取模型列表，请手动填写模型 ID。"},
+    "MODEL_SLOT_INVALID": {"en-US": "Choose the active connection or draft.", "zh-CN": "请选择生效连接或停用草稿。"},
     "CONFIGURATION_INVALID": {
         "en-US": "The requested Agent configuration is invalid.",
         "zh-CN": "请求的 Agent 配置无效。",

@@ -12,6 +12,9 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from backend.application.ports.identity_repository import IdentityRepository
 from backend.application.ports.entry_task_lifecycle import EntryTaskExportPort
+from backend.application.ports.coach_conversation_repository import (
+    CoachConversationExportPort,
+)
 from backend.application.ports.model_connection_repository import ModelConnectionRepository
 from backend.application.ports.plan_repository import StoredPlan
 from backend.application.ports.report_repository import StoredWeeklyReport
@@ -40,6 +43,10 @@ _PROFILE_FIELDS = (
 _PREFERENCE_FIELDS = ("language", "unit_system", "timezone")
 _MODEL_CONNECTION_FIELDS = (
     "provider",
+    "provider_id",
+    "generation_status",
+    "tool_status",
+    "structured_status",
     "protocol",
     "base_url",
     "model",
@@ -109,12 +116,15 @@ class ExportAccountData:
         data_dir: Path,
         identities: IdentityRepository,
         model_connections: ModelConnectionRepository | None = None,
-        *, entry_tasks: EntryTaskExportPort | None = None,
+        *,
+        entry_tasks: EntryTaskExportPort | None = None,
+        coach_conversations: CoachConversationExportPort | None = None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
         self.model_connections = model_connections
         self.entry_tasks = entry_tasks
+        self.coach_conversations = coach_conversations
 
     def execute(self, user_id: str) -> bytes:
         try:
@@ -194,6 +204,12 @@ class ExportAccountData:
                             )
                         ),
                     )
+                    project_workspace = getattr(self.model_connections, "project_workspace", None)
+                    if project_workspace:
+                        workspace = project_workspace(model_snapshot)
+                        if workspace.draft is not None:
+                            budget.add_entry(entries, "model-connection-draft.json", _stable_json(
+                                _project_fields(workspace.draft.model_dump(mode="json"), _MODEL_CONNECTION_FIELDS)))
         if self.entry_tasks is not None:
             remaining = max(0, MAX_EXPORT_BYTES - budget.source_bytes)
             limit = min(MAX_SOURCE_BYTES, remaining)
@@ -202,6 +218,16 @@ class ExportAccountData:
                 raise ValueError('Entry task source exceeds the size limit')
             budget.source_bytes += len(snapshot)
             budget.add_entry(entries, 'entry-drafts.json', snapshot)
+        if self.coach_conversations is not None:
+            remaining = max(0, MAX_EXPORT_BYTES - budget.source_bytes)
+            limit = min(MAX_SOURCE_BYTES, remaining)
+            snapshot = self.coach_conversations.export_conversations(
+                user_id, max_bytes=limit
+            )
+            if not isinstance(snapshot, bytes) or len(snapshot) > limit:
+                raise ValueError('Coach conversation source exceeds the size limit')
+            budget.source_bytes += len(snapshot)
+            budget.add_entry(entries, 'coach-conversations.json', snapshot)
         archive = io.BytesIO()
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as exported:
             for path in sorted(entries):

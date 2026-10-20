@@ -50,7 +50,8 @@ def test_file_repository_atomically_isolates_users(monkeypatch):
     assert len(replace_calls) == 1
     assert replace_calls[0][1].name == "model_connection.json"
     stored = json.loads((data_dir / "users" / "user-a" / "model_connection.json").read_text(encoding="utf-8"))
-    assert stored["encrypted_api_key"] == "encrypted-value"
+    assert stored["schema_version"] == 2
+    assert stored["active"]["encrypted_api_key"] == "encrypted-value"
 
 
 def test_public_connection_never_contains_ciphertext():

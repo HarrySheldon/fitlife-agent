@@ -1,11 +1,18 @@
 from typing import Protocol
 
-from backend.domain.model_connection import ModelConnection, PublicModelConnection
+from backend.domain.model_connection import ModelConnection, ModelConnectionWorkspace, PublicModelConnection
 
 
 class ModelConnectionRepository(Protocol):
+    def get_workspace(self, user_id: str) -> ModelConnectionWorkspace: ...
+
+    def compare_and_set(self, user_id: str, *, expected_revision: int,
+                        workspace: ModelConnectionWorkspace) -> ModelConnectionWorkspace: ...
+
     def get(self, user_id: str) -> ModelConnection | None: ...
 
     def project_public(self, snapshot: bytes) -> PublicModelConnection: ...
+
+    def project_workspace(self, snapshot: bytes): ...
 
     def save(self, user_id: str, connection: ModelConnection) -> None: ...

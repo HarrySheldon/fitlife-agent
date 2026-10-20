@@ -42,7 +42,7 @@ class ResponsesApi:
         self.create_calls.append(kwargs)
         if "tools" in kwargs:
             return SimpleNamespace(
-                output=[SimpleNamespace(type="function_call", name="connection_probe")],
+                output=[SimpleNamespace(type="function_call", name="connection_probe", arguments='{"ok": true}')],
                 output_text="",
             )
         return SimpleNamespace(output=[], output_text="## Responses answer")
@@ -73,7 +73,7 @@ class ChatCompletionsApi:
     def create(self, **kwargs):
         self.create_calls.append(kwargs)
         if "tools" in kwargs:
-            tool_call = SimpleNamespace(function=SimpleNamespace(name="connection_probe"))
+            tool_call = SimpleNamespace(function=SimpleNamespace(name="connection_probe", arguments='{"ok": true}'))
             message = SimpleNamespace(content=None, tool_calls=[tool_call])
         else:
             message = SimpleNamespace(content="## Chat answer", tool_calls=[])
@@ -137,6 +137,12 @@ def test_responses_adapter_supports_unified_planner_writer_list_and_probe():
 
 
 def test_responses_writer_distinguishes_ui_locale_from_answer_language():
+    """C0: the payload field decides the language; the locale and the prompt do not.
+
+    This used to assert the opposite - that the language of `user_query` controls the
+    answer. For a quick action that text is an English prompt written by the
+    application, so a Chinese account answered in English.
+    """
     responses = ResponsesApi()
     client = SimpleNamespace(responses=responses, models=ModelsApi())
     adapter = OpenAIResponsesAdapter(client=client, model="response-model")
@@ -145,12 +151,15 @@ def test_responses_writer_distinguishes_ui_locale_from_answer_language():
         {
             "user_query": "Please answer this question in English.",
             "context_metadata": {"language": "zh-CN"},
+            "answer_language": "en-US",
         }
     )
 
     instructions = responses.create_calls[-1]["instructions"]
-    assert "context_metadata.language is the UI locale only" in instructions
-    assert "The language of user_query controls the answer language" in instructions
+    assert "answer_language in the payload is authoritative" in instructions
+    assert "context_metadata.language is only the UI locale and does not decide it." in instructions
+    assert "infer the answer language from the wording of user_query" in instructions
+    assert "The language of user_query controls the answer language" not in instructions
 
 
 def test_chat_completions_adapter_supports_unified_planner_writer_list_and_probe():

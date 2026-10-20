@@ -17,7 +17,8 @@ def collect_metrics(root, fixed, gateway, progress):
         metrics.update(rule_version=SAFETY_RULE_VERSION, rule_pack_version=default_pack().pack_version,
             safe_config_fingerprint=fingerprint({"llm_enabled": fixed.llm_enabled,
                 "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode,
-                "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days}))
+                "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days,
+                "coach_conversations_enabled": fixed.coach_conversations_enabled}))
     metrics.update(gateway_attempts=gateway.attempts if gateway else None,
         estimated_tokens=None if gateway is None or gateway.failed_attempts else gateway.estimated_tokens,
         known_estimated_tokens=gateway.estimated_tokens if gateway else None,
@@ -46,7 +47,8 @@ def worker_main(channel, declaration, temporary):
                     os.environ.pop(key, None)
             Settings.settings_customise_sources = classmethod(lambda cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings: (init_settings,))
             fixed = Settings(_env_file=None, data_dir=root, sqlite_database_path=root / "fitlife.sqlite3", auth_secret="synthetic-evaluation-only", llm_enabled=False,
-                             interactive_entry_enabled='interactive_entry' in scenario.requires)
+                             interactive_entry_enabled='interactive_entry' in scenario.requires,
+                             coach_conversations_enabled='coach_conversations' in scenario.requires)
             get_settings.cache_clear()
             import backend.config as configuration
             configuration.get_settings = lambda: fixed
@@ -60,6 +62,21 @@ def worker_main(channel, declaration, temporary):
             from backend.api import plan, smart_entry
             from backend.task_evaluation.budget import MeteredMockGateway, RemoteBudget
             gateway = MeteredMockGateway(RemoteBudget(channel))
+            faults = scenario.initial_state.faults
+            if faults.slow_coach_answer_seconds or faults.oversize_coach_answer:
+                # Evaluation-only fault injection: the answer still flows through
+                # the real runtime, safety and publication path.
+                original_write = gateway.write_answer
+                delay = faults.slow_coach_answer_seconds
+                oversize = faults.oversize_coach_answer
+
+                def faulted_write(state, _original=original_write, _delay=delay, _oversize=oversize):
+                    if _delay:
+                        time.sleep(_delay)
+                    answer = _original(state)
+                    return answer + ("\n\n" + "x" * 1500) if _oversize else answer
+
+                gateway.write_answer = faulted_write
             graph._resolve_gateway = lambda *args, **kwargs: gateway
             plan.resolve_user_model_gateway = lambda *args, **kwargs: gateway
             smart_entry.resolve_user_model_gateway = lambda *args, **kwargs: gateway
@@ -71,13 +88,21 @@ def worker_main(channel, declaration, temporary):
             from backend.task_evaluation.observation import observe_database
             with TestClient(create_app()) as client:
                 headers = seed_environment(client, scenario, root)
+                step_number = 0
                 def before_step(step):
+                    nonlocal step_number
+                    step_number += 1
                     if scenario.initial_state.faults.expire_drafts:
                         import sqlite3
                         with sqlite3.connect(fixed.database_path) as connection:
                             connection.execute("UPDATE record_drafts SET expires_at='2000-01-01T00:00:00Z'")
-                result = execute_scenario(scenario, client, headers_factory=lambda actor: headers[actor], observer=lambda: observe_database(fixed.database_path, actors=headers.user_ids, data_dir=root), before_step=before_step, progress_metrics=progress,
-                                          supported_capabilities={'interactive_entry'})
+                    if scenario.initial_state.faults.expire_coach_messages_at_step == step_number:
+                        import sqlite3
+                        with sqlite3.connect(fixed.database_path) as connection:
+                            connection.execute("UPDATE coach_messages SET created_at='2000-01-01T00:00:00Z'")
+                result = execute_scenario(scenario, client, headers_factory=lambda actor: headers[actor], observer=lambda: {
+                    **observe_database(fixed.database_path, actors=headers.user_ids, data_dir=root), "gateway_attempts": gateway.attempts}, before_step=before_step, progress_metrics=progress,
+                                          supported_capabilities={'interactive_entry', 'coach_conversations'})
                 from dataclasses import replace
                 from backend.task_evaluation.metrics import runtime_metrics
                 from backend.safety.gate import SAFETY_RULE_VERSION, default_pack
@@ -90,7 +115,8 @@ def worker_main(channel, declaration, temporary):
                     "rule_version": SAFETY_RULE_VERSION, "rule_pack_version": default_pack().pack_version,
                     "safe_config_fingerprint": fingerprint({"llm_enabled": fixed.llm_enabled,
                         "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode,
-                        "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days}),
+                        "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days,
+                        "coach_conversations_enabled": fixed.coach_conversations_enabled}),
                     "gateway_attempts": gateway.attempts, "estimated_tokens": None if gateway.failed_attempts else gateway.estimated_tokens,
                     "known_estimated_tokens": gateway.estimated_tokens, "failed_attempts": gateway.failed_attempts,
                     "provider_usage": None, "mock_usage_estimated": True,

@@ -29,7 +29,7 @@ export function DeleteAccount() {
     setError(null)
     try {
       await api.deleteAccount({ password, confirmation: 'DELETE' })
-      logout()
+      logout({ stopCoach: false })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t('settingsDelete.failed'))
       setDeleting(false)

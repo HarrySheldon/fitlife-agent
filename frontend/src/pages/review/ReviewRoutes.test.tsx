@@ -7,6 +7,9 @@ import { api } from '../../services/api'
 import { Review } from '../Review'
 import { WeeklyReview } from './WeeklyReview'
 
+const sharedCoach = vi.hoisted(() => ({ enabled: false, send: vi.fn() }))
+vi.mock('../../hooks/useCoach', () => ({ useCoach: () => sharedCoach.enabled ? { send: sharedCoach.send, active: null, sending: false } : null }))
+
 vi.mock('../../hooks/useDashboard', () => ({
   useDashboard: () => ({
     data: {
@@ -48,6 +51,7 @@ const storedReport = {
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  sharedCoach.enabled = false
   await i18n.changeLanguage('en-US')
   vi.mocked(api.listWeeklyReports).mockResolvedValue([storedReport])
   vi.mocked(api.getWeeklyReport).mockResolvedValue(storedReport)
@@ -68,6 +72,17 @@ function renderRoute(path: string) {
     </MemoryRouter>,
   )
 }
+
+it('explains the saved weekly report through the shared coach without regenerating it', async () => {
+  sharedCoach.enabled = true
+  renderRoute('/review/week/2026-W35')
+  fireEvent.click(await screen.findByRole('button', { name: 'Explain weekly patterns' }))
+  expect(sharedCoach.send).toHaveBeenCalledWith(expect.objectContaining({
+    action: 'explain_weekly_report', surface: 'review', report_week: '2026-W35',
+  }))
+  expect(api.interpretWeeklyReport).not.toHaveBeenCalled()
+  expect(api.generateWeeklyReport).not.toHaveBeenCalled()
+})
 
 function renderNavigableWeek(path: string) {
   return render(

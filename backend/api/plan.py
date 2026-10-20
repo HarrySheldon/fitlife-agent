@@ -8,11 +8,13 @@ from backend.agent.graph import interpret_persisted_plan
 from backend.agent.structured_workflow import run_structured_agent
 from backend.agent.runtime import RuntimeControlError
 from backend.agent.validator import validate_generated_plan
+from backend.api.coach_conversations import coach_error, get_coach_admission_service
 from backend.api.dependencies import optional_current_user, require_current_user
 from backend.api.preference_context import preferences_for
 from backend.api.utils import ok, request_id_for
 from backend.application.ports.model_gateway import ConfigurableModelGateway
 from backend.application.ports.plan_repository import StoredPlan
+from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.application.use_cases.generate_plan import GeneratePlan
 from backend.application.use_cases.plans import Plans
 from backend.config import get_settings
@@ -133,19 +135,38 @@ def create_adjustment_draft(
 
 
 @router.post("/{plan_id}/interpret")
-def interpret_plan(plan_id: str, request: Request, user: AuthenticatedUser = Depends(require_current_user)):
+def interpret_plan(
+    plan_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_current_user),
+    admission: CoachTurnService = Depends(get_coach_admission_service),
+):
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         stored = _plans().get(user.user_id, plan_id)
         plan_snapshot = stored.plan.model_dump(mode="json")
         preferences = preferences_for(user)
-    # Keep lifecycle locks on their owning thread, outside Runtime workers.
-    result = interpret_persisted_plan(
-        plan_id=stored.plan_id,
-        plan=plan_snapshot,
-        user_id=user.user_id,
-        preferences=preferences,
-        request_id=request_id_for(request),
-    )
+
+    def produce() -> dict:
+        # Keep lifecycle locks on their owning thread, outside Runtime workers.
+        return interpret_persisted_plan(
+            plan_id=stored.plan_id,
+            plan=plan_snapshot,
+            user_id=user.user_id,
+            preferences=preferences,
+            request_id=request_id_for(request),
+        )
+
+    try:
+        result = admission.run_legacy(
+            user.user_id,
+            question=f"Interpret plan {plan_id}",
+            action="adjust_next_plan",
+            surface="plan",
+            produce=produce,
+        )
+    except Exception as error:
+        raise coach_error(error) from None
+
     with user_lifecycle_guard(get_settings().data_dir, user.user_id):
         response = CoachActionResponse(
             surface="plan",

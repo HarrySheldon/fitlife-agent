@@ -20,6 +20,7 @@ from backend.domain.model_connection import (
     ModelProvider,
     PublicModelConnection,
     utc_now_iso,
+    credential_hint,
 )
 
 
@@ -55,6 +56,11 @@ class SaveModelSettings:
         self.cipher = cipher
 
     def execute(self, user_id: str, update: ModelSettingsUpdate) -> PublicModelConnection:
+        # Public activation is owned by ModelConnectionWorkspaceService. This
+        # legacy internal writer must never enable an unverified connection.
+        if update.enabled:
+            from backend.domain.errors import model_verification_required_error
+            raise model_verification_required_error()
         current = self.repository.get(user_id) or ModelConnection()
         api_key = update.api_key.strip() if update.api_key is not None else None
         if update.api_key is not None and not api_key:
@@ -115,7 +121,10 @@ class ClearModelApiKey:
         saved = current.model_copy(
             update={
                 "encrypted_api_key": None,
+                "enabled": False,
                 "api_key_hint": None,
+                "generation_status": "not_run",
+                "tool_status": "not_run",
                 "test_status": "untested",
                 "test_error_code": None,
                 "tested_at": None,
@@ -208,7 +217,7 @@ class TestModelConnection:
 
 
 def _api_key_hint(api_key: str) -> str:
-    return f"********{api_key[-4:]}"
+    return credential_hint(api_key)
 
 
 def _resolve_gateway(

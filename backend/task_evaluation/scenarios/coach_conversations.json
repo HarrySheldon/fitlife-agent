@@ -1,0 +1,1116 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "coach-zh-boundary",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "boundary-zh"
+          },
+          "body": {
+            "question": "请推荐股票",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "answer_language": "data.receipt.context.language"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages"
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "answer_language": "zh-CN",
+        "coach_boundary_replies": 1,
+        "gateway_attempts": 0,
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "coach-en-explicit-boundary",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "boundary-en"
+          },
+          "body": {
+            "question": "Pick stocks",
+            "language": "en-US"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "answer_language": "data.receipt.context.language"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "answer_language": "en-US",
+        "coach_boundary_replies": 1,
+        "gateway_attempts": 0,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "coach-idempotent-owner-isolation",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "initial_state": {
+        "authorization": {
+          "additional_users": [
+            "other"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "same-click"
+          },
+          "body": {
+            "question": "Pick stocks"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "same-click"
+          },
+          "body": {
+            "question": "Pick stocks"
+          },
+          "observe": {
+            "replayed": "data.replayed"
+          }
+        },
+        {
+          "actor": "other",
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 404
+        },
+        {
+          "actor": "other",
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "expected_status": 404
+        },
+        {
+          "actor": "other",
+          "method": "POST",
+          "path": "/api/v1/coach/turns/{turn}/cancel",
+          "expected_status": 404
+        }
+      ],
+      "expected": {
+        "replayed": true,
+        "gateway_attempts": 0,
+        "coach_boundary_replies": 1,
+        "coach_turns": 1,
+        "coach_messages": 2,
+        "actor.other.coach_messages": 0,
+        "actor.other.coach_turns": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "coach-missing-saved-plan-no-generation",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "missing-plan"
+          },
+          "body": {
+            "question": "Explain saved plan",
+            "action": "adjust_next_plan",
+            "surface": "plan",
+            "plan_id": "plan-12345678"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "failed",
+        "gateway_attempts": 0,
+        "coach_turns": 1,
+        "coach_successes": 0,
+        "coach_messages": 1,
+        "coach_unapproved_answers": 0,
+        "plan_draft_count": 0,
+        "plan_history_count": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "coach-zh-quick-explain",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "zh-explain"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "answer_language": "data.receipt.context.language"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "answer_language": "zh-CN",
+        "message_count": 2,
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0,
+        "gateway_attempts": 2
+      }
+    },
+    {
+      "id": "coach-en-account-language",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "PATCH",
+          "path": "/settings/preferences",
+          "body": {
+            "language": "en-US"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "en-account"
+          },
+          "body": {
+            "question": "Explain today",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "answer_language": "data.receipt.context.language"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "answer_language": "en-US",
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-explicit-language-override",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "PATCH",
+          "path": "/settings/preferences",
+          "body": {
+            "language": "en-US"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "zh-override"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "answer_language": "data.receipt.context.language"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "answer_language": "zh-CN",
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-oversize-answer-rejected",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "initial_state": {
+        "faults": {
+          "oversize_coach_answer": true
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "oversize"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "failed",
+        "message_count": 1,
+        "coach_turns": 1,
+        "coach_successes": 0,
+        "coach_messages": 1,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-multiturn-same-chat",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "multi-1"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "multi-2"
+          },
+          "body": {
+            "question": "再详细一点",
+            "action": "chat",
+            "surface": "today",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 4,
+        "coach_turns": 2,
+        "coach_successes": 2,
+        "coach_messages": 4,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-cross-chat-isolation",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat_a": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat_a}/turns",
+          "headers": {
+            "Idempotency-Key": "iso-a"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat_b": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat_b}/turns",
+          "headers": {
+            "Idempotency-Key": "iso-b"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-20",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat_a}/messages",
+          "expected_status": 200,
+          "observe": {
+            "messages_a": "data.messages.length"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat_b}/messages",
+          "expected_status": 200,
+          "observe": {
+            "messages_b": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "messages_a": 2,
+        "messages_b": 2,
+        "coach_turns": 2,
+        "coach_successes": 2,
+        "coach_messages": 4,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-cross-tab-conflict",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "initial_state": {
+        "faults": {
+          "slow_coach_answer_seconds": 2
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "tab-1"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "tab-2"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "expected_status": 409
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-stop-cleanup",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "initial_state": {
+        "faults": {
+          "slow_coach_answer_seconds": 2
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "stop-1"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/turns/{turn}/cancel",
+          "observe": {
+            "cancel_status": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "stop-2"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-20",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "cancel_status": "running",
+        "terminal": "succeeded",
+        "message_count": 3,
+        "coach_turns": 2,
+        "coach_cancelled": 1,
+        "coach_successes": 1,
+        "coach_messages": 3,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-retention-90d",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "initial_state": {
+        "faults": {
+          "expire_coach_messages_at_step": 4
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "retention"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 0,
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-chat-deleted",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "initial_state": {
+        "faults": {
+          "slow_coach_answer_seconds": 2
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "delete-chat"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/coach/conversations/{chat}"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 404
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/turns/{turn}/cancel",
+          "expected_status": 404
+        }
+      ],
+      "expected": {
+        "coach_turns": 1,
+        "coach_messages": 1,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "coach-account-deleted",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "account-delete"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/account",
+          "body": {
+            "password": "synthetic-password123",
+            "confirmation": "DELETE"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations",
+          "expected_status": 401
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_turns": 0,
+        "coach_messages": 0
+      }
+    },
+    {
+      "id": "coach-sources-visible",
+      "version": 1,
+      "requires": [
+        "coach_conversations"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "sources"
+          },
+          "body": {
+            "question": "蛋白质目标应该怎么定？",
+            "action": "chat",
+            "surface": "today",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_messages_with_sources": 1,
+        "coach_unapproved_answers": 0
+      }
+    }
+  ]
+}

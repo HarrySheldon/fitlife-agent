@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import account, auth, calendar, chat, coach, dashboard, eval, exercise_catalog, food_catalog, health, meals, plan, profile, profile_targets, report, settings as settings_api, smart_entry, today, upload, workouts
+from backend.api import account, auth, calendar, chat, coach, coach_conversations, dashboard, eval, exercise_catalog, food_catalog, health, meals, plan, profile, profile_targets, report, settings as settings_api, smart_entry, today, upload, workouts
 from backend.api.utils import application_error_response
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
@@ -38,6 +38,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="FitLife Agent API", version="0.1.0", lifespan=lifespan)
+    from backend.infrastructure.agent_runtime.rate_limiter import ProcessRateLimiter
+    app.state.model_preview_limiter = ProcessRateLimiter()
 
     @app.middleware("http")
     async def assign_request_id(request: Request, call_next):
@@ -112,6 +114,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar.router)
     app.include_router(today.router)
     app.include_router(coach.router)
+    app.include_router(coach_conversations.router)
     app.include_router(dashboard.router)
     app.include_router(chat.router)
     app.include_router(report.router)

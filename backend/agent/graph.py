@@ -10,11 +10,13 @@ from backend.config import get_settings
 from backend.infrastructure.agent_runtime.factory import CurrentAgentRuntime
 from backend.agent.workflow import FitLifeWorkflow
 from backend.application.ports.fitness_repository import FitnessRepository
+from backend.application.ports.model_call_context import current_abort
 from backend.application.ports.model_gateway import ModelGateway
 from backend.application.ports.structured_model_gateway import StructuredModelGateway
 from backend.application.use_cases.generate_plan import GeneratePlan
 from backend.application.use_cases.generate_weekly_report import GenerateWeeklyReport
 from backend.domain.errors import ApplicationError, ai_not_configured_error, model_gateway_error
+from backend.domain.coach_answer import resolve_language
 from backend.domain.user_preferences import UserPreferences
 from backend.infrastructure.model_gateway.factory import resolve_user_model_gateway
 from backend.infrastructure.model_gateway.openai_responses import build_model_gateway
@@ -39,6 +41,10 @@ def run_fitlife_agent(
     context_date: str | None = None,
     request_id: str | None = None,
     _trusted_page_intent: bool = False,
+    language: str | None = None,
+    answer_mode: str | None = None,
+    history_loader=None,
+    coach_action: str | None = None,
 ) -> dict:
     command = AgentCommand(
         operation=operation,
@@ -50,8 +56,11 @@ def run_fitlife_agent(
         initial_tool_calls=tuple(initial_tool_calls or ()),
         request_id=request_id,
         trusted_page_intent=_trusted_page_intent,
+        language=language,
+        answer_mode=answer_mode,
+        coach_action=coach_action,
     )
-    workflow = _LazyFitLifeWorkflow(repository, gateway, user_id, preferences or UserPreferences())
+    workflow = _LazyFitLifeWorkflow(repository, gateway, user_id, preferences or UserPreferences(), history_loader=history_loader)
     return DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
 
 
@@ -71,10 +80,11 @@ def _grounding_mode() -> str:
 
 class _LazyFitLifeWorkflow:
     def __init__(self, repository, gateway, user_id, preferences, context_loader=None,
-                 structured_gateway=None):
+                 structured_gateway=None, history_loader=None):
         self.repository, self.gateway, self.user_id, self.preferences = repository, gateway, user_id, preferences
         self.context_loader = context_loader
         self.structured_gateway = structured_gateway
+        self.history_loader = history_loader
 
     async def execute(self, command, context):
         from backend.safety.business_scope import decide_business_scope, is_auxiliary_request
@@ -84,19 +94,40 @@ class _LazyFitLifeWorkflow:
         text = command.raw_coach_question if command.raw_coach_question is not None else command.question
         scope = decide_business_scope(text)
         if scope.scope == "out_of_scope" or scope.needs_clarification or is_auxiliary_request(text):
-            return await BoundaryWorkflow(scope).execute(command, context)
+            return await BoundaryWorkflow(
+                scope,
+                language=resolve_language(
+                    requested=command.language,
+                    account=self.preferences.language if self.preferences is not None else None,
+                ),
+            ).execute(command, context)
         if scope.scope == "mixed":
             command = replace(command, question="；".join(scope.allowed_subtasks))
         elif command.raw_coach_question and scope.scope == "unclear":
             # The generated page prompt cannot turn unrelated free text into a
             # fitness request. Let the planner see that original text alone.
             command = replace(command, question=command.raw_coach_question)
+        if self.history_loader is not None:
+            from backend.safety.context import sanitize_context
+            from backend.safety.gate import default_pack
+            from backend.agent.tasks.input_contracts import validate_context_findings, HistoryMessage
+            remaining = max(0, context.policy.budget.max_tokens - context.tokens - context.output_tokens)
+            # Keep most of the remaining budget for current facts, output and safety.
+            projection = await context.call(lambda: self.history_loader(min(4000, remaining // 4)))
+            history, report = sanitize_context(
+                [dict(HistoryMessage(role=item.role, body=item.body).model_dump(), admitted_scope=item.admitted_scope) for item in projection.messages],
+                default_pack(), scan_all=True,
+            )
+            validate_context_findings(report)
+            context.consume_context(json.dumps(history, ensure_ascii=False))
+            command = replace(command, recent_history=tuple(history))
         repository = self.repository or await context.call(get_fitness_repository)
         if self.context_loader is not None and not (command.raw_coach_question and scope.scope == "unclear"):
             results, calls = await context.step("context_loader", lambda: self.context_loader(repository))
             context.consume_context(json.dumps(results, ensure_ascii=False, default=str))
             command = replace(command, initial_tool_results=results, initial_tool_calls=tuple(calls))
         gateway = self.gateway or await context.call(lambda: _resolve_gateway(self.user_id))
+        _register_abort(gateway)
         structured_gateway = self.structured_gateway
         if structured_gateway is None and isinstance(gateway, StructuredModelGateway):
             structured_gateway = gateway
@@ -107,6 +138,14 @@ class _LazyFitLifeWorkflow:
             review_mode=_review_mode(),
             structured_gateway=structured_gateway,
             grounding_mode=_grounding_mode(),
+            # An explicit request for this turn beats the account setting, which beats
+            # the app default. The question text is never consulted.
+            answer_language=resolve_language(
+                requested=command.language,
+                account=self.preferences.language if self.preferences is not None else None,
+            ),
+            answer_mode=command.answer_mode,
+            coach_action=command.coach_action,
         )
         return await workflow.execute(command, context)
 
@@ -115,20 +154,40 @@ def run_contextual_coach_action(
     surface: str, action: str, date: str | None, question: str | None = None,
     user_id: str | None = None, *, repository: FitnessRepository | None = None,
     gateway: ModelGateway | None = None, preferences: UserPreferences | None = None,
-    request_id: str | None = None,
+    request_id: str | None = None, language: str | None = None,
+    answer_mode: str | None = None,
+    history_loader=None,
+    followup_detail: bool = False,
 ) -> dict:
     command = AgentCommand(
-        operation="coach_action", question=_coach_prompt(surface, action, date, question),
+        operation="coach_action", question=_coach_prompt(surface, action, date, question)
+            + (" Explain the reasons and provide more detail about this result." if followup_detail else ""),
         user_id=user_id, surface=surface, context_date=date, request_id=request_id,
         raw_coach_question=question or "",
         trusted_page_intent=not bool(question),
+        language=language,
+        answer_mode=answer_mode,
+        coach_action=action,
     )
     workflow = _LazyFitLifeWorkflow(
         repository, gateway, user_id, preferences or UserPreferences(),
         context_loader=lambda loaded_repository: _build_contextual_tool_context(action, date, user_id, loaded_repository),
+        history_loader=history_loader,
     )
     result = DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
-    result["trace"] = {**result.get("trace", {}), "surface": surface, "coach_action": action, "context_date": date}
+    result["trace"] = {
+        **result.get("trace", {}),
+        "surface": surface,
+        "coach_action": action,
+        "context_date": date,
+        # Auditable, so a reviewer can see which language rule applied without
+        # re-reading the prompt.
+        "answer_language": resolve_language(
+            requested=language,
+            account=(preferences or UserPreferences()).language,
+        ),
+        "answer_mode": answer_mode or "brief",
+    }
     return result
 
 
@@ -168,6 +227,18 @@ def interpret_persisted_plan(
     return result
 
 
+def _register_abort(gateway) -> None:
+    """Let a cancel close this run's HTTP transport instead of orphaning it.
+
+    The gateway owns a private ``httpx.Client``, so closing it here cannot affect
+    another account's in-flight request.
+    """
+    abort = current_abort.get()
+    close = getattr(gateway, "close", None)
+    if abort is not None and callable(close):
+        abort.register(close)
+
+
 def _resolve_gateway(user_id: str | None) -> ModelGateway:
     try:
         gateway = resolve_user_model_gateway(user_id) if user_id else build_model_gateway()
@@ -202,8 +273,11 @@ def _coach_prompt(surface: str, action: str, date: str | None, question: str | N
         "suggest_next_meal": "Suggest the next meal using today's remaining calorie and protein gap.",
         "adjust_today_training": "Suggest a practical training adjustment for today based on the user's profile and records.",
         "explain_weekly_report": "Create a weekly summary report, then explain the most important behavior change.",
-        "adjust_next_plan": "Create a plan for next week and adjust it using recent records and the user's profile.",
-        "suggest_targets": "Suggest calorie and protein targets from the user's body state, goal, and training frequency.",
+        # Explanation only. Generating an adjustment draft belongs to the plan task
+        # service, which owns scope permission, the shared repair rounds and the atomic
+        # confirmation. A Coach answer must not look like one of those drafts.
+        "adjust_next_plan": "Explain the deterministic next-week plan draft using recent records and the user's profile. Do not create, change, activate or save a plan.",
+        "suggest_targets": "Explain the deterministic calorie and protein target suggestion from the user's body state, goal and training frequency. Do not propose different targets.",
     }[action]
     suffix = f" Date: {date}." if date else ""
     user_text = f" User question: {question}" if question else ""

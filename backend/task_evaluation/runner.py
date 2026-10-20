@@ -133,6 +133,9 @@ def _response_value(payload, path):
     for key in parts:
         if isinstance(value, dict) and key in value:
             value = value[key]
+        elif isinstance(value, list) and key == "length":
+            # A count is safe to observe; the elements themselves are not.
+            value = len(value)
         elif isinstance(value, list) and key.isascii() and key.isdecimal() and len(key) <= 3 and int(key) < len(value):
             value = value[int(key)]
         else:
@@ -144,9 +147,12 @@ def _observe_response(payload, mapping):
     """Only closed business metadata can enter a desensitized report."""
     import re
     integers = (r"data\.(version|remaining_draft_version)",
+                r"data\.messages\.length",
                 r"data\.payload\.interaction\.clarification_rounds",
                 r"data\.payload\.interaction\.items\.[0-9]{1,3}\.revision")
     enums = {
+        r"data\.status": {'queued', 'running', 'awaiting_user', 'succeeded', 'failed', 'cancelled', 'timed_out', 'interrupted', 'expired'},
+        r"data\.receipt\.context\.language": {'zh-CN', 'en-US'},
         r"data\.payload\.interaction\.status": {'collecting', 'awaiting_clarification', 'awaiting_confirmation', 'partially_saved', 'completed', 'cancelled', 'expired'},
         r"data\.payload\.interaction\.items\.[0-9]{1,3}\.state": {'needs_clarification', 'ready', 'saved', 'discarded'},
         r"data\.(item_commits|commits)\.[0-9]{1,3}\.record_state": {'unchanged', 'changed', 'deleted'},
@@ -226,12 +232,29 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
         request_started = time.monotonic()
         if business_started is None:
             business_started = request_started
+        turn_wait_failure = None
         try:
             response = client.request(step.method, path, headers=headers, json=body or None)
+            if step.wait_for_turn:
+                for poll in range(101):
+                    if response.status_code != 200:
+                        break
+                    status = response.json().get("data", {}).get("status")
+                    if status not in {"queued", "running"}:
+                        if status not in {"awaiting_user", "succeeded", "failed", "cancelled", "timed_out", "interrupted", "expired"}:
+                            turn_wait_failure = ("case_error", ("invalid_turn_status",))
+                        break
+                    if poll == 100:
+                        turn_wait_failure = ("failed", ("turn_not_terminal",))
+                        break
+                    time.sleep(0.05)
+                    response = client.request("GET", path, headers=headers)
         finally:
             processing_ms += (time.monotonic() - request_started) * 1000
             if progress_metrics is not None:
                 progress_metrics["processing_ms"] = processing_ms
+        if turn_wait_failure:
+            return incomplete(*turn_wait_failure)
         captured = {}
         payload = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
@@ -409,7 +432,12 @@ def to_run_record(result: CaseResult, *, mode: str, git_sha: str | None = None,
         processing_ms=result.metrics.get("processing_ms"),
         calls=result.metrics.get("gateway_attempts"),
         retries=result.metrics.get("retries"),
-        details={key: value for key, value in result.metrics.items() if key in {"run_ids", "ledger", "elapsed_ms", "provider_usage", "mock_usage_estimated", "policy_version", "rule_pack_version", "candidate_reason", "token_measurement", "cleanup_status", "dataset_hash", "catalog_digest", "known_estimated_tokens", "failed_attempts", "started_at", "finished_at", "first_candidate", "confirmed_candidate"}},
+        details={**{key: value for key, value in result.metrics.items() if key in {"run_ids", "ledger", "elapsed_ms", "provider_usage", "mock_usage_estimated", "policy_version", "rule_pack_version", "candidate_reason", "token_measurement", "cleanup_status", "dataset_hash", "catalog_digest", "known_estimated_tokens", "failed_attempts", "started_at", "finished_at", "first_candidate", "confirmed_candidate"}},
+            "coach_invariants": {key: value for key, value in result.observed.items()
+                if key in {"coach_messages", "coach_turns", "coach_successes", "coach_cancelled",
+                           "coach_failed", "coach_slot_holders", "coach_unapproved_answers",
+                           "coach_boundary_replies", "coach_messages_with_sources", "gateway_attempts"}
+                and type(value) is int and value >= 0}},
         error_class=None if passed else "cleanup_failed" if result.metrics.get("cleanup_status") == "failed" else result.status,
     )
 

@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
+
+from backend.application.ports.model_call_context import current_abort
+from backend.infrastructure.model_gateway.async_coach_gateway import AsyncCoachTransport
 
 from backend.application.ports.credential_cipher import CredentialCipher
 from backend.application.ports.model_connection_repository import ModelConnectionRepository
@@ -12,8 +16,10 @@ from backend.config import Settings, get_settings
 from backend.domain.errors import ai_disabled_error, ai_not_configured_error, credential_store_unavailable_error
 from backend.domain.model_connection import ModelConnection
 from backend.domain.model_endpoint_policy import ModelEndpointPolicy
+from backend.domain.model_provider import DEFAULT_PROVIDERS
 from backend.infrastructure.model_gateway.openai_chat_completions import OpenAIChatCompletionsAdapter
 from backend.infrastructure.model_gateway.openai_responses import OpenAIResponsesAdapter
+from backend.infrastructure.model_gateway.protocol_registry import adapter_for
 from backend.infrastructure.settings.fernet_cipher import FernetCredentialCipher
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 
@@ -42,8 +48,10 @@ def create_model_gateway(
     endpoint_policy: ModelEndpointPolicy | None = None,
 ) -> ConfigurableModelGateway:
     policy = endpoint_policy or ModelEndpointPolicy()
-    base_url = None
-    if connection.provider == "custom":
+    adapter = adapter_for(connection.protocol)
+    base_url = (DEFAULT_PROVIDERS.resolve("openai", connection.protocol).default_base_url
+                if connection.provider == "openai" else None)
+    if connection.base_url or connection.provider == "custom":
         if not connection.base_url:
             from backend.domain.errors import invalid_model_endpoint_error
 
@@ -54,7 +62,7 @@ def create_model_gateway(
         from openai import OpenAI
 
         http_client = httpx.Client(
-            transport=EndpointPolicyTransport(policy),
+            transport=AsyncCoachTransport(policy) if current_abort.get() is not None else EndpointPolicyTransport(policy),
             follow_redirects=False,
             timeout=httpx.Timeout(30.0, connect=5.0),
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
@@ -62,13 +70,20 @@ def create_model_gateway(
         kwargs: dict[str, Any] = {"api_key": api_key, "http_client": http_client, "max_retries": 0}
         if base_url:
             kwargs["base_url"] = base_url
-        client = OpenAI(**kwargs)
+        try:
+            client = OpenAI(**kwargs)
+        except Exception:
+            http_client.close()
+            raise
 
+    # Only the actual official endpoint uses its native schema API. Compatible
+    # services use schema-guided text with local validation for probes AND business.
+    host = urlsplit(base_url or "").hostname
+    adapter_options = {"structured_mode": "native" if connection.provider == "openai" and host == "api.openai.com" else "json"}
     if connection.protocol == "chat_completions":
-        gateway = OpenAIChatCompletionsAdapter(client=client, model=connection.model)
-    else:
-        gateway = OpenAIResponsesAdapter(client=client, model=connection.model)
-    gateway.provider = connection.provider
+        adapter_options["max_tokens_field"] = "max_tokens" if host == "api.deepseek.com" else "max_completion_tokens"
+    gateway = adapter(client=client, model=connection.model, **adapter_options)
+    gateway.provider = connection.provider_id or connection.provider
     return gateway
 
 

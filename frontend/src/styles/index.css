@@ -2006,6 +2006,44 @@ pre {
   background: rgba(255, 250, 241, 0.58);
 }
 
+.model-active-summary {
+  padding: 22px;
+  border: 1px solid #cfc4b3;
+  border-left: 4px solid #216869;
+  background: #fffaf1;
+}
+
+.model-active-summary h2 { margin: 0 0 12px; font-size: 14px; color: #55645b; }
+.model-active-summary p, .model-setup-step p { margin: 6px 0; font-size: 13px; line-height: 1.65; color: #55645b; }
+.model-endpoint { overflow-wrap: anywhere; font-family: monospace; }
+.model-step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 10px;
+  border: 1px solid #216869;
+  border-radius: 50%;
+  color: #216869;
+  font-variant-numeric: tabular-nums;
+}
+.model-probe-results { display: grid; width: 100%; gap: 8px; }
+.model-probe-results > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #cfc4b3;
+  border-left: 3px solid #8a958d;
+  font-size: 13px;
+}
+.model-probe-results [data-status="passed"] { border-left-color: #2c7a55; }
+.model-probe-results [data-status="failed"] { border-left-color: #b64e3b; }
+.model-probe-results small { overflow-wrap: anywhere; }
+.model-setup-step details { width: 100%; }
+.model-setup-step summary { cursor: pointer; color: #216869; font-size: 13px; padding: 8px 0; }
+
 .settings-section {
   display: grid;
   grid-template-columns: minmax(210px, 0.72fr) minmax(0, 1.45fr);
@@ -4359,6 +4397,65 @@ pre {
 
 .profile-summary dt { color: #777066; font-size: 13px; }
 .profile-summary dd { margin: 5px 0 0; font-size: 18px; font-weight: 700; }
+
+/* Coach is a workspace companion, not a modal blocking the business page. */
+.coach-launcher { position: fixed; z-index: 70; bottom: max(24px, env(safe-area-inset-bottom)); right: 24px; display: flex; align-items: center; gap: 9px; min-height: 48px; border: 1px solid #5b7361; border-radius: 28px; padding: 12px 20px; background: #172f25; color: #fbf8f1; box-shadow: 0 8px 28px #17211d30; }
+.coach-launcher span { font-size: 12px; color: #e8cc95; }
+.coach-window { position: fixed; z-index: 80; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 32px)); height: min(760px, 80dvh); display: flex; flex-direction: column; overflow: hidden; background: #fbf9f4; color: #17211d; border: 1px solid #c8cfc4; border-radius: 18px; box-shadow: 0 24px 90px #17211d3b; }
+.coach-window[hidden] { display: none; }
+.coach-window:focus-visible { outline: 3px solid #947146; outline-offset: 3px; }
+.coach-window-maximized { width: calc(100vw - 32px); height: calc(100dvh - 32px); }
+.coach-window-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #dce1d6; background: #edf0e7; cursor: grab; touch-action: none; }
+.coach-window-header h2 { margin: 4px 0 0; font-size: 18px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coach-window-header span, .coach-welcome > span { font-size: 10px; letter-spacing: .16em; color: #4e6554; }
+.coach-window-header nav { display: flex; gap: 4px; }
+.coach-window button { cursor: pointer; }
+.coach-window button:disabled { opacity: .5; cursor: not-allowed; }
+.coach-window-header button { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; border: 0; border-radius: 8px; background: transparent; color: inherit; }
+.coach-window-header button:hover { background: #dce3d6; }
+.coach-history { max-height: 180px; overflow: auto; display: grid; padding: 10px; gap: 4px; border-bottom: 1px solid #dce1d6; }
+.coach-history button { border: 0; text-align: left; padding: 12px; background: #eef1e8; border-radius: 6px; overflow-wrap: anywhere; }
+.coach-history button[aria-current=true] { box-shadow: inset 3px 0 #315c45; }
+.coach-transcript-wrap { position: relative; flex: 1; min-height: 0; }
+.coach-transcript { height: 100%; overflow: auto; overscroll-behavior: contain; padding: 20px 24px; box-sizing: border-box; }
+.coach-welcome { max-width: 400px; margin: 30px auto; }
+.coach-welcome h3 { font-size: 28px; letter-spacing: -.04em; font-weight: 600; }
+.coach-welcome p { color: #657064; line-height: 1.8; }
+.coach-message { margin-bottom: 20px; overflow-wrap: anywhere; line-height: 1.7; }
+.coach-message header { display: flex; gap: 12px; align-items: baseline; color: #4e6554; font-size: 12px; }
+.coach-message time { color: #777b70; font-size: 11px; }
+.coach-message-user { margin-left: 12%; background: #e8eee1; padding: 12px 16px; border-radius: 12px 12px 2px 12px; }
+.coach-message p { margin: 7px 0; }
+.coach-jump { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border: 1px solid #a8b6a3; border-radius: 20px; background: #fffdf7; white-space: nowrap; }
+.coach-turn-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 22px; color: #4c614e; font-size: 13px; }
+.coach-turn-status button { background: transparent; border: 1px solid #b5bcae; border-radius: 8px; padding: 8px 12px; }
+.coach-turn-status small { flex-basis: 100%; }
+.coach-composer { border-top: 1px solid #dce1d6; padding: 14px 22px; background: #f4f3ec; }
+.coach-composer label { display: block; font-size: 13px; margin-bottom: 6px; }
+.coach-composer textarea { display: block; box-sizing: border-box; resize: vertical; width: 100%; min-height: 64px; max-height: 160px; font: inherit; padding: 10px; border: 1px solid #b4bda9; border-radius: 8px; background: #fffefa; }
+.coach-composer-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; }
+.coach-composer-footer small { color: #63705f; font-size: 11px; }
+.coach-window .form-error { margin: 8px 22px; }
+.coach-history-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.coach-history-row > button:first-child { flex: 1; min-width: 120px; }
+.coach-history-row form { display: flex; gap: 6px; width: 100%; align-items: end; }
+.coach-history-row input { max-width: 100%; box-sizing: border-box; }
+.coach-delete-dialog { max-width: min(400px, calc(100vw - 40px)); padding: 24px; border: 1px solid #b4bda9; border-radius: 14px; background: #fbf9f4; line-height: 1.7; }
+.coach-delete-dialog::backdrop { background: #17211d70; }
+.coach-delete-dialog button { padding: 10px 16px; margin-right: 8px; }
+.coach-history-notice { margin: 4px 22px; color: #657064; font-size: 11px; }
+.coach-message-context { padding-top: 8px; border-top: 1px solid #dde3d6; color: #536650; font-size: 12px; }
+.coach-message-context p { font-size: 11px; }
+.coach-message-context ul { padding-left: 18px; margin: 4px 0; }
+.coach-message-context details { margin-top: 8px; }
+@media (max-width: 767px) {
+  .coach-window, .coach-window-maximized { inset: 0 !important; transform: none !important; width: 100%; height: 100dvh; border-radius: 0; border: 0; padding-bottom: env(safe-area-inset-bottom); box-sizing: border-box; }
+  .coach-window-header { padding: 10px 12px; cursor: default; }
+  .coach-window-header h2 { max-width: 130px; font-size: 16px; }
+  .coach-transcript { padding: 16px; }
+  .coach-composer { padding: 12px; }
+  .coach-launcher { right: 16px; bottom: max(20px, env(safe-area-inset-bottom)); }
+}
 
 @media (max-width: 620px) {
   .profile-summary dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }

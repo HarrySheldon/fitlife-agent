@@ -7,6 +7,8 @@ import { api } from '../../services/api'
 import { Plan } from '../Plan'
 import { NewPlan } from './NewPlan'
 import { PlanDetail } from './PlanDetail'
+const coachState = vi.hoisted(() => ({ value: null as null | { send: ReturnType<typeof vi.fn>; active: null; sending: boolean } }))
+vi.mock('../../hooks/useCoach', () => ({ useCoach: () => coachState.value }))
 
 vi.mock('../../services/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../services/api')>()
@@ -34,6 +36,7 @@ const stored = {
 }
 
 beforeEach(async () => {
+  coachState.value = null
   vi.clearAllMocks()
   await i18n.changeLanguage('en-US')
   vi.mocked(api.listPlans).mockResolvedValue([stored])
@@ -88,11 +91,24 @@ describe('plan task routes', () => {
   it('asks the plan-specific Coach endpoint to interpret the persisted plan', async () => {
     renderRoute('/plan/plan-00000001')
     expect(await screen.findByRole('heading', { name: /plan-00000001/ })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /open coach/i }))
+    fireEvent.click(screen.getByRole('button', { name: /explain saved plan/i }))
     const drawer = screen.getByRole('dialog')
-    fireEvent.click(within(drawer).getByRole('button', { name: /generate adjustment/i }))
+    fireEvent.click(within(drawer).getByRole('button', { name: /explain saved plan/i }))
 
     await waitFor(() => expect(api.interpretPlan).toHaveBeenCalledWith('plan-00000001'))
     expect(await within(drawer).findByText('Use the persisted plan.')).toBeInTheDocument()
+  })
+
+  it('sends the saved plan reference once to the shared Coach without generating a draft', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    coachState.value = { send, active: null, sending: false }
+    renderRoute('/plan/plan-00000001')
+    await screen.findByRole('heading', { name: /plan-00000001/ })
+    fireEvent.click(screen.getByRole('button', { name: /explain saved plan/i }))
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ plan_id: 'plan-00000001', surface: 'plan', action: 'adjust_next_plan' }))
+    expect(api.interpretPlan).not.toHaveBeenCalled()
+    expect(api.createPlanAdjustmentDraft).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

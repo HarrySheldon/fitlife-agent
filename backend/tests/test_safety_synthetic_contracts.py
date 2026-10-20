@@ -67,7 +67,8 @@ def test_the_fixtures_carry_no_real_user_data():
 def _render(case):
     catalog = build_evidence(case["tool_results"])
     answer = GroundedAnswer.model_validate({"blocks": case["blocks"]})
-    return render_grounded_answer(answer, catalog)
+    # These cases are written in Chinese, so they must ask for Chinese labels.
+    return render_grounded_answer(answer, catalog, language="zh-CN")
 
 
 @pytest.mark.parametrize("case", GROUNDING_CASES, ids=[c["id"] for c in GROUNDING_CASES])

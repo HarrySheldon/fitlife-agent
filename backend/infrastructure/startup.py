@@ -5,6 +5,7 @@ import json
 import logging
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.config import get_settings
@@ -18,6 +19,9 @@ from backend.infrastructure.catalog.seed_foods import (
     seed_bundled_foods,
 )
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
+from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
+    SQLiteCoachConversationRepository,
+)
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.sqlite.migrations import run_migrations
 from backend.infrastructure.sqlite.runtime import get_database
@@ -87,6 +91,14 @@ def run_startup(
         counts={"applied_version": schema_version},
         duration_ms=_elapsed(phase_started),
         checksum_prefix=RECORDS_MIGRATIONS[-1].checksum[:12],
+    )
+
+    # A fresh process owns no in-flight turn, so every turn still marked running
+    # belongs to a process that is gone. Saying "interrupted" is the only honest
+    # state: this process cannot resume that inference, and resending it would
+    # bill the account twice for one question.
+    interrupted = SQLiteCoachConversationRepository(database).interrupt_stale_turns(
+        (), at=datetime.now(timezone.utc)
     )
 
     catalog_completed = catalog_failed = 0

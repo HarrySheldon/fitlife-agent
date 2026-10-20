@@ -14,9 +14,14 @@ from backend.i18n import (
     message_for_request,
     translate_public_message,
 )
+from backend.api.coach_conversations import get_coach_admission_service
+from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
 from backend.infrastructure.repositories.sqlite_profile_target_repository import (
     SQLiteProfileTargetRepository,
+)
+from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
+    SQLiteCoachConversationRepository,
 )
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.infrastructure.sqlite.runtime import get_database
@@ -40,19 +45,25 @@ def delete_account(
     request: Request,
     payload: AccountDeleteRequest,
     principal: AuthenticatedPrincipal = Depends(require_current_principal),
+    admission: CoachTurnService = Depends(get_coach_admission_service),
 ):
     settings = get_settings()
     language = language_for_request(request, principal.user)
     setattr(request.state, REQUEST_LANGUAGE_STATE_KEY, language)
+    # Stop the account's model call before its rows disappear. Leaving it running
+    # would let a worker keep billing after the account that asked is gone.
+    admission.cancel_active_for_account(principal.user.user_id)
     DeleteAccount(
         settings.data_dir,
         FileIdentityRepository(settings.data_dir),
         SQLiteProfileTargetRepository(get_database()),
+        coach_conversations=SQLiteCoachConversationRepository(get_database()),
     ).execute(
         principal,
         password=payload.password,
         confirmation=payload.confirmation,
     )
+    request.app.state.model_preview_limiter.clear_user(principal.user.user_id)
     return ok(
         None,
         translate_public_message("ACCOUNT_DELETED", language),
@@ -69,6 +80,7 @@ def export_account_data(
         FileIdentityRepository(settings.data_dir),
         FileModelConnectionRepository(settings.data_dir),
         entry_tasks=SQLiteEntryTaskLifecycleRepository(get_database()),
+        coach_conversations=SQLiteCoachConversationRepository(get_database()),
     ).execute(principal.user.user_id)
     return Response(
         content=archive,
@@ -86,6 +98,7 @@ def change_password(
     request: Request,
     payload: AccountPasswordChangeRequest,
     principal: AuthenticatedPrincipal = Depends(require_current_principal),
+    admission: CoachTurnService = Depends(get_coach_admission_service),
 ):
     repository = FileIdentityRepository(get_settings().data_dir)
     session = ChangePassword(repository, _issue_session).execute(
@@ -93,6 +106,7 @@ def change_password(
         current_password=payload.current_password,
         new_password=payload.new_password,
     )
+    admission.cancel_active_for_account(principal.user.user_id)
     return ok(
         session.model_dump(),
         message_for_request("ACCOUNT_PASSWORD_CHANGED", request, principal.user),
@@ -103,9 +117,11 @@ def change_password(
 def revoke_other_sessions(
     request: Request,
     principal: AuthenticatedPrincipal = Depends(require_current_principal),
+    admission: CoachTurnService = Depends(get_coach_admission_service),
 ):
     repository = FileIdentityRepository(get_settings().data_dir)
     session = RevokeOtherSessions(repository, _issue_session).execute(principal)
+    admission.cancel_active_for_account(principal.user.user_id)
     return ok(
         session.model_dump(),
         message_for_request("ACCOUNT_SESSIONS_REVOKED", request, principal.user),

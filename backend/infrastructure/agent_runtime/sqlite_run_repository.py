@@ -7,13 +7,14 @@ from pathlib import Path
 
 from backend.agent.contracts import AgentRunSnapshot
 from backend.agent.persistence import InvalidTransition, RunEvent, next_snapshot, safe_payload
+from backend.infrastructure.sqlite.database import write_lock_for
 
 
 class SQLiteRunRepository:
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connect() as connection:
+        with write_lock_for(self.path), self.connect() as connection:
             # Serialize schema inspection and every DDL change across constructors.
             # executescript would commit this transaction before running its SQL.
             connection.execute("BEGIN IMMEDIATE")
@@ -93,7 +94,7 @@ class SQLiteRunRepository:
     def create(self, run):
         if run.status != "accepted" or run.version != 1:
             raise InvalidTransition("New run must be accepted")
-        with self.connect() as connection:
+        with write_lock_for(self.path), self.connect() as connection:
             values = tuple(asdict(run).values())
             columns = ",".join("id" if name == "run_id" else name for name in asdict(run))
             connection.execute("INSERT INTO agent_runs (" + columns + ") VALUES (" + ",".join("?" for _ in values) + ")", values)
@@ -106,7 +107,7 @@ class SQLiteRunRepository:
 
     def update(self, run, event_type, payload=None):
         payload = safe_payload(payload or {})
-        with self.connect() as connection:
+        with write_lock_for(self.path), self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = self._get(connection, run.run_id, run.user_id)
             updated = next_snapshot(current, run, event_type)

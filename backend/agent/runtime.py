@@ -19,7 +19,7 @@ from backend.agent.policy import RuntimePolicy
 from backend.agent.persistence import ERROR_CODES, TERMINAL_STATUSES, utc_now
 from backend.agent.telemetry import SafeTelemetryContext
 from backend.infrastructure.agent_runtime.memory_run_repository import MemoryCheckpointStore, MemoryRunRepository
-from backend.application.ports.model_call_context import remaining_model_timeout
+from backend.application.ports.model_call_context import current_abort, remaining_model_timeout
 from backend.configuration.resolver import ConfigurationResolver
 from backend.configuration.models import EffectiveRunConfig, RunPolicySnapshot
 from backend.infrastructure.agent_runtime.rate_limiter import ProcessRateLimiter
@@ -350,6 +350,11 @@ class AgentRuntime:
         event = Event()
         with self._lock:
             self._cancellations[run_id] = event
+        # A turn-level abort must also stop this run, otherwise the runtime would
+        # record a transport failure instead of the cancellation the user asked for.
+        abort = current_abort.get()
+        if abort is not None:
+            abort.register(event.set)
         now = datetime.now(timezone.utc)
         config_error = None
         try:
@@ -399,7 +404,9 @@ class AgentRuntime:
             result=replace((await context.call(lambda: workflow.execute(command,context))).with_request_id(),request_id=request_id,run_id=run_id)
             def review():
                 try:
-                    answer, decision = review_output(command.question, result.answer_markdown)
+                    presentation = ({"boundary_language": result.trace.get("answer_language")}
+                        if result.intent == "business_scope" else {})
+                    answer, decision = review_output(command.question, result.answer_markdown, **presentation)
                 except SafetyRefusal as error:
                     self._safety_event(context, error.decision)
                     raise
@@ -508,9 +515,14 @@ class AgentRuntime:
             return asyncio.run(self.execute(command, workflow))
         result = []
         failure = []
+        # threading.Thread does not propagate context variables, so copy the
+        # caller's context explicitly. Without this a per-run abort registry, the
+        # token ceiling and the remaining-time budget would all be lost at the
+        # sync/async boundary.
+        copied = copy_context()
         def bridge():
             try:
-                result.append(asyncio.run(self.execute(command, workflow)))
+                result.append(copied.run(asyncio.run, self.execute(command, workflow)))
             except BaseException as error:
                 failure.append(error)
         thread = Thread(target=bridge, name="fitlife-agent-sync-bridge")

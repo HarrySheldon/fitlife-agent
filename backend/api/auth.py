@@ -5,6 +5,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, Request
 
 from backend.api.dependencies import require_current_user
+from backend.api.coach_conversations import get_coach_admission_service
 from backend.api.utils import ok
 from backend.domain.errors import ApplicationError
 from backend.i18n import message_for_request
@@ -17,6 +18,14 @@ from backend.infrastructure.sqlite.runtime import get_database
 
 
 router = APIRouter(prefix="/auth")
+
+
+@router.post("/logout")
+def logout(user: AuthenticatedUser = Depends(require_current_user), admission=Depends(get_coach_admission_service)):
+    # JWT storage is still cleared by the client. This endpoint stops account work;
+    # it does not silently rotate every other session's token version.
+    admission.cancel_active_for_account(user.user_id)
+    return ok(None)
 
 
 @router.post("/register")

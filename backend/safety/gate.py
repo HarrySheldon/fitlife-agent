@@ -229,7 +229,7 @@ def _with_caveat(
     caveat keeps the answer usable and tells the reader what to distrust.
     """
     parts = [text]
-    if notice:
+    if notice and notice not in text.split("\n\n"):
         parts.append(notice)
     if supporting is None:
         return "\n\n".join(part for part in parts if part), verdict

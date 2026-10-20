@@ -8,6 +8,9 @@ import stat
 from pathlib import Path
 from uuid import uuid4
 
+from backend.application.ports.coach_conversation_repository import (
+    CoachConversationExportPort,
+)
 from backend.application.ports.identity_repository import IdentityRepository
 from backend.application.ports.profile_target_repository import ProfileTargetRepository
 from backend.domain.errors import ApplicationError, account_delete_failed_error
@@ -24,10 +27,13 @@ class DeleteAccount:
         data_dir: Path,
         identities: IdentityRepository,
         profile_targets: ProfileTargetRepository | None = None,
+        *,
+        coach_conversations: CoachConversationExportPort | None = None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
         self.profile_targets = profile_targets
+        self.coach_conversations = coach_conversations
 
     def execute(
         self,
@@ -112,6 +118,8 @@ class DeleteAccount:
             try:
                 if self.profile_targets is not None:
                     self.profile_targets.delete_user_data(user_id)
+                if self.coach_conversations is not None:
+                    self.coach_conversations.delete_user_data(user_id)
             except (OSError, ValueError, sqlite3.Error):
                 if staged_quarantine is not None:
                     _restore_quarantine(

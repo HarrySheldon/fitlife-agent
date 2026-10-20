@@ -10,14 +10,23 @@ from fastapi.testclient import TestClient
 
 import backend.agent.graph as agent_graph
 from backend.api import plan as plan_api
+from backend.api.coach_conversations import get_coach_admission_service
 from backend.agent.planner import PlannerRoute
 from backend.api.plan import generate_adjusted_plan
 from backend.api.dependencies import require_current_user
+from backend.application.ports.coach_answer import CoachTurnAnswer
 from backend.application.ports.plan_repository import StoredPlan
 from backend.application.ports.structured_model_gateway import StructuredModelResult
+from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.application.use_cases.plans import Plans
 from backend.domain.errors import ApplicationError
 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
+from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
+    SQLiteCoachConversationRepository,
+)
+from backend.infrastructure.sqlite.database import SQLiteDatabase
+from backend.infrastructure.sqlite.migrations import run_migrations
+from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedUser
 from backend.tools.data_access import DEFAULT_PROFILE, MEAL_COLUMNS, WORKOUT_COLUMNS
@@ -29,6 +38,26 @@ VALID_PLAN = {
     "validation": {"passed": True, "warnings": [], "violations": [], "repair_suggestions": []},
     "trace": {"tool_calls": ["generate_next_week_plan"]},
 }
+
+
+class _UnusedAnswer:
+    """The plan interpreter is stubbed in these tests; admission must not call it."""
+
+    def run(self, request):  # pragma: no cover - a call here is the failure
+        raise AssertionError("plan interpretation must not reach the answer port")
+
+
+def _admission_on(tmp_path) -> CoachTurnService:
+    """A real admission service on a throwaway database.
+
+    The endpoint genuinely takes the shared slot, so the test gives it a real one
+    instead of stubbing the check away.
+    """
+    database = SQLiteDatabase(tmp_path / "coach.sqlite")
+    run_migrations(database, RECORDS_MIGRATIONS)
+    return CoachTurnService(
+        SQLiteCoachConversationRepository(database), _UnusedAnswer(), lease_id="test-lease"
+    )
 
 
 def test_deterministic_generation_returns_a_validated_draft_without_persisting(tmp_path):
@@ -257,6 +286,8 @@ def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_pa
     app.dependency_overrides[require_current_user] = lambda: AuthenticatedUser(
         user_id="user-a", display_name="User A"
     )
+
+    app.dependency_overrides[get_coach_admission_service] = lambda: _admission_on(tmp_path)
 
     if delete_during_interpretation:
         with pytest.raises(ApplicationError) as raised:

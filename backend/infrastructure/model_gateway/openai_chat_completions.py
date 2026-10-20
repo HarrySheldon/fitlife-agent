@@ -13,19 +13,29 @@ from backend.infrastructure.model_gateway.openai_responses import (
     WRITER_INSTRUCTIONS,
     _model_ids,
     _probe_tool,
+    _probe_timeout,
+    _valid_probe_arguments,
 )
 from backend.agent.model_payloads import writer_payload_for_model
-from backend.application.ports.model_call_context import model_timeout_options
+from backend.application.ports.model_call_context import model_timeout_options, model_output_limit
+from backend.domain.model_connection_probe import ConnectionBusinessSample, check_business_sample
+from backend.infrastructure.model_gateway.structured_json import json_instructions, parse_json_output
 
 
 class OpenAIChatCompletionsAdapter:
-    def __init__(self, *, client: Any, model: str) -> None:
+    def __init__(self, *, client: Any, model: str, structured_mode: str = "native",
+                 max_tokens_field: str = "max_completion_tokens") -> None:
         self.client = client
         self.model = model
+        self.structured_mode = structured_mode
+        self.max_tokens_field = max_tokens_field
 
     def plan_route(self, question: str) -> PlannerRoute:
         from backend.agent.tasks.input_contracts import build_review_input
         question = build_review_input(question=question, draft="").question
+        if self.structured_mode == "json":
+            return self.parse_structured(instructions=PLANNER_INSTRUCTIONS, input_text=question,
+                response_model=PlannerRoute).output
         response = self.client.chat.completions.parse(
             model=self.model,
             messages=[
@@ -41,6 +51,9 @@ class OpenAIChatCompletionsAdapter:
         return PlannerRoute.model_validate(parsed)
 
     def write_answer(self, state: dict) -> str:
+        # Same ceiling as the Responses adapter, under this protocol's parameter name.
+        limit = model_output_limit.get()
+        output_options = {self.max_tokens_field: limit} if limit is not None else {}
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -53,6 +66,7 @@ class OpenAIChatCompletionsAdapter:
                     "content": json.dumps(writer_payload_for_model(state), ensure_ascii=False),
                 },
             ],
+            **output_options,
             **model_timeout_options(),
         )
         text = str(response.choices[0].message.content or "").strip()
@@ -67,6 +81,15 @@ class OpenAIChatCompletionsAdapter:
         input_text: str,
         response_model: type[StructuredOutput],
     ) -> StructuredModelResult:
+        limit = model_output_limit.get()
+        output_options = {self.max_tokens_field: limit} if limit is not None else {}
+        if self.structured_mode == "json":
+            response = self.client.chat.completions.create(model=self.model, messages=[
+                {"role": "system", "content": json_instructions(instructions, response_model)},
+                {"role": "user", "content": input_text}], **output_options, **model_timeout_options())
+            parsed = parse_json_output(response.choices[0].message.content or "", response_model)
+            return StructuredModelResult(output=parsed, model=str(getattr(response, "model", None) or self.model),
+                usage=_chat_usage(getattr(response, "usage", None)))
         response = self.client.chat.completions.parse(
             model=self.model,
             messages=[
@@ -74,6 +97,7 @@ class OpenAIChatCompletionsAdapter:
                 {"role": "user", "content": input_text},
             ],
             response_format=response_model,
+            **output_options,
             **model_timeout_options(),
         )
         parsed = response.choices[0].message.parsed
@@ -86,18 +110,43 @@ class OpenAIChatCompletionsAdapter:
         )
 
     def list_models(self) -> list[str]:
-        return _model_ids(self.client.models.list())
+        return _model_ids(self.client.models.list(**model_timeout_options()))
 
-    def probe_tool_call(self) -> None:
+    def close(self) -> None:
+        self.client.close()
+
+    def probe_generation(self) -> dict[str, int] | None:
+        response = self.client.chat.completions.create(model=self.model,
+            messages=[{"role": "user", "content": "Reply with OK."}],
+            **{self.max_tokens_field: 128}, **_probe_timeout())
+        if not str(response.choices[0].message.content or "").strip():
+            raise ValueError("Model did not return nonempty text")
+        return _chat_usage(getattr(response, "usage", None)) or None
+
+    def probe_structured(self) -> dict[str, int] | None:
+        token = model_output_limit.set(128)
+        try:
+            result = self.parse_structured(instructions="Extract the food, amount and unit from the synthetic input.",
+                input_text="oats 40 g", response_model=ConnectionBusinessSample)
+            check_business_sample(result.output)
+            return result.usage or None
+        finally:
+            model_output_limit.reset(token)
+
+    def probe_tool_call(self) -> dict[str, int] | None:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": "Call connection_probe with ok=true."}],
             tools=[{"type": "function", "function": _probe_tool()}],
             tool_choice={"type": "function", "function": {"name": "connection_probe"}},
+            max_completion_tokens=128,
+            **_probe_timeout(),
         )
         tool_calls = response.choices[0].message.tool_calls or []
-        if not any(call.function.name == "connection_probe" for call in tool_calls):
+        if not any(call.function.name == "connection_probe"
+                   and _valid_probe_arguments(getattr(call.function, "arguments", "")) for call in tool_calls):
             raise ValueError("Model did not return the required tool call")
+        return _chat_usage(getattr(response, "usage", None)) or None
 
 
 def _chat_usage(value: Any) -> dict[str, int]:

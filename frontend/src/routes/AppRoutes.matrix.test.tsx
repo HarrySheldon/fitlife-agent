@@ -23,7 +23,12 @@ vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ user: authState.authentic
 vi.mock('../hooks/usePreferences', () => ({ usePreferences: () => ({ preferences: { language: 'en-US', unit_system: 'metric', timezone: 'Asia/Shanghai' }, loading: false, error: null, updatePreferences: vi.fn(), localDate: () => '2026-08-26' }) }))
 vi.mock('../hooks/useProfileSetup', () => ({ useProfileSetup: () => ({ setup: profileSetup, preview: null, restriction: null, loading: false, saving: false, calculating: false, confirming: false, stalePreview: false, error: null, updateProfile: vi.fn(), updateOverallGoal: vi.fn(), calculateTargets: vi.fn(), confirmTargets: vi.fn() }) }))
 vi.mock('../hooks/useProfile', () => ({ useProfile: () => ({ profile: { height_cm: 175, weight_kg: 70, age: 30, gender: 'male', goal: 'maintenance', weekly_training_frequency: 4, diet_preferences: [], allergies_or_restrictions: [], target_weight_kg: 70, daily_calorie_target: 2200, daily_protein_target: 140, experience_level: 'experienced', training_preference: 'mixed', target_mode: 'manual' }, loading: false, saving: false, error: null, save: vi.fn() }) }))
-vi.mock('../hooks/useModelSettings', () => ({ useModelSettings: () => ({ settings: { provider: 'openai', protocol: 'responses', base_url: null, model: 'gpt-5.5', enabled: false, api_key_configured: false, api_key_hint: null, test_status: 'untested', test_error_code: null, tested_at: null, updated_at: null, state: 'unconfigured' }, models: [], loading: false, action: null, feedback: null, refresh: vi.fn(), save: vi.fn(), clearApiKey: vi.fn(), listModels: vi.fn(), testConnection: vi.fn() }) }))
+vi.mock('../hooks/useModelSettings', () => ({ useModelSettings: () => ({
+  workspace: { revision: 0, active: null, draft: null }, providers: [], dirty: false,
+  editing: { provider_id: '', protocol: 'chat_completions', base_url: '', model: '', expected_revision: 0, credential_mode: 'new', api_key: '' },
+  patch: vi.fn(), load: vi.fn(), probeResult: null, verificationToken: null, disable: vi.fn(),
+  models: [], loading: false, action: null, feedback: null, refresh: vi.fn(), save: vi.fn(), clearApiKey: vi.fn(), listModels: vi.fn(), testConnection: vi.fn(),
+}) }))
 
 vi.mock('../components/Layout', () => ({ Layout: () => <Outlet /> }))
 vi.mock('../components/OnboardingGate', () => ({ OnboardingGate: () => <Outlet /> }))

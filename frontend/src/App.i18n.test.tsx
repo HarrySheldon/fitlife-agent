@@ -131,11 +131,9 @@ vi.mock('./hooks/useProfileSetup', () => ({
 
 vi.mock('./hooks/useModelSettings', () => ({
   useModelSettings: () => ({
-    settings: {
-      provider: 'openai', protocol: 'responses', base_url: null, model: 'gpt-5.5', enabled: false,
-      api_key_configured: false, api_key_hint: null, test_status: 'untested', test_error_code: null,
-      tested_at: null, updated_at: null, state: 'unconfigured',
-    },
+    workspace: { revision: 0, active: null, draft: null }, providers: [], dirty: false,
+    editing: { provider_id: '', protocol: 'chat_completions', base_url: '', model: '', expected_revision: 0, credential_mode: 'new', api_key: '' },
+    patch: vi.fn(), load: vi.fn(), probeResult: null, verificationToken: null, disable: vi.fn(),
     models: [], loading: false, action: null, feedback: null, refresh: vi.fn(), save: vi.fn(),
     clearApiKey: vi.fn(), listModels: vi.fn(), testConnection: vi.fn(),
   }),

@@ -78,6 +78,11 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
         current_id,
         ModelConnection(
             model="用户模型",
+            provider="custom",
+            provider_id="synthetic-provider",
+            generation_status="passed",
+            tool_status="passed",
+            structured_status="passed",
             encrypted_api_key="encrypted-secret",
             api_key_hint="********cret",
         ),
@@ -106,6 +111,7 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
     assert "current-export-user" not in disposition
     with ZipFile(io.BytesIO(response.content)) as exported:
         assert exported.namelist() == [
+            "coach-conversations.json",
             "entry-drafts.json",
             "identity.json",
             "model-connection.json",
@@ -115,6 +121,10 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
             "records/workouts.csv",
         ]
         identity = json.loads(exported.read("identity.json"))
+        model = json.loads(exported.read("model-connection.json"))
+        assert model["provider_id"] == "synthetic-provider"
+        assert model["generation_status"] == model["tool_status"] == "passed"
+        assert model["structured_status"] == "passed"
         contents = b"\n".join(exported.read(name) for name in exported.namelist())
     assert identity["user_id"] == current_id
     assert identity["username"] == "current-export-user"
