@@ -1,5 +1,55 @@
 # Agent 任务系统总交付 Implementation Plan
 
+## 2026-10-23 当前路线与状态（优先于下方历史快照）
+
+已按用户确认的[路线重组设计](../specs/2026-10-23-agent-roadmap-reorganization-design.md)重写S3/S4/S5。三条主线为：
+
+1. **可信执行：** 把业务理解、安全审核与实际执行权限分开，控制隐私读取、提示注入影响及正常请求误拒。
+2. **受约束规划与可靠落地：** 同一Agent借助Skill和确定性工具提交有类型候选，约束失败有限修订，用户确认后原子激活。
+3. **质量约束下的性能：** 先测模型往返、上下文和实际耗时，再做可信预取、依赖失效与局部复用；质量/安全一致才比较收益。
+
+统一Runtime、Skill和供应商Adapter是共用底座，不单独包装为原创算法。RAG仍为独立知识工程工作线；当前小型知识库及hashing向量检索不能冒充语义检索提升，本轮不包含完整RAG升级计划。
+
+核对基线`main/3519f69`，统一教练实现`93e09a4`已集成；证据见[本次集成记录](../../evaluation/2026-10-23-unified-coach-integration.md)。默认模式和安全配置以实际代码为准，集成不等于生产开关已启用。主目录已有两项transport修改继续保留。**本次只落地计划，S3/S4/S5代码尚未开始，不新增实测指标。**
+
+| 当前顺序 | 详细计划/检查点 | 验收目标 |
+| --- | --- | --- |
+| 已有基础 | S0/S1/S2、M、C、U历史见下文与各验收记录 | 复用已交付能力，不因新路线重做另一套Agent |
+| 首先执行 | [S4-A1/A2](2026-10-10-agent-task-s4-performance.md)（2项） | 闭合attempt计量、来源指纹、同引擎reference与配对基础 |
+| 其次执行 | [S3 Task 1–8](2026-10-10-agent-task-s3-plans.md)（8项） | 类型Patch、持久任务、TaskSession/ToolSpec、候选工具、有限修订、原子确认、同源UI、评估 |
+| 再做优化 | [S4-B1/C1/C2/D1](2026-10-10-agent-task-s4-performance.md)（4项） | 有收益证据的上下文/依赖/缓存优化及同等质量报告 |
+| 最后验收 | [S5 Task 1–4](2026-10-10-agent-task-s5-acceptance.md)（4项） | 离线准入、live Adapter、授权实测、受控发布与生命周期 |
+
+S5 Task 1可提前离线准备；Task 2用假Provider接通，真正probe另获授权后可辅助profiling。最终acceptance依赖S3及S4-D，不能为了测性能跳过质量验收。S4-C2若基线不支持缓存收益，记录不实施优化的结论并以禁用路径验收，不为亮点硬加缓存。
+
+**剩余18个计划检查点：S3 8 + S4 6 + S5 4。** 它们是任务拆分，不是工作量百分比或模型调用次数。原23项及“余12/15项”只保留作历史记录；已完成S0/S1/S2的13项不重编号。旧S3/S4/S5映射在各新计划中列出。
+
+### 当前设计覆盖表
+
+| 设计要求 | 新检查点 | 验证证据 |
+| --- | --- | --- |
+| 封闭工具效果、可信TaskSession与模型权限分离 | S3-3/4；S5-1 | 不可信内容不授权、越权handler零触达、草稿写入非read-only |
+| 有类型候选、硬约束与差异 | S3-1/4/5 | 不解析final Markdown为候选、不改未授权领域、不信模型校验标志 |
+| 整任务两轮修订、跨run预算、业务失败分类 | S3-2/5/8 | CAS并发、幂等恢复、初次round0、两域共享额度 |
+| 原子确认、旧版本冲突、权威约束与唯一存储源 | S3-6 | 同事务重验、head/digest检查、响应丢失重放不重复激活 |
+| 教练/计划同源、等待释放槽、账户生命周期 | S3-7/8；S5-4 | 同任务卡片、无双槽死锁、到期/导出/删除、聊天不删正式历史 |
+| 真实计量、来源指纹、对照可比性 | S4-A1/A2/D1；S5-2/3 | 物理attempt闭合、unknown不作0、Mock/live分开 |
+| 稳定前缀、最小上下文、增量依赖与有界复用 | S4-B1/C1/C2 | 授权先于缓存、撤销/版本变更失效、不伪称KV cache命中 |
+| 正常业务误拒、隐私/攻击和健康边界 | U既有保护；S3-8；S5-1/3 | 合成对抗/正常案例、人工盲标、确定性不变量和语义质量分列 |
+| 受控启用及可用于简历的证据 | S5-3/4 | SHA/配置/样本/失败明细、实际usage、授权与发布状态分开 |
+
+下文历史中的“成功模块冻结”在新实现中指：仅在其权威依赖指纹未变化时复用；联合约束变化必须重新验证。每轮接纳一个typed bundle，业务校验失败占本轮；协议错误不冒充正常约束反馈。正式激活不是模型工具，Provider不进入写事务。
+
+### 代码实施前门禁
+
+只改文档不创建分支或操作数据。开始代码时先读工作区差异，不覆盖用户修改；新分支/工作树之前按AGENTS.md使用主解释器和配置运行`scripts/backup_sqlite.py --output <绝对备份路径>`，在主checkout的忽略目录`.local-backups/`保存备份，核验integrity=ok并记录SHA256；需保留run历史时同时备份Runtime库。隔离数据副本及账户配置/加密密钥，核对实际数据库和Docker挂载不指主库。测试只用合成数据，真实连接密钥不打印、不进Git。
+
+集成或正式迁移前再次备份保留的主库；迁移先副本/dry-run，正式应用独立授权。提交/推送、删除工作树及开发数据也不由“计划写好”推断授权。
+
+---
+
+## 历史阶段记录（以下日期状态不得覆盖上述当前路线）
+
 ## 2026-10-22 新增 U 前置阶段
 
 用户确认在 S3 前实施 [U0–U6 统一教练计划](2026-10-22-unified-coach-agent.md)，采用同一个 Agent、渐进式 Skill、确定性工具与统一执行权限；不开放脚本或任意代码。本地实现及证据见 [U验收记录](../../evaluation/unified-coach-acceptance.md)。下文旧日期状态保留为历史，不能当作当前未提交/已发布结论。
@@ -34,7 +84,7 @@
 
 2026-10-18 后续用户确认 [连接测试业务化修订](2026-10-18-connection-business-check.md)：取消原生工具调用准入和分能力展示，统一「测试连接」，内部生成＋最小业务 JSON 解析，兼容服务探测与实际结构化业务共用本地验证。凭证升级 v2，保留工作区／安全／超时约束。修订已完成本地实现及离线验收：新版后端完整业务2026项、配置6项、前端278项及构建通过，独立复审无遗留发现；以上首版2012项仅作历史。未提交、合并、推送或部署，真实供应商未实测。S3–S5未启动。
 
-## 2026-10-18 教练体验与剩余计划联合编排（当前执行顺序）
+## 2026-10-18 教练体验与剩余计划联合编排（历史执行顺序）
 
 用户已整体确认 [教练会话与交互设计](../specs/2026-10-18-coach-conversation-experience-design.md)，并要求与原未完成计划一起推进。新增 [C阶段及联合实施计划](2026-10-18-coach-conversation-experience.md)，保持S0–S5原编号；不是把聊天、计划调整和性能重写成一个巨大任务。
 
@@ -53,7 +103,7 @@ C阶段5个检查点为语言／输出契约、90天持久会话、原子准入�
 
 C的真实模型和发布检查并入S5，避免重复耗费密钥／预算；S4对照须固定相同语言和输出长度契约，不能用“少回答”充当同等质量的算法提速。新存储进入实施时遵循AGENTS.md备份／隔离／副本验证，本文没有执行迁移、模型调用或生产启用。
 
-## 阶段及依赖
+## 旧版阶段及依赖（由2026-10-23路线取代）
 
 | 顺序 | 计划文件 | 可交付结果 |
 | --- | --- | --- |
@@ -69,7 +119,7 @@ C的真实模型和发布检查并入S5，避免重复耗费密钥／预算；S4
 原串行主依赖 S0 → S1 → S2 → S3 → S4 → S5；当前执行顺序以新增前置阶段一节为准。S2/S3 的场景分别随业务补齐，S0 不伪造不存在的多轮 API。
 共 23 个任务检查点：S0 4 个、S1 4 个、S2 5 个、S3 5 个、S4 3 个、S5 2 个。阶段不是单个大提交，每任务先写失败测试，再实现，再回归。
 
-## 设计覆盖与验收位置
+## 旧版设计覆盖与验收位置（当前映射见文首）
 
 | 设计要求 | 落地任务 | 主要证据 |
 | --- | --- | --- |
@@ -116,13 +166,15 @@ git rev-parse HEAD
 $taskPython = (Resolve-Path -LiteralPath '.venv\Scripts\python.exe').Path
 & $taskPython -m pytest --version
 if ($LASTEXITCODE -ne 0) { throw 'pytest unavailable' }
-$env:DATA_DIR = Join-Path (Get-Location).Path '.tmp\agent-unified-tests'
+$taskStamp = Get-Date -Format 'yyyyMMdd-HHmmssfff'
+$env:DATA_DIR = Join-Path (Get-Location).Path ".tmp\agent-unified-tests-$taskStamp"
 $env:SQLITE_DATABASE_PATH = ''
 $env:LLM_ENABLED = 'false'
+$env:OPENAI_API_KEY = ''
 New-Item -ItemType Directory -Path $env:DATA_DIR -Force | Out-Null
 & $taskPython -c "import os; from pathlib import Path; from scripts import generate_sample_data as s; s.DATA_DIR=Path(os.environ['DATA_DIR']); s.main()"
 if ($LASTEXITCODE -ne 0) { throw 'Synthetic seed failed' }
-& $taskPython -m pytest backend/tests --ignore=backend/tests/test_config.py -q -p no:cacheprovider
+& $taskPython -m pytest backend/tests --ignore=backend/tests/test_config.py -q -p no:cacheprovider --basetemp=".tmp/pytest-full-$taskStamp"
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed' }
 npm --prefix frontend test
 if ($LASTEXITCODE -ne 0) { throw 'Frontend tests failed' }
@@ -132,7 +184,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
 
 记录命令、环境、提交、工作区差异、耗时、失败类别；不能复用过去“1498 passed”当本次基线。环境故障和真实断言失败分开，修复仅限任务必要范围。
 新测试不能访问真实账户和 Provider。前端构建内脚本含 shell 逻辑由 npm 处理，不在 PowerShell 手写 Bash 运算符。
-上述是合成回归命令，不是主库备份命令。配置优先级测试另起独立进程，移除DATA_DIR/SQLite覆盖后执行；新API fixture还需固定自己的tmp_path数据库。详细隔离和分组约束见C联合计划。本文只更新命令，没有实际运行测试或生成数据。
+上述是合成回归命令，不是主库备份命令。配置优先级测试另起独立PowerShell进程，清除DATA_DIR、SQLITE_DATABASE_PATH、LLM_ENABLED、OPENAI_API_KEY等本轮覆盖后，以同一项目解释器执行 `-m pytest backend/tests/test_config.py -q -p no:cacheprovider`；不修改.env；新API fixture还需固定自己的tmp_path数据库。详细隔离和分组约束见C联合计划。本文只更新命令，没有实际运行测试或生成数据。
 
 ## 阶段结束检查
 
