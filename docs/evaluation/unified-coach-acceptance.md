@@ -2,6 +2,8 @@
 
 日期：2026-10-22。开发分支 `codex/unified-coach-agent`；基准 `a042ed9`，本地未提交工作区。
 
+2026-10-23后续：功能已提交为 `93e09a4` 并快进合入本地main；合并后完整回归2299通过/1跳过。下文保留开发期状态快照，提交与集成情况以[主线集成记录](2026-10-23-unified-coach-integration.md)及Git同步检查为准，新模式仍未启用。
+
 状态：**U0–U6 本地实施与离线自动化验收完成**。最终单次后端回归2299通过/1跳过，配置6通过，隔离Mock回放28/28；未提交、未集成、未启用新模式。以文末最终记录为准，保留中间失败与修复历史，不把离线通过等同真实模型或临床验收。
 
 设计：[统一教练详细方案](../superpowers/specs/2026-10-22-unified-coach-agent-design.md)。计划：[U0–U6](../superpowers/plans/2026-10-22-unified-coach-agent.md)。基线：[U0](unified-coach-baseline.md)。
