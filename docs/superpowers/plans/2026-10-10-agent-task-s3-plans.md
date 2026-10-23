@@ -269,7 +269,7 @@ GET  /plan/current
 ```
 POST统一Idempotency-Key/expected_version；confirm另带expected_head_revision和candidate_digest。owner从认证取；body多余字段拒绝。/plan/current注册在动态/{plan_id}之前。GET永不启动Provider，未知/他人同404，409后显示最新差异要求重新确认。
 - [ ] **补齐准入与取消：** PlanAdjustmentService.execute由现有账户单槽准入保护；从已有Coach执行中进入时传可信同账户执行lease而非用户控制的already_admitted布尔，避免二次争槽死锁。不创建并列后台池；等待许可/确认无执行槽。cancel传播同一AbortRegistry，传输清理后才释放；晚到答复不得发布候选。
-- [ ] **兼容与开关：** Settings新增 `plan_adjustment_tasks_enabled=False`、`plan_storage_mode: file|sqlite='file'`、`plan_task_ttl_days=30`、`plan_candidate_ttl_minutes=30`，正数、创建时快照。任务execute须显式使用unified能力，模式不符报配置错误，不能回退另一模型链；普通旧计划路径保持兼容。启用S3后旧调整draft入口委派同一应用服务，旧activate不得绕过新candidate版本确认。禁用后GET可读，execute/confirm拒绝。
+- [ ] **兼容与开关：** Settings新增 `plan_adjustment_tasks_enabled=True`（2026-10-23用户决定：交付即默认开启，不再留"做完看不见"的窗口；见[路线图设计§13](../specs/2026-10-23-agent-roadmap-reorganization-design.md)）、`plan_storage_mode: file|sqlite='file'`、`plan_task_ttl_days=30`、`plan_candidate_ttl_minutes=30`，正数、创建时快照。`plan_storage_mode` 保持 `file` 默认：存储源切换属数据迁移，不由"默认开启"推导，仍须显式 dry-run/apply。任务execute须显式使用unified能力，模式不符报配置错误，不能回退另一模型链；普通旧计划路径保持兼容。启用S3后旧调整draft入口委派同一应用服务，旧activate不得绕过新candidate版本确认。禁用后GET可读，execute/confirm拒绝。
 - [ ] **实现共用交互：** PlanTaskCard/PlanDiff共用许可、硬约束、真实old/new、数字来源、过期和两轮额度文案；模型解释与代码差异分栏。警示不因折叠消失。未知网络结果重试同key；改目标/范围展示新关联任务由用户决定；删聊天不删任务/正式计划。
 - [ ] **GREEN：**
 ```powershell

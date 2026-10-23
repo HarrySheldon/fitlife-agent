@@ -19,10 +19,13 @@
 | 其次执行 | [S3 Task 1–8](2026-10-10-agent-task-s3-plans.md)（8项） | 类型Patch、持久任务、TaskSession/ToolSpec、候选工具、有限修订、原子确认、同源UI、评估 |
 | 再做优化 | [S4-B1/C1/C2/D1](2026-10-10-agent-task-s4-performance.md)（4项） | 有收益证据的上下文/依赖/缓存优化及同等质量报告 |
 | 最后验收 | [S5 Task 1–4](2026-10-10-agent-task-s5-acceptance.md)（4项） | 离线准入、live Adapter、授权实测、受控发布与生命周期 |
+| 收尾 | U7 默认启用与教练legacy退役（1项，见§13） | 新引擎成为默认路径，旧教练分支移除，四处开关同步 |
 
 S5 Task 1可提前离线准备；Task 2用假Provider接通，真正probe另获授权后可辅助profiling。最终acceptance依赖S3及S4-D，不能为了测性能跳过质量验收。S4-C2若基线不支持缓存收益，记录不实施优化的结论并以禁用路径验收，不为亮点硬加缓存。
 
-**剩余18个计划检查点：S3 8 + S4 6 + S5 4。** 它们是任务拆分，不是工作量百分比或模型调用次数。原23项及“余12/15项”只保留作历史记录；已完成S0/S1/S2的13项不重编号。旧S3/S4/S5映射在各新计划中列出。
+**剩余19个计划检查点：S3 8 + S4 6 + S5 4 + U7 1。** 它们是任务拆分，不是工作量百分比或模型调用次数。原23项及“余12/15项”只保留作历史记录；已完成S0/S1/S2的13项不重编号。旧S3/S4/S5映射在各新计划中列出。
+
+**默认值决定（2026-10-23用户确认）：** 统一Agent不再长期挂在默认关闭的开关后面。`coach_agent_mode`、`coach_conversations_enabled`、`VITE_COACH_CONVERSATIONS_ENABLED` 与 S3 的 `plan_adjustment_tasks_enabled` 均按默认开启实现；`plan_storage_mode` 与 `task_execution_strategy` **不跟着改**（前者属数据迁移授权，后者属对照实验基线）。退役顺序与精确范围见[路线图设计§13](../specs/2026-10-23-agent-roadmap-reorganization-design.md)：**先 S5 验收、后删 legacy**，且只退役教练的模式分叉，不删 `business_scope`、`BoundaryWorkflow`、`structured_workflow`（S2智能录入与计划页仍依赖它们）。
 
 ### 当前设计覆盖表
 

@@ -155,7 +155,7 @@ Read-Host不是授权；dry-run也不是live结果。操作者核对脱敏清单
 **Modify:** `backend/config.py`及受影响入口；配置随S2/S3/S4落下，S5只补缺和验收，不重复定义另一套开关。
 
 - [ ] **RED：** flags测试覆盖新入口关闭时不能执行/激活已有新任务，但允许认证用户查看/取消；不绕到旧接口激活。服务端账户allowlist不能由请求参数覆盖。以pytest上述文件为独立RED/GREEN检查点，使用唯一basetemp。
-- [ ] **配置接线：** S3定义plan_adjustment_tasks_enabled、plan_storage_mode、计划/候选TTL；S4定义task_execution_strategy；已有S2配置保留。默认不扩大上线；TTL快照不因配置更新延长，安全政策只能收紧。coach_agent_mode及安全审核/grounding实际值进入验收清单，不能把默认legacy/off写成已启用新机制。
+- [ ] **配置接线：** S3定义plan_adjustment_tasks_enabled、plan_storage_mode、计划/候选TTL；S4定义task_execution_strategy；已有S2配置保留。按[路线图设计§13](../specs/2026-10-23-agent-roadmap-reorganization-design.md)，教练引擎(`coach_agent_mode`)、会话入口及`plan_adjustment_tasks_enabled`按默认开启交付，不再以默认关闭作为交付形态；`plan_storage_mode`与`task_execution_strategy`不跟着改（前者属迁移授权，后者属对照基线）。正式迁移与扩大上线仍逐项授权；TTL快照不因配置更新延长，安全政策只能收紧。验收清单记录实际生效值，但不把"代码默认true"写成"生产已验证"。
 - [ ] **发布手册：** 备份主业务和Runtime数据库、integrity/checksum → 副本清点与import dry-run → 用户单独授权正式迁移 → 核对历史、head、账户配置和加密密钥 → 服务端指定测试账户启用 → 合成/批准测试账户完整闭环 → 用户单独授权扩大。代码合并不合并SQLite数据，不清旧账本或历史。
 - [ ] **故障/隐私演练：** Provider不可用、超时、断线、确认响应丢失、head冲突、约束更新、账户导出/删除/到期；每项记录状态、正式写入数、重放结果。聊天90天到期不级联删除正式计划，过期会话和摘要不进入模型；任务等待释放槽位，取消真实清理后释放，同任务两轮额度跨run持久保留。
 - [ ] **最终门禁：** 执行总计划完整合成回归与前端构建，记录当前证据而不是引用旧通过数；检查TaskSession、封闭工具、候选回执、SQLite原子激活、同源UI、依赖失效和配对报告覆盖。优化不通过则保留reference；关闭入口不删除历史。切换sqlite后不能直接退回旧文件作为最新状态源，先停写核对。

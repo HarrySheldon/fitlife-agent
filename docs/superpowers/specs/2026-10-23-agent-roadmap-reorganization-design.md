@@ -195,3 +195,50 @@ RAG拥有独立数据集与检索/引用判分Adapter，复用现有评估基础
 书面设计已获用户同意并使用writing-plans改写总计划及S3/S4/S5。下一步代码入口为S4-A1/A2观测与基线；执行方式由用户选择，开始前按AGENTS.md备份并隔离开发数据。本文不将计划编写计为功能交付，也不替代真实调用、正式迁移和上线的独立授权。
 
 文档确认不自动授权真实密钥调用、生产迁移、启用、提交/推送、创建分支或子代理实现。代码实施仍遵守AGENTS.md：先核对主库并备份、建立隔离数据、验证项目解释器，保留无关未提交改动。
+
+## 13. 默认启用与 legacy 教练分支退役
+
+2026-10-23用户决定：统一Agent已经过离线验证可行，不再长期挂在默认关闭的开关后面；新引擎与教练会话入口直接作为默认路径，旧的教练legacy分支可以退役。本节把该决定落成可执行的范围与顺序，避免"删legacy"被误解为删除全部旧模块。
+
+### 13.1 目标默认值
+
+| 设置 | 当前 | 目标 | 说明 |
+| --- | --- | --- | --- |
+| `coach_agent_mode` | `legacy` | `unified` | 教练`chat`/`coach_action`走统一循环 |
+| `coach_conversations_enabled` | `false` | `true` | 会话接口开放 |
+| `VITE_COACH_CONVERSATIONS_ENABLED` | `false` | `true` | 前端挂载教练窗口；构建期注入，需重建镜像 |
+| `plan_adjustment_tasks_enabled` | 拟新增`False` | `True` | S3交付时即为默认开启，不再留"做完看不见"的窗口 |
+| `plan_storage_mode` | 拟新增`file` | **保持`file`** | 存储源切换是数据迁移，不由"默认开启"推导；仍走显式`--dry-run`/`--apply` |
+| `task_execution_strategy` | 拟新增`reference` | **保持`reference`** | 它是性能对照策略，默认改optimized会失去基线 |
+
+`plan_storage_mode`与`task_execution_strategy`两行是本节唯一"不跟着改默认"的项：前者属于数据迁移授权，后者属于对照实验设计。把它们与可见性开关混为一谈会让S4失去可比基线、让S3跳过导入核对。
+
+### 13.2 退役范围：只退役教练的legacy分支
+
+核对基线`a36b6cd`的依赖事实（只读grep，未改代码）：
+
+| 组件 | 现有使用方 | 结论 |
+| --- | --- | --- |
+| `graph.py:99-112`的`not unified`短路与`graph.py:142`的`FitLifeWorkflow(...)`教练实例化 | 仅教练legacy路径 | **可退役** |
+| `business_scope.decide_business_scope` | `structured_workflow.py:52`、`interactive_entry.py:147`、`coach_turns.py:400`、`business_scope.py:46/128` | **不可删** |
+| `BoundaryWorkflow` | `workflow.py:173/198`、`graph.py:100` | **不可删** |
+| `FitLifeWorkflow` | `graph.py:142`（教练）**与**`evaluation.py:32`（旧评估入口，经`api/eval.py`、`scripts/run_eval.py`暴露） | **删之前必须先处置旧评估入口** |
+| `structured_workflow.py` | `api/plan.py`、`smart_entry_analyzer.py`、`entry_workflow.py` | 与教练无关，**不动** |
+
+因此"删除legacy"的准确含义是：移除教练请求上的模式分叉与旧流水线调用，**不是**删除`safety/business_scope.py`、`BoundaryWorkflow`或`structured_workflow.py`。S2智能录入与计划页仍依赖它们，误删会让无关入口失效。
+
+`business_scope`在unified教练路径上本来就不参与准入（`unified_coach.py`不调用它），所以退役legacy分支不影响S2，也不改变S2的越权拦截。
+
+### 13.3 执行顺序：先验收，后删除
+
+1. **S4-A**完成后再动默认值——基线必须在同一引擎上测，否则A1/A2的计量与配对没有意义。
+2. **S3交付时**直接把`plan_adjustment_tasks_enabled`写成`True`，同时补齐README与`.env.example`的启用说明。
+3. **S5通过后**再移除教练legacy分支。顺序不能颠倒：legacy是回退路径，在S5给出受控发布结论前删除它，等于把唯一退路提前拆掉。
+4. 删除时同步：`docker-compose.yml`的`${COACH_AGENT_MODE:-legacy}`、`backend/config.py`默认值、`frontend`构建参数、`.env.example`；四处必须一起改，否则会出现"前端开窗口、后端每次409"或反过来的错配。
+5. 旧评估入口若仍要保留，先把`_LazyFitLifeWorkflow`改为指向unified，或明确下线`/api/v1/eval`与`scripts/run_eval.py`；不允许留下导入即失败的死代码。
+
+### 13.4 本节不主张的事
+
+- 不主张默认开启等于已验证生产质量：离线mock通过、`COACH_AGENT_MODE`可运行，仍不等于真实模型理解、注入稳健性或临床正确性；那些由S5的授权live验收回答。
+- 不主张`plan_storage_mode`默认切sqlite，也不主张跳过导入dry-run。
+- 不因默认开启而降低任何审核、权限或预算配置；`safety_review_mode`等维持现状。

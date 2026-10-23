@@ -121,7 +121,7 @@ def test_reduction_requires_positive_baseline():
 & $taskPython -m pytest backend/tests/task_evaluation/test_comparison.py backend/tests/test_task_execution_policy.py -q --basetemp="$taskBase-a2-red"
 ```
 
-- [ ] **实现策略模型：** ExecutionStrategy为reference/optimized；Settings `task_execution_strategy` 默认reference，固定到run/任务执行快照。TaskFacts包含task_kind、trusted_action、fields_complete、catalog_unambiguous、scope_verified、constraints_complete；事实由应用/校验器生成，不信模型说“简单”。A阶段optimized仍可与reference完全等价，不伪造优化收益。
+- [ ] **实现策略模型：** ExecutionStrategy为reference/optimized；Settings `task_execution_strategy` 默认reference，固定到run/任务执行快照。TaskFacts包含task_kind、trusted_action、fields_complete、catalog_unambiguous、scope_verified、constraints_complete；事实由应用/校验器生成，不信模型说“简单”。A阶段optimized仍可与reference完全等价，不伪造优化收益。**该默认值不随2026-10-23"新引擎默认开启"决定改动**：它是对照实验的基线选择，翻成optimized会让S4失去可比对象；可见性开关与实验变量必须分开。
 - [ ] **实现配对接口：** `pair_records(reference, optimized)`按 `case_id/version/repeat_index/invariant_fingerprint/cache_state`配对；不匹配返回有原因的拒配结果。`reduction_percent(baseline, optimized)`按正基线计算，可为负数表示退化。冷/热应用缓存分别配对，不以冷reference对热optimized宣传算法收益；Provider缓存不能由cold标志声称清空。
 - [ ] **定义12个Coach场景：** 可信快捷动作、开放任务、首次训练建议、当前聊天追问、zh/en、必要追问、长但有效历史、过期历史过滤、权限不足、必要审核故障、取消/重试。Task 1 metrics能观察实际阶段，语义质量用S5标注，不按回答关键词打成功。S2复用interactive_entry suite，标task_kind=entry，不能合并引擎成功率。
 - [ ] **扩展CLI（本步实现后才可用）：** `--strategy reference|optimized`、`--repeat`正整数、`--cache-state cold|warm`、`--compare REF OPT`只读。compare模式不要求suite、不构造Provider，输出matched/rejected/quality_gate和原始配对；执行模式仍需suite与显式预算。一次配对运行按case内交替两策略顺序，不先跑完全reference再完全optimized作为正式live结论。
