@@ -13,12 +13,12 @@ ERROR_CODES = frozenset({"INTERNAL_ERROR", "MODEL_AUTH_FAILED", "MODEL_NOT_FOUND
     "MODEL_TRANSIENT_ERROR", "MODEL_INVALID_REQUEST", "RUN_CANCELLED", "RUN_TIMED_OUT",
     "RUN_BUDGET_EXCEEDED", "AI_NOT_CONFIGURED", "CREDENTIAL_STORE_UNAVAILABLE", "SAFETY_REFUSAL", "AGENT_RATE_LIMITED", "CONFIGURATION_INVALID", "CHECKPOINT_UNAVAILABLE",
     "TASK_NOT_FOUND", "TASK_VERSION_CONFLICT", "IDEMPOTENCY_CONFLICT", "TASK_EXPIRED", "TASK_BUDGET_EXHAUSTED", "REPAIR_LIMIT",
-    "INPUT_CLARIFICATION_REQUIRED", "INPUT_CONSTRAINT_CLARIFICATION_REQUIRED", "BUSINESS_SCOPE_NOT_SUPPORTED"})
+    "INPUT_CLARIFICATION_REQUIRED", "INPUT_CONSTRAINT_CLARIFICATION_REQUIRED", "BUSINESS_SCOPE_NOT_SUPPORTED", "AGENT_TOOL_REJECTED", "AUTHENTICATION_REQUIRED"})
 EVENT_TYPES = frozenset({
     "RUN_ACCEPTED", "RUN_STARTED", "STEP_STARTED", "STEP_RETRY_SCHEDULED",
     "STEP_SUCCEEDED", "STEP_FAILED", "TOOL_STARTED", "TOOL_FINISHED",
     "SAFETY_DECIDED", "SAFETY_REVIEWED", "RUN_CANCEL_REQUESTED", "RUN_SUCCEEDED",
-    "RUN_FAILED", "RUN_CANCELLED", "RUN_TIMED_OUT",
+    "RUN_FAILED", "RUN_CANCELLED", "RUN_TIMED_OUT", "AGENT_TOOL_DECIDED", "AGENT_PROGRESS",
 })
 
 
@@ -36,14 +36,21 @@ class InvalidTransition(RuntimeError):
 
 def safe_payload(payload: Mapping[str, object]) -> dict:
     """Reject unknown fields and free-form text; never stringify exceptions."""
-    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status"}
+    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions", "agent_tool", "resource_release", "loaded_skill_ids", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status"}
     result = {}
     for key, value in payload.items():
         if key not in allowed:
             raise ValueError("Unsupported event payload field")
-        if key in {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls"}:
+        if key in {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions"}:
             if type(value) not in (int, float) or value < 0 or not math.isfinite(value):
                 raise ValueError("Invalid event metric")
+        elif key == 'agent_tool' and value not in {'skills.search', 'resources.read', 'fitness.query', 'knowledge.search', 'fitness.calculate', 'other'}:
+            raise ValueError('Invalid agent tool')
+        elif key == 'resource_release' and (not isinstance(value, str) or re.fullmatch(r'[0-9a-f]{64}', value) is None):
+            raise ValueError('Invalid resource release')
+        elif key == 'loaded_skill_ids' and (not isinstance(value, list) or len(value) > 32 or any(
+                not isinstance(item, str) or re.fullmatch(r'skill:[a-z][a-z0-9-]{0,63}(?:/reference:[a-z][a-z0-9-]{0,63})?', item) is None for item in value)):
+            raise ValueError('Invalid published resource identifiers')
         elif key == "error_code" and value not in ERROR_CODES:
             raise ValueError("Invalid error code")
         elif key == "error_type" and value not in {"transient", "authentication", "invalid_input", "quota", "safety", "cancelled", "timeout", "budget", "internal"}:

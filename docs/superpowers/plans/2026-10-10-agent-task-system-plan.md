@@ -1,5 +1,11 @@
 # Agent 任务系统总交付 Implementation Plan
 
+## 2026-10-22 新增 U 前置阶段
+
+用户确认在 S3 前实施 [U0–U6 统一教练计划](2026-10-22-unified-coach-agent.md)，采用同一个 Agent、渐进式 Skill、确定性工具与统一执行权限；不开放脚本或任意代码。本地实现及证据见 [U验收记录](../../evaluation/unified-coach-acceptance.md)。下文旧日期状态保留为历史，不能当作当前未提交/已发布结论。
+
+新顺序：S0/S1/S2 → M → C0–C4 → U0–U6 → S3 → S4 → S5。S3 仍持有正式任务、共享两轮修订、版本差异与原子确认；不另建一套具有独立权限与预算的模型 Planner/Writer。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 实际执行时使用环境中同名技能；是否委派由用户选择。
 
 **Goal:** 按六阶段交付可恢复、受约束、可评估的业务 Agent。

@@ -67,6 +67,28 @@ Why off by default: the C0 language fix must not depend on adopting the new entr
 per-page coach drawer stays available as a fallback. See
 `docs/evaluation/2026-10-20-c0-c4-delivery-record.md`.
 
+## Optional unified Agent engine
+
+The coach window and its Agent engine are separate switches. Set
+`COACH_AGENT_MODE=unified` for the new bounded decision loop with progressively
+loaded Skills and five registered read/calculation tools; the default remains
+`legacy`. It supports structured JSON generation without requiring native tool
+calling. Training plans are advice only, not saved or activated business plans.
+
+In an already configured, isolated checkout, set the backend flag before using
+the existing launcher (enable the two window flags above separately if desired):
+
+~~~powershell
+$env:COACH_AGENT_MODE = 'unified'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
+~~~
+
+Verify development data mounts and ports do not overlap the retained main
+installation before startup, and keep encryption keys consistent with the chosen
+data copy. Stop/cancel active work before switching modes; failures do not
+automatically rerun in legacy mode. Offline evidence and limitations are in the
+[U0–U6 acceptance record](docs/evaluation/unified-coach-acceptance.md).
+
 ## Run without Docker
 
 Use an existing project virtual environment, or create one before installing dependencies:

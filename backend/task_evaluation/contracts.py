@@ -58,6 +58,11 @@ class FaultSeeds(BaseModel):
     slow_coach_answer_seconds: float = Field(default=0, ge=0, le=10)
     # Deterministic output that breaks the answer length contract.
     oversize_coach_answer: bool = False
+    # Declarative mock responses, not executable scripts or import paths.
+    unified_decisions: list[dict[str, Any]] = Field(default_factory=list, max_length=32)
+    poison_knowledge: bool = False
+    unified_revoke_at_call: int = Field(default=0, strict=True, ge=0, le=16)
+    unified_review_unavailable: bool = False
 
 
 class ProfileSeed(BaseModel):

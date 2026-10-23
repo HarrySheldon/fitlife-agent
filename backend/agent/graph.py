@@ -92,8 +92,11 @@ class _LazyFitLifeWorkflow:
 
         # Evaluate actual user text before repository, contextual tools or gateway.
         text = command.raw_coach_question if command.raw_coach_question is not None else command.question
+        unified = get_settings().coach_agent_mode == 'unified' and command.operation in {'chat', 'coach_action'}
+        if unified and not command.user_id:
+            raise ApplicationError(code='AUTHENTICATION_REQUIRED', message='Sign in to use the unified coach.', status_code=401)
         scope = decide_business_scope(text)
-        if scope.scope == "out_of_scope" or scope.needs_clarification or is_auxiliary_request(text):
+        if not unified and (scope.scope == "out_of_scope" or scope.needs_clarification or is_auxiliary_request(text)):
             return await BoundaryWorkflow(
                 scope,
                 language=resolve_language(
@@ -101,9 +104,9 @@ class _LazyFitLifeWorkflow:
                     account=self.preferences.language if self.preferences is not None else None,
                 ),
             ).execute(command, context)
-        if scope.scope == "mixed":
+        if not unified and scope.scope == "mixed":
             command = replace(command, question="；".join(scope.allowed_subtasks))
-        elif command.raw_coach_question and scope.scope == "unclear":
+        elif not unified and command.raw_coach_question and scope.scope == "unclear":
             # The generated page prompt cannot turn unrelated free text into a
             # fitness request. Let the planner see that original text alone.
             command = replace(command, question=command.raw_coach_question)
@@ -122,12 +125,17 @@ class _LazyFitLifeWorkflow:
             context.consume_context(json.dumps(history, ensure_ascii=False))
             command = replace(command, recent_history=tuple(history))
         repository = self.repository or await context.call(get_fitness_repository)
-        if self.context_loader is not None and not (command.raw_coach_question and scope.scope == "unclear"):
+        if not unified and self.context_loader is not None and not (command.raw_coach_question and scope.scope == "unclear"):
             results, calls = await context.step("context_loader", lambda: self.context_loader(repository))
             context.consume_context(json.dumps(results, ensure_ascii=False, default=str))
             command = replace(command, initial_tool_results=results, initial_tool_calls=tuple(calls))
         gateway = self.gateway or await context.call(lambda: _resolve_gateway(self.user_id))
         _register_abort(gateway)
+        if unified:
+            from backend.agent.coach_composition import build_unified_workflow
+            command = replace(command, language=resolve_language(requested=command.language,
+                account=self.preferences.language if self.preferences is not None else None))
+            return await build_unified_workflow(command, repository, gateway).execute(command, context)
         structured_gateway = self.structured_gateway
         if structured_gateway is None and isinstance(gateway, StructuredModelGateway):
             structured_gateway = gateway

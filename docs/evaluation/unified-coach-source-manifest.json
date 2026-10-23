@@ -1,0 +1,191 @@
+{
+  "base": "a042ed9b1ce8cfc8105935dedd3a01edf68e7fe4",
+  "manifest_sha256": "9df9340c439dc4bcc5847965e6f578d9dd960a41fbf6c4baf6b622834e83cd36",
+  "hash_definition": "sorted path + space + lowercase sha256, joined LF, UTF-8 SHA256",
+  "files": [
+    {
+      "path": "backend/agent/coach_composition.py",
+      "sha256": "53a891c610a4ee72cedebf0fd3ebbd87c2a1dc10cf881bed50a9f6d6169021fb"
+    },
+    {
+      "path": "backend/agent/coach_delivery.py",
+      "sha256": "3831f69b2eb0c3c2f75d40647fb7a005fc5e383b0351340c41aca098e73d1180"
+    },
+    {
+      "path": "backend/agent/context_builder.py",
+      "sha256": "9489e879a83ad1eb3aa57612f06693b29fd0873a9cb70e9e5b53798302122c81"
+    },
+    {
+      "path": "backend/agent/decision.py",
+      "sha256": "071ab12d1174bf67f16bbaa0bf22fda8ec87ba4b6413be1f9e62fbe103c2ed4c"
+    },
+    {
+      "path": "backend/agent/graph.py",
+      "sha256": "603c98dbe0024870bc210d4605846e065d480aac2cb0e419b5665bcb4388e00a"
+    },
+    {
+      "path": "backend/agent/persistence.py",
+      "sha256": "3ccaf2b2a592487e2ac1a245f0e0ab55306d4774d62cae7ad0ae74e7491f5db8"
+    },
+    {
+      "path": "backend/agent/prompts/coach_system.md",
+      "sha256": "fecd5f34f053a81c699be04ec8fa0689757a1fc1a8a671136481317cac0cbba3"
+    },
+    {
+      "path": "backend/agent/skills/__init__.py",
+      "sha256": "39559788cbe54c29ac0ef474367934942832d07b5e363feeddb336169d1b2867"
+    },
+    {
+      "path": "backend/agent/skills/catalog.py",
+      "sha256": "80fd05b9bf4cb08e8e36899fe5c3b206e06bb330acb1acc83c40498c824d8d48"
+    },
+    {
+      "path": "backend/agent/skills/loader.py",
+      "sha256": "954230baa9873b01b261dbd3b401d2fd7c839413c60c946c2850c81b8d7c2b3b"
+    },
+    {
+      "path": "backend/agent/tools/__init__.py",
+      "sha256": "c26537171a667d0e70a120568d8a298d8e38743f55b4479f4a884b8a02ad87e3"
+    },
+    {
+      "path": "backend/agent/tools/contracts.py",
+      "sha256": "3da2cbf20a53860282f42ccf30206573d44cd8b41f675e203fa4ddae08360b1d"
+    },
+    {
+      "path": "backend/agent/tools/executor.py",
+      "sha256": "f347bf7326e2c21845fd996bd96defdcb9afeeab954afd8371de8a138704fa07"
+    },
+    {
+      "path": "backend/agent/tools/handlers.py",
+      "sha256": "a04ac1790183764fc471b8eee904ab918d2a7880e0ca46134922cdc4be606256"
+    },
+    {
+      "path": "backend/agent/tools/registry.py",
+      "sha256": "bc786eae5e4f0679ece01c7db85c20eca95279b220c7f5053484adf0f19e055d"
+    },
+    {
+      "path": "backend/agent/unified_coach.py",
+      "sha256": "19d50a1d9c90fd527f178e40e99c7230639e49c4833de0978ac8cc797dd9dc90"
+    },
+    {
+      "path": "backend/application/ports/agent_decision_gateway.py",
+      "sha256": "0a89c596809ec85de6839765065b2d75dd6befc8bd99a6c503eb9c52c203bd3a"
+    },
+    {
+      "path": "backend/application/use_cases/coach_turns.py",
+      "sha256": "50033bb9730e070cca5172d9619e1f876828690f53760dc10d663140325d52f4"
+    },
+    {
+      "path": "backend/coach_skills/nutrition-review/skill.json",
+      "sha256": "05a5a9d9b219b50391189e066215c674a557f2d53cd853703496b4a4be5bef14"
+    },
+    {
+      "path": "backend/coach_skills/nutrition-review/SKILL.md",
+      "sha256": "898354198a9ee8c69446c620b73f79b610ed56563026dd96567487ab6dd9d34c"
+    },
+    {
+      "path": "backend/coach_skills/today-explanation/skill.json",
+      "sha256": "902c0ff43d793ea7972a7cf9482d972684a7fba8de81d83aeafdb2ff642ad9fe"
+    },
+    {
+      "path": "backend/coach_skills/today-explanation/SKILL.md",
+      "sha256": "cfde8e014bd7afe79d79165e7813ee41b26eb2de8f999bdab4fcffae54437839"
+    },
+    {
+      "path": "backend/coach_skills/training-plan/references/exercises.md",
+      "sha256": "49abe4b446f0ca339e23d0a3ac88ebeff217eef220e501503de2a8835429908d"
+    },
+    {
+      "path": "backend/coach_skills/training-plan/skill.json",
+      "sha256": "c8e56ae6647598854fafcf1cc0abf2a6f808f00793edc8ac5aca02f241c8643f"
+    },
+    {
+      "path": "backend/coach_skills/training-plan/SKILL.md",
+      "sha256": "c90bc90a71e728547871fa20884a1be44d55abcc66a32bb78b7af63861510769"
+    },
+    {
+      "path": "backend/config.py",
+      "sha256": "32d61eb91944ba01c0d3fb457c9722840b3ad5ce05409795d73a96b2d1eea77b"
+    },
+    {
+      "path": "backend/domain/coach_answer.py",
+      "sha256": "f38b221021d7552f170d778414a9dfa043692dd25413623c31fc7cb00c9b110f"
+    },
+    {
+      "path": "backend/infrastructure/model_gateway/agent_decision_adapter.py",
+      "sha256": "e13ba4977b6f6a13622ad8c33def60bea86893efb770b83d0789386a3240cb1d"
+    },
+    {
+      "path": "backend/safety/business_scope.py",
+      "sha256": "5533b05d5b3d64c2afc3e2176b50f8bac468a1fbb4781488e5488532919334d7"
+    },
+    {
+      "path": "backend/task_evaluation/budget.py",
+      "sha256": "5ead4ada59b409bb0802c914c91fe331051e245af9036d8f333e0dbf36be6e76"
+    },
+    {
+      "path": "backend/task_evaluation/contracts.py",
+      "sha256": "093d087cc69a16239e32b076d7bc228bd46249628872bfd9c39bafb98eabd29f"
+    },
+    {
+      "path": "backend/task_evaluation/metrics.py",
+      "sha256": "c4e96e7af9dfc746d67405b12775bdeb958888897adf2fda7717d81669195ccb"
+    },
+    {
+      "path": "backend/task_evaluation/runner.py",
+      "sha256": "1eef4889930d0a740e7a5ac4a57a9414b27b520ab296570b84506926b1c38110"
+    },
+    {
+      "path": "backend/task_evaluation/scenarios/unified_coach.json",
+      "sha256": "9b491d1d30e5e6b8e9decf677f2303c0dc53e4e6e6d849a3a7d36cf7b7cd6d13"
+    },
+    {
+      "path": "backend/task_evaluation/worker.py",
+      "sha256": "5312de5f72d2b299a44454734ece99a71adbc7cde938070002c2bd473ff8ad7e"
+    },
+    {
+      "path": "backend/tests/task_evaluation/test_unified_coach.py",
+      "sha256": "32d045beeb9b68a6c1a88497deee6fa9dfdb441430bed5c87b9baf038e058c5b"
+    },
+    {
+      "path": "backend/tests/test_coach_conversation_api.py",
+      "sha256": "84267269be3c62f0b78f6e6136d3c776c6fd9cba3a0ba62f21d9b9216209e04a"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_agent_loop.py",
+      "sha256": "2958faa17d517c8d9bafa95997ff4574c5fac8757fef2a46897daa6b3d2f141a"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_business_write_separation.py",
+      "sha256": "11c0244068bfc7a9375707cba7ca992724b1f3bc3550a11c5f4fe12d04592a1b"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_context_builder.py",
+      "sha256": "e6ecf84e14da1325609dfb190c6d3979904a7e2415ec9c22c2ff55040f569abc"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_decision_gateway.py",
+      "sha256": "876cd04b39bb4b499ae51ad8fc86ff39f7a1dc51112851d1a5a83d2294e51678"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_delivery.py",
+      "sha256": "d1e780145c8fa78450cf9daf59cf965342c575997a36c03af66130897bafcb49"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_entry_integration.py",
+      "sha256": "e1d9abb74728d6dcab7d00556c1e8ed381294b52bceeb6625b240e08f4fe1e30"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_scope_regression.py",
+      "sha256": "8c4f89997cf83ae4aebaaaf13b368a598c0435582a6b47e0006384b94d608e23"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_skill_catalog.py",
+      "sha256": "ff5aa201daa74169e2c873a3adc868e7ba978203d7688314d0edc54315d8f4f1"
+    },
+    {
+      "path": "backend/tests/unified_coach/test_tool_authorization.py",
+      "sha256": "8d7848baeb17987c0a56b2ba273142b352bc01f905c04edefd2ad298eaba67eb"
+    }
+  ]
+}

@@ -147,6 +147,7 @@ def _observe_response(payload, mapping):
     """Only closed business metadata can enter a desensitized report."""
     import re
     integers = (r"data\.(version|remaining_draft_version)",
+                r"data\.(?:receipt\.)?trace\.(?:decision_count|tool_attempts|tool_executions|tool_denials|cache_hits|protocol_failures)",
                 r"data\.messages\.length",
                 r"data\.payload\.interaction\.clarification_rounds",
                 r"data\.payload\.interaction\.items\.[0-9]{1,3}\.revision")
@@ -432,7 +433,7 @@ def to_run_record(result: CaseResult, *, mode: str, git_sha: str | None = None,
         processing_ms=result.metrics.get("processing_ms"),
         calls=result.metrics.get("gateway_attempts"),
         retries=result.metrics.get("retries"),
-        details={**{key: value for key, value in result.metrics.items() if key in {"run_ids", "ledger", "elapsed_ms", "provider_usage", "mock_usage_estimated", "policy_version", "rule_pack_version", "candidate_reason", "token_measurement", "cleanup_status", "dataset_hash", "catalog_digest", "known_estimated_tokens", "failed_attempts", "started_at", "finished_at", "first_candidate", "confirmed_candidate"}},
+        details={**{key: value for key, value in result.metrics.items() if key in {"run_ids", "ledger", "elapsed_ms", "provider_usage", "mock_usage_estimated", "policy_version", "rule_pack_version", "candidate_reason", "token_measurement", "cleanup_status", "dataset_hash", "catalog_digest", "known_estimated_tokens", "failed_attempts", "started_at", "finished_at", "first_candidate", "confirmed_candidate", "tool_attempts", "tool_denials", "cache_hits", "decision_count", "protocol_failures", "tool_executions", "context_chars", "loaded_skill_ids", "resource_releases"}},
             "coach_invariants": {key: value for key, value in result.observed.items()
                 if key in {"coach_messages", "coach_turns", "coach_successes", "coach_cancelled",
                            "coach_failed", "coach_slot_holders", "coach_unapproved_answers",

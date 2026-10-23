@@ -25,6 +25,7 @@ backend/data/users.json
 backend/data/users/
 backend/data/catalog/.catalog-localization.publish.lock
 .tmp/
+.dev-data/
 .pytest-*/
 pytest-*/
 backend/pytest-*/

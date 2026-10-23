@@ -403,7 +403,11 @@ class CoachTurnService:
                     tuple({"role": item.role, "body": item.body, "admitted_scope": item.admitted_scope} for item in projection.messages)) != request.question
             answer = self.answers.run(request)
             from backend.domain.coach_answer import limits_for_or_default
-            if len(answer.answer_markdown) > limits_for_or_default(request.action, request.answer_mode).body_chars:
+            contract = request.action
+            if (request.action == 'chat' and answer.trace.get('agent_mode') == 'unified'
+                    and answer.trace.get('answer_contract') == 'training_plan_advice'):
+                contract = 'training_plan_advice'
+            if len(answer.answer_markdown) > limits_for_or_default(contract, request.answer_mode).body_chars:
                 from backend.domain.errors import ApplicationError
                 raise ApplicationError(code="COACH_ANSWER_TOO_LONG", message="The answer exceeded its output contract.", status_code=502)
             if answer.review_status != "approved":

@@ -199,7 +199,23 @@ def test_a_second_key_while_running_is_refused_not_queued(client, service, answe
     answer.release.set()
 
 
-def test_a_stopping_turn_still_holds_the_slot(client, service, answer):
+def test_a_stopping_turn_still_holds_the_slot(client, service, answer, monkeypatch):
+    # Abort notification is not proof that the worker has finished unwinding.
+    # Hold that boundary explicitly: the default fake can otherwise exit in
+    # 10 ms, legitimately releasing the slot before the next HTTP request.
+    transport_unwinding = Event()
+    allow_transport_close = Event()
+    original_run = answer.run
+
+    def controlled_run(request):
+        try:
+            return original_run(request)
+        finally:
+            transport_unwinding.set()
+            if not allow_transport_close.wait(5):
+                raise RuntimeError('test transport close barrier timed out')
+
+    monkeypatch.setattr(answer, 'run', controlled_run)
     headers = _headers(client)
     conversation_id = _conversation(client, headers)
     turn_id = _ask(client, headers, conversation_id, "key-1").json()["data"]["turn_id"]
@@ -210,10 +226,15 @@ def test_a_stopping_turn_still_holds_the_slot(client, service, answer):
     assert stopped.json()["data"]["status"] == "running"
     assert stopped.json()["data"]["stopping"] is True
 
-    # The transport has not closed yet, so the model is still running.
-    busy = _ask(client, headers, conversation_id, "key-2")
-    assert busy.status_code == 409
-    assert busy.json()["error"]["code"] == "COACH_TURN_BUSY"
+    try:
+        assert answer.aborted.wait(2)
+        assert transport_unwinding.wait(2)
+        # The controlled transport has not closed, so the slot must stay held.
+        busy = _ask(client, headers, conversation_id, "key-2")
+        assert busy.status_code == 409
+        assert busy.json()["error"]["code"] == "COACH_TURN_BUSY"
+    finally:
+        allow_transport_close.set()
 
     service.wait(turn_id, timeout=5)
     assert client.get(f"{BASE}/turns/{turn_id}", headers=headers).json()["data"]["status"] == "cancelled"

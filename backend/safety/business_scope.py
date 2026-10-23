@@ -111,7 +111,12 @@ def decide_business_scope(question: str, *, planner_consulted: bool = False) -> 
     # Instruction attacks belong to the injection gate, never this admission rule.
     if re.search(r"忽略.*(?:指令|规则)|系统提示|ignore.*instructions|system prompt", text, re.I):
         return ScopeDecision("unclear", needs_clarification=planner_consulted)
-    health = _health_request(text)
+    # Topic detection is not a grammar allowlist. Explicit unrelated goals below
+    # still take precedence; natural greetings and requests must not fail merely
+    # because every clause is not a recognised grammatical shape.
+    unrelated_goal = bool(re.search(
+        r"政治(?:论文|論文|训练|訓練)|破解密码|股票投资|political (?:essay|training)|stock portfolio|crack.*password", text, re.I))
+    health = (_supported_detail_question(text) or bool(re.search(_HEALTH, text, re.I))) and not unrelated_goal
     mentions_health = bool(re.search(_HEALTH, text, re.I))
     irrelevant = bool(re.search(r"(?:帮我|请|如何|怎么).*(?:选股票|推荐股票|炒股|写代码|写程序)|(?:pick|recommend|choose) stocks|write (?:code|a program)", text, re.I)
                       or re.fullmatch(r"(?:which|what) stocks (?:should|can|could) I (?:buy|sell)[?!.]*", text, re.I))
@@ -128,6 +133,8 @@ def decide_business_scope(question: str, *, planner_consulted: bool = False) -> 
         # Semantic independence is not inferred from punctuation. A normal clause
         # could be an enabling step toward the other goal; clarify before tools.
         return ScopeDecision("mixed", needs_clarification=True)
+    if unrelated_goal:
+        return ScopeDecision("unclear", needs_clarification=planner_consulted)
     if health:
         return ScopeDecision("in_scope", (text,))
     if irrelevant:

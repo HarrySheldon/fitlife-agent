@@ -185,6 +185,12 @@ ACTION_REGISTRY: Mapping[str, ActionSpec] = {
     "suggest_targets": ActionSpec("suggest_targets", "brief", True),
 }
 
+# Internal result contracts, not additional public quick-action buttons.
+ADVICE_REGISTRY: Mapping[str, ActionSpec] = {
+    'training_plan_advice': ActionSpec('training_plan_advice', 'detailed', True,
+        AnswerLimits(body_chars=3000, detailed_body_chars=6000)),
+}
+
 
 def action_spec(action: str) -> ActionSpec:
     try:
@@ -213,7 +219,7 @@ def limits_for_or_default(action: str | None, mode: AnswerMode = "brief") -> Ans
     budget. The registry still fails closed for `action_spec`, which is what the
     action endpoint calls.
     """
-    spec = ACTION_REGISTRY.get(action) if action else None
+    spec = (ACTION_REGISTRY.get(action) or ADVICE_REGISTRY.get(action)) if action else None
     limits = spec.limits if spec is not None else AnswerLimits()
     if mode == "detailed":
         return replace(limits, body_chars=limits.detailed_body_chars)

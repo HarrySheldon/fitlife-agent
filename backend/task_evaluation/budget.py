@@ -77,12 +77,13 @@ class MeteredMockGateway:
     provider = "mock"
     model = "deterministic-eval-v1"
 
-    def __init__(self, budget):
+    def __init__(self, budget, *, unified_decisions=None):
         self.budget = budget
         self.attempts = 0
         self.estimated_tokens = 0
         self.denied = False
         self.failed_attempts = 0
+        self.unified_decisions = iter(unified_decisions) if unified_decisions is not None else None
 
     def _call(self, function, *args, **kwargs):
         # Local mock accounting estimate, never provider-reported usage.
@@ -123,5 +124,11 @@ class MeteredMockGateway:
     def parse_structured(self, *args, **kwargs):
         from backend.task_evaluation.runner import NetworkAttempt
         def refuse(*args, **kwargs):
+            from backend.agent.decision import DecisionEnvelope
+            from backend.application.ports.structured_model_gateway import StructuredModelResult
+            if self.unified_decisions is not None and kwargs.get('response_model') is DecisionEnvelope:
+                value = next(self.unified_decisions, {'kind': 'ask', 'question': '请说明可用器械和训练时间。'})
+                output = DecisionEnvelope.model_validate({'decision': value})
+                return StructuredModelResult(output, self.model, {})
             raise NetworkAttempt()
         return self._call(refuse, *args, **kwargs)

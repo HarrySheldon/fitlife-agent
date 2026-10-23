@@ -1,5 +1,11 @@
 # S3 统一计划调整 Implementation Plan
 
+## 2026-10-22 与统一 Agent 的衔接修订
+
+先完成 [U0–U6](2026-10-22-unified-coach-agent.md)；下文任务2的 coordinator 是领域任务/修订状态协调，不再自建另一套模型决策循环、Planner/Writer 或授权账本。生成/修复请求通过统一 Agent 及受控领域能力完成；task version、范围许可、整任务共享两轮、候选差异、幂等和原子激活仍由本文领域/应用模块执行。新旧入口不能直接以聊天输出替代正式候选。
+
+本文仍未开始实施。U仅返回建议，不创建本文的会话/候选/plan head，不迁移正式计划。开始S3前根据当前Interface修订任务2的调用名，保留其他数据库事务、导出删除和预算约束。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 实际执行时使用环境中同名技能；是否委派由用户选择。
 
 **Goal:** 用一个协调流程支持饮食/训练调整，受授权和硬约束控制并保留历史版本。

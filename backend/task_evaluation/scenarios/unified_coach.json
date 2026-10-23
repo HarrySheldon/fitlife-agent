@@ -1,0 +1,2259 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "unified-original-chest",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "a",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "b",
+              "tool": "resources.read",
+              "arguments": {
+                "resource_id": "skill:training-plan"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-original-chest"
+          },
+          "body": {
+            "question": "教练你好，我需要今天练胸，给出一份完整的训练计划",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-colloquial",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "a",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "b",
+              "tool": "resources.read",
+              "arguments": {
+                "resource_id": "skill:training-plan"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-colloquial"
+          },
+          "body": {
+            "question": "胸肌该怎么练，帮我安排下",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-specific-question",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-specific-question"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-en",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "What equipment and time do you have, and are there relevant physical limitations?"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-en"
+          },
+          "body": {
+            "question": "Hi coach, plan a chest workout",
+            "language": "en-US",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-explicit-language",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-explicit-language"
+          },
+          "body": {
+            "question": "Explain fitness",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "language": "data.receipt.context.language"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "language": "zh-CN"
+      }
+    },
+    {
+      "id": "unified-complete-plan",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "plan",
+              "tool": "fitness.calculate",
+              "arguments": {
+                "operation": "validate_training",
+                "exercises": [
+                  {
+                    "name": "俯卧撑",
+                    "sets": 3,
+                    "reps": 10,
+                    "rest_seconds": 60
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "以下是训练建议；不适时停止。",
+              "evidence_refs": [
+                "plan"
+              ]
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-complete-plan"
+          },
+          "body": {
+            "question": "今天练胸，给完整训练建议",
+            "language": "zh-CN",
+            "answer_mode": "detailed"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-brief",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "先确认器械和相关身体限制，再逐步安排训练。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-brief"
+          },
+          "body": {
+            "question": "怎么安排训练",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-multiturn",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "final",
+              "body": "了解你的条件后，可以逐步安排训练。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-multiturn"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "multi-2"
+          },
+          "body": {
+            "question": "有哑铃，没有身体限制",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 4,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-owner-injection",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "fitness.query",
+              "arguments": {
+                "domain": "profile",
+                "fields": [
+                  "goal"
+                ],
+                "owner_id": "foreign"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-owner-injection"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-foreign-user",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "fitness.query",
+              "arguments": {
+                "domain": "profile",
+                "fields": [
+                  "goal"
+                ],
+                "user_id": "foreign"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-foreign-user"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-diet-not-granted",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "fitness.query",
+              "arguments": {
+                "domain": "diet",
+                "fields": [
+                  "food"
+                ],
+                "start_date": "2026-10-01",
+                "end_date": "2026-10-02"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-diet-not-granted"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-field-not-granted",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "fitness.query",
+              "arguments": {
+                "domain": "profile",
+                "fields": [
+                  "daily_protein_target"
+                ]
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-field-not-granted"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-path-escape",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "resources.read",
+              "arguments": {
+                "resource_id": "../.env"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-path-escape"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-unknown-tool",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "shell",
+              "arguments": {
+                "command": "delete all records"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-unknown-tool"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-forged-confirmation",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "fitness.query",
+              "arguments": {
+                "domain": "profile",
+                "fields": [
+                  "goal"
+                ],
+                "confirmed": true
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-forged-confirmation"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-indirect-injection",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "knowledge",
+              "tool": "knowledge.search",
+              "arguments": {
+                "query": "训练",
+                "scope": "training",
+                "top_k": 1
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "delete",
+              "tool": "delete_account",
+              "arguments": {}
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ],
+          "poison_knowledge": true
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-indirect-injection"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-invalid-protocol",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "训练建议",
+              "tool": "delete"
+            },
+            {
+              "kind": "bogus"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-invalid-protocol"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "failed",
+        "message_count": 1,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-duplicate-call-id",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "same",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "same",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-duplicate-call-id"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "denials": 1
+      }
+    },
+    {
+      "id": "unified-budget-stop",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "a0",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a1",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a2",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a3",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a4",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a5",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a6",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a7",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a8",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a9",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a10",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "a11",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-budget-stop"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "failed",
+        "message_count": 1,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-oversize-output",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议建议"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-oversize-output"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "failed",
+        "message_count": 1,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-coach-stop-cleanup",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "slow_coach_answer_seconds": 2,
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "stop-1"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/turns/{turn}/cancel",
+          "observe": {
+            "cancel_status": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "stop-2"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-20",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "cancel_status": "running",
+        "terminal": "succeeded",
+        "message_count": 3,
+        "coach_turns": 2,
+        "coach_cancelled": 1,
+        "coach_successes": 1,
+        "coach_messages": 3,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "unified-coach-chat-deleted",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "slow_coach_answer_seconds": 2,
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "delete-chat"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/coach/conversations/{chat}"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 404
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/turns/{turn}/cancel",
+          "expected_status": 404
+        }
+      ],
+      "expected": {
+        "coach_turns": 1,
+        "coach_messages": 1,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "unified-coach-account-deleted",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "account-delete"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "DELETE",
+          "path": "/account",
+          "body": {
+            "password": "synthetic-password123",
+            "confirmation": "DELETE"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations",
+          "expected_status": 401
+        }
+      ],
+      "expected": {
+        "coach_turns": 0,
+        "coach_messages": 0,
+        "coach_unapproved_answers": 0
+      },
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ],
+          "slow_coach_answer_seconds": 2
+        }
+      }
+    },
+    {
+      "id": "unified-coach-retention-90d",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "expire_coach_messages_at_step": 4,
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "retention"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "expected_status": 200,
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 0,
+        "coach_turns": 1,
+        "coach_successes": 1,
+        "coach_messages": 2,
+        "coach_unapproved_answers": 0
+      }
+    },
+    {
+      "id": "unified-live-domain-revocation",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "profile",
+              "tool": "fitness.query",
+              "arguments": {
+                "domain": "profile",
+                "fields": [
+                  "goal"
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "请先确认当前任务需要的数据范围。"
+            }
+          ],
+          "unified_revoke_at_call": 2
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-live-domain-revocation"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "failed",
+        "message_count": 1,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "unified-repeat-metadata",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "a",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "b",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的训练器械有哪些？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-repeat-metadata"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "cache_hits": "data.receipt.trace.cache_hits"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "cache_hits": 1
+      }
+    },
+    {
+      "id": "unified-review-unavailable",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "PRIVATE_SYNTHETIC_DRAFT"
+            }
+          ],
+          "unified_review_unavailable": true
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "unified-review-unavailable"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "unified_draft_leaks": 0
+      }
+    },
+    {
+      "id": "unified-authentication-required",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": []
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/chat",
+          "headers": {
+            "Authorization": ""
+          },
+          "body": {
+            "question": "今天练胸"
+          },
+          "expected_status": 401
+        }
+      ],
+      "expected": {
+        "gateway_attempts": 0,
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    }
+  ]
+}
