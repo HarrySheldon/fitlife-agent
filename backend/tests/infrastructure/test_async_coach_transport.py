@@ -72,6 +72,33 @@ def test_async_transport_preserves_non_streaming_response():
         assert client.post("https://model.invalid/test", json={"x": 1}).json() == {"ok": True}
 
 
+def test_async_transport_decodes_a_content_encoded_response_exactly_once():
+    import gzip
+
+    payload = b'{"ok": true, "note": "compressed provider reply"}'
+    compressed = gzip.compress(payload)
+
+    class Compressed(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            # A raw ByteStream keeps the body compressed, like a real socket.
+            return httpx.Response(
+                200,
+                headers={
+                    "content-encoding": "gzip",
+                    "content-length": str(len(compressed)),
+                    "content-type": "application/json",
+                },
+                stream=httpx.ByteStream(compressed),
+            )
+
+    with httpx.Client(transport=AsyncCoachTransport(Policy(), transport_factory=Compressed)) as client:
+        response = client.post("https://model.invalid/test", json={})
+
+    assert response.status_code == 200
+    assert response.content == payload
+    assert response.json() == {"ok": True, "note": "compressed provider reply"}
+
+
 def test_cancel_before_request_does_not_start_transport():
     abort = AbortRegistry()
     abort.abort()

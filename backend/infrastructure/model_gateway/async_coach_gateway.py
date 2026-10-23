@@ -53,9 +53,16 @@ class AsyncCoachTransport(httpx.BaseTransport):
                     content=body, extensions=request.extensions,
                 )
                 response = await client.send(outgoing)
+                # ``aread()`` yields the *decoded* body (gzip/br/zstd already
+                # applied), so the rebuilt response must not carry the encoding
+                # headers -- otherwise the caller decodes a second time and dies
+                # with "incorrect header check" on any compressed provider reply.
                 content = await response.aread()
+                headers = httpx.Headers(response.headers)
+                headers.pop("content-encoding", None)
+                headers.pop("content-length", None)
                 return httpx.Response(
-                    response.status_code, headers=response.headers, content=content,
+                    response.status_code, headers=headers, content=content,
                     extensions=response.extensions,
                 )
         finally:
