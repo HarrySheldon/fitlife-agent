@@ -10,6 +10,7 @@ from backend.agent.runtime import BudgetExceeded
 from backend.agent.safety import check_input
 from backend.agent.tools.registry import tool_descriptions
 from backend.agent.skills.catalog import SkillResourceError
+from backend.agent.task_session import AdviceSession
 from backend.agent.workflow import verify_guard_steps
 from backend.safety.context import sanitize_context
 from backend.safety.gate import default_pack
@@ -17,9 +18,11 @@ from backend.domain.coach_answer import limits_for_or_default, output_token_limi
 
 
 class UnifiedCoachWorkflow:
-    def __init__(self, gateway, executor, *, review_gateway=None, review_mode='off'):
+    def __init__(self, gateway, executor, *, review_gateway=None, review_mode='off', session=None):
         self.gateway, self.executor = gateway, executor
         self.review_gateway, self.review_mode = review_gateway, review_mode
+        # Plain advice is the default: no task, no rounds, no receipt.
+        self.session = session or AdviceSession()
 
     async def execute(self, command, context):
         await context.step('input_guard', lambda: check_input(command.question))
@@ -32,6 +35,7 @@ class UnifiedCoachWorkflow:
         for decision_index in range(1, 13):
             context.raise_if_cancelled()
             self.executor.check_access()
+            self.session.before_decision()
             context.consume_context(request.instructions + serialized(request.tool_descriptions) + serialized(request.messages))
             action = command.coach_action
             if not action and 'training' in self.executor.principal.authorized_domains:
@@ -54,10 +58,15 @@ class UnifiedCoachWorkflow:
                     # Recheck after Runtime's worker queue, immediately before
                     # forwarding already-read private observations to a provider.
                     self.executor.check_access()
+                    # A permission revoked while waiting must be caught before
+                    # the trusted state this round was built on is used.
+                    self.session.before_decision()
                     return self.gateway.decide(request)
                 response = await context.tool('agent_decision_model', 'safe', decide)
                 decision = DecisionEnvelope.model_validate({'decision': response.decision}).decision
                 context.consume_output(DecisionEnvelope(decision=decision).model_dump_json())
+                # Observation only: a session never turns model text into a grant.
+                self.session.after_decision(decision)
             except (ValidationError, ValueError) as error:
                 if isinstance(error, SkillResourceError):
                     raise
@@ -77,7 +86,9 @@ class UnifiedCoachWorkflow:
                 # Published Skills are workflow instructions of lower authority.
                 # User records/knowledge are data, sanitized at each model ingress.
                 payload = observation
-                if observation['tool'] not in {'skills.search', 'resources.read'}:
+                # The tool's declared effect decides whether its output must be
+                # sanitized; the loop does not keep a list of tool names.
+                if not observation.get('public'):
                     payload, _ = await context.step('context_guard', lambda: sanitize_context(
                         observation, default_pack(), scan_all=True))
                 else:
@@ -99,7 +110,7 @@ class UnifiedCoachWorkflow:
                 if observation['tool'] == 'knowledge.search':
                     sources.extend({'source': item.get('source', ''), 'heading': item.get('heading', '')}
                                    for item in observation['data'])
-            return AgentResult(answer, 'coach_advice', {
+            metadata = {
                 'scope': 'in_scope', 'llm_used': True, 'llm_answer_used': True,
                 'agent_mode': 'unified', 'answer_contract': answer_contract(decision, self.executor, command),
                 'answer_language': command.language or 'en-US', 'answer_mode': command.answer_mode or 'brief',
@@ -110,5 +121,11 @@ class UnifiedCoachWorkflow:
                 'review_mode': self.review_mode,
                 'loaded_skill_ids': sorted({item['data']['resource_id'] for item in self.executor.observations.values()
                     if item['tool'] == 'resources.read' and item['status'] == 'ok'}),
-            }, {}, tuple(sources), self.gateway.model)
+            }
+            # The receipt is built by the session, not by the model, and is only
+            # present when a task actually produced one.
+            receipt = self.session.before_delivery(decision)
+            if receipt:
+                metadata['task_receipt'] = dict(receipt)
+            return AgentResult(answer, 'coach_advice', metadata, {}, tuple(sources), self.gateway.model)
         raise BudgetExceeded('Agent decision budget exhausted')
