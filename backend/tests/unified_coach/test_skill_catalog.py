@@ -80,9 +80,15 @@ def test_symlink_cannot_escape_published_root(tmp_path):
     outside.write_text('Not a published resource', encoding='utf-8')
     (folder / 'skill.json').write_text(json.dumps({'id': 'unsafe', 'version': '1',
         'title': 'Unsafe', 'description': 'Unsafe link'}), encoding='utf-8')
+    link = folder / 'SKILL.md'
     try:
-        (folder / 'SKILL.md').symlink_to(outside)
+        link.symlink_to(outside)
     except OSError:
         pytest.skip('Windows symlink creation privilege unavailable')
+    if not link.is_symlink():
+        # Some sandboxes report success but write a regular file instead. The
+        # guard below would then test nothing, so skip rather than pass or fail
+        # on an escape attempt that was never created.
+        pytest.skip('symlink creation silently degraded to a regular file')
     with pytest.raises(SkillResourceError, match='RESOURCE_NOT_AUTHORIZED'):
         SkillCatalog(root)

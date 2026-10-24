@@ -35,15 +35,24 @@ class InvalidTransition(RuntimeError):
 
 
 def safe_payload(payload: Mapping[str, object]) -> dict:
-    """Reject unknown fields and free-form text; never stringify exceptions."""
-    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions", "agent_tool", "resource_release", "loaded_skill_ids", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status"}
+    """Reject unknown fields and free-form text; never stringify exceptions.
+
+    The allowlist is the redaction boundary: an attempt identifier, a usage
+    source and a token count are registered here by name. Queries, records,
+    prompts and keys have no field, so they cannot be recorded by accident.
+    """
+    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions", "agent_tool", "resource_release", "loaded_skill_ids", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status", "attempt_id", "usage_source"}
     result = {}
     for key, value in payload.items():
         if key not in allowed:
             raise ValueError("Unsupported event payload field")
-        if key in {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions"}:
+        if key in {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions"}:
             if type(value) not in (int, float) or value < 0 or not math.isfinite(value):
                 raise ValueError("Invalid event metric")
+        elif key == "attempt_id" and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{32}", value) is None):
+            raise ValueError("Invalid attempt identifier")
+        elif key == "usage_source" and value not in {"provider", "mock_estimate", "unknown"}:
+            raise ValueError("Invalid usage source")
         elif key == 'agent_tool' and value not in {'skills.search', 'resources.read', 'fitness.query', 'knowledge.search', 'fitness.calculate', 'other'}:
             raise ValueError('Invalid agent tool')
         elif key == 'resource_release' and (not isinstance(value, str) or re.fullmatch(r'[0-9a-f]{64}', value) is None):

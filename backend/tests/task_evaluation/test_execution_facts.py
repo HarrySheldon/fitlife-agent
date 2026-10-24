@@ -98,7 +98,8 @@ def test_exception_metrics_preserve_known_provenance_and_processing(tmp_path):
     metrics = collect_metrics(tmp_path, fixed, gateway, {"processing_ms": 12})
     assert metrics["processing_ms"] == 12
     assert metrics["model"] == "deterministic-eval-v1"
-    assert metrics["rule_version"] and metrics["safe_config_fingerprint"]
+    assert metrics["rule_version"] and metrics["invariant_config_fingerprint"]
+    assert metrics["treatment_config_fingerprint"]
 
 
 def test_invalid_plan_file_is_not_observed_as_valid_plan(tmp_path):

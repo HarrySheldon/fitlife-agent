@@ -25,6 +25,13 @@ from backend.configuration.models import EffectiveRunConfig, RunPolicySnapshot
 from backend.infrastructure.agent_runtime.rate_limiter import ProcessRateLimiter
 from backend.agent.safety import check_input, review_output, SafetyRefusal, SAFETY_RULE_VERSION
 from backend.domain.errors import ApplicationError
+from backend.task_evaluation.measurements import (
+    AttemptKind,
+    AttemptLedger,
+    MEASURED_USAGE_SOURCES,
+    UsageMeasurement,
+    unknown_usage,
+)
 T = TypeVar("T")
 _SYNC_SLOTS = BoundedSemaphore(16)
 
@@ -83,6 +90,9 @@ class RuntimeContext:
         self.provider = self.model = None
         self.output_tokens = 0
         self.retry_count = 0
+        # Physical attempts are opened before the operation runs and closed with
+        # a terminal state, so an interrupted attempt never looks like no attempt.
+        self.attempts = AttemptLedger(clock=clock)
         self.task_budget_binding = task_budget_binding
         self._budget_operation_prefix = run_id or uuid4().hex
 
@@ -227,6 +237,45 @@ class RuntimeContext:
                 if inspect.iscoroutine(value):
                     value.close()
             task.add_done_callback(_consume_completion)
+    @staticmethod
+    def _usage_event(usage: UsageMeasurement | None) -> dict:
+        """Event fields for one attempt's usage; unknown stays explicit."""
+        if usage is None or not usage.measured:
+            return {"usage_source": "unknown"}
+        payload = {"usage_source": usage.source, "input_tokens": usage.input_tokens,
+                   "output_tokens": usage.output_tokens}
+        if usage.cached_input_tokens is not None:
+            payload["cached_input_tokens"] = usage.cached_input_tokens
+        return payload
+
+    def _measure_usage(self, result) -> UsageMeasurement:
+        """Read a provider usage dict without inventing a number for it.
+
+        A provider that reports nothing is unknown. A provider that reports zero
+        is measured zero. The two must never collapse into the same value.
+        """
+        usage = getattr(result, "usage", None)
+        if not isinstance(usage, dict) or not usage:
+            return unknown_usage()
+        input_tokens = usage.get("input_tokens", usage.get("prompt_tokens"))
+        output_tokens = usage.get("output_tokens", usage.get("completion_tokens"))
+        if type(input_tokens) is not int or type(output_tokens) is not int:
+            return unknown_usage()
+        if input_tokens < 0 or output_tokens < 0:
+            return unknown_usage()
+        cached = usage.get("cached_input_tokens")
+        if type(cached) is not int or cached < 0 or cached > input_tokens:
+            cached = None
+        source = usage.get("source")
+        if source not in MEASURED_USAGE_SOURCES:
+            # Without provider metadata we cannot say who reported the number,
+            # so it stays unknown rather than being attributed by guess.
+            if self.provider is None:
+                return unknown_usage()
+            source = "mock_estimate" if self.provider == "mock" else "provider"
+        return UsageMeasurement(source=source, input_tokens=input_tokens,
+                                output_tokens=output_tokens, cached_input_tokens=cached)
+
     async def _invoke(self, name, operation, replay, is_tool=False):
         limit = self.policy.retry.max_attempts if replay == "safe" else 1
         known_tools = {"plan_route_model", "write_answer_model", "safety_review_model", "load_profile", "analyze_meals", "analyze_workouts", "retrieve_knowledge", "generate_weekly_report", "generate_next_week_plan", "validate_plan"}
@@ -242,22 +291,53 @@ class RuntimeContext:
                     self.model_calls += 1
                     if self.model_calls > self.policy.budget.max_model_calls:
                         raise BudgetExceeded("The model-call budget was exhausted.")
+            # The identifier is allocated and the attempt recorded as started
+            # *before* the operation can run, so a queue wait is not a start and
+            # an interruption cannot erase the attempt.
+            attempt_id = None
+            if is_tool:
+                attempt_id = self.attempts.open(
+                    AttemptKind.PHYSICAL_MODEL if name.endswith("_model")
+                    else AttemptKind.PHYSICAL_HANDLER,
+                    tool=metadata.get("tool"))
             try:
-                self.record("TOOL_STARTED" if is_tool else "STEP_STARTED", self, metadata)
+                self.record("TOOL_STARTED" if is_tool else "STEP_STARTED", self,
+                            {**metadata, "attempt_id": attempt_id} if is_tool else metadata)
                 if is_tool and name.endswith("_model"):
                     async with self.telemetry.span("fitlife.ai.request", {"attempt": attempt}):
                         result = await self._budgeted_model_call(operation)
                 else:
                     result = await self.call(operation)
                 self.raise_if_cancelled()
-                self.record("TOOL_FINISHED" if is_tool else "STEP_SUCCEEDED", self, {**metadata, "outcome": "succeeded"})
+                usage = self._measure_usage(result) if is_tool else None
+                if attempt_id is not None:
+                    self.attempts.complete(attempt_id, usage)
+                self.record("TOOL_FINISHED" if is_tool else "STEP_SUCCEEDED", self,
+                            {**metadata, "outcome": "succeeded", "attempt_id": attempt_id,
+                             **self._usage_event(usage)} if is_tool
+                            else {**metadata, "outcome": "succeeded"})
                 return result
-            except (RunCancelled, RunTimedOut, BudgetExceeded):
-                self.record("TOOL_FINISHED" if is_tool else "STEP_FAILED", self, {**metadata, "outcome": "failed"})
+            except (RunCancelled, RunTimedOut, BudgetExceeded) as control_error:
+                if attempt_id is not None:
+                    # A run-level stop is not a tool failure; label it so the
+                    # attempt ledger separates cleanup from an unanswered call.
+                    if isinstance(control_error, RunCancelled):
+                        self.attempts.cancel(attempt_id)
+                    else:
+                        self.attempts.fail(attempt_id)
+                self.record("TOOL_FINISHED" if is_tool else "STEP_FAILED", self,
+                            {**metadata, "outcome": "failed", "attempt_id": attempt_id,
+                             **self._usage_event(None)} if is_tool
+                            else {**metadata, "outcome": "failed"})
                 raise
             except Exception as error:
+                if attempt_id is not None:
+                    self.attempts.fail(attempt_id)
                 failure=classify_failure(error, stage=name, attempt=attempt)
-                self.record("TOOL_FINISHED" if is_tool else "STEP_FAILED", self, {**metadata, "outcome": "failed"})
+                self.record("TOOL_FINISHED" if is_tool else "STEP_FAILED", self,
+                            {**metadata, "outcome": "failed", "attempt_id": attempt_id,
+                             **self._usage_event(None)} if is_tool
+                            else {**metadata, "outcome": "failed"})
                 if attempt >= limit or getattr(error,"_fitlife_no_replay",False) or decide_disposition(failure) is not Disposition.RETRY:
                     try:
                         setattr(error, "_fitlife_no_replay", True)
@@ -445,6 +525,9 @@ class AgentRuntime:
         finally:
             if lease is not None:
                 lease.release()
+            # Anything still open never reached its own terminal record: the
+            # work may or may not have finished, so its usage stays unknown.
+            context.attempts.close_unfinished("incomplete")
             span.set_attributes({"input_tokens": context.tokens, "output_tokens": context.output_tokens,
                                  "tool_calls": context.tool_calls, "model_calls": context.model_calls,
                                  "retry_count": context.retry_count})

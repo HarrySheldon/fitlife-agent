@@ -29,6 +29,14 @@ class RunRecord:
     calls: int | None = None
     retries: int | None = None
     error_class: str | None = None
+    # Pairing metadata. Two runs are only comparable when the invariant
+    # fingerprint, the run mode and the cache state agree; the strategy and the
+    # repeat index are what differ by design.
+    strategy: str | None = None
+    cache_state: str | None = None
+    repeat_index: int = 0
+    invariant_fingerprint: str | None = None
+    treatment_fingerprint: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
 
@@ -48,6 +56,11 @@ class GroupSummary:
     known_total_tokens: int = 0
     unknown_token_count: int = 0
     coverage: dict[str, int] = field(default_factory=dict)
+    # Attempts that started and never reached their own terminal record. They
+    # are reported next to the token numbers so a reader cannot mistake an
+    # incomplete run for a cheap one.
+    attempts_incomplete: int = 0
+    unknown_usage_runs: int = 0
 
 
 @dataclass(frozen=True)
@@ -86,6 +99,8 @@ def _group(records: list[RunRecord], mode: str) -> GroupSummary:
         unknown_token_count=sum(r.total_tokens is None for r in group_records),
         coverage={status: sum(("passed" if r.success else r.error_class or "failed") == status for r in group_records)
                   for status in sorted({"passed" if r.success else r.error_class or "failed" for r in group_records})},
+        attempts_incomplete=sum(int(r.details.get("attempts_incomplete") or 0) for r in group_records),
+        unknown_usage_runs=sum(1 for r in group_records if r.details.get("unknown_usage_count")),
     )
 
 
@@ -127,6 +142,10 @@ def render_markdown(report: Report) -> str:
         lines.append(f"- 失败：{group.failures}")
         lines.append(f"- 已知 tokens 小计：{group.known_total_tokens}；未知数量：{group.unknown_token_count}")
         lines.append(f"- 覆盖状态：{json.dumps(group.coverage, ensure_ascii=False)}")
+        if group.attempts_incomplete:
+            lines.append(f"- 已开始未完成的物理尝试：{group.attempts_incomplete}（不计为未调用）")
+        if group.unknown_usage_runs:
+            lines.append(f"- usage 未知的运行：{group.unknown_usage_runs}（未知不记 0）")
         if mode == "mock":
             lines.append("- tokens 为字符估算；非 Provider 使用量或付费成本。")
         lines.append(

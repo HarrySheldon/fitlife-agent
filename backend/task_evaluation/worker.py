@@ -6,7 +6,7 @@ from pathlib import Path
 
 def collect_metrics(root, fixed, gateway, progress):
     from backend.task_evaluation.metrics import runtime_metrics
-    from backend.task_evaluation.provenance import fingerprint
+    from backend.task_evaluation.measurements import config_fingerprints
     metrics = dict(progress)
     try:
         metrics.update(runtime_metrics(root))
@@ -15,10 +15,7 @@ def collect_metrics(root, fixed, gateway, progress):
     if fixed is not None:
         from backend.safety.gate import SAFETY_RULE_VERSION, default_pack
         metrics.update(rule_version=SAFETY_RULE_VERSION, rule_pack_version=default_pack().pack_version,
-            safe_config_fingerprint=fingerprint({"llm_enabled": fixed.llm_enabled,
-                "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode,
-                "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days,
-                "coach_conversations_enabled": fixed.coach_conversations_enabled}))
+            **config_fingerprints(fixed))
     metrics.update(gateway_attempts=gateway.attempts if gateway else None,
         estimated_tokens=None if gateway is None or gateway.failed_attempts else gateway.estimated_tokens,
         known_estimated_tokens=gateway.estimated_tokens if gateway else None,
@@ -28,11 +25,11 @@ def collect_metrics(root, fixed, gateway, progress):
     return metrics
 
 
-def worker_main(channel, declaration, temporary):
+def worker_main(channel, declaration, temporary, strategy="reference", cache_state="cold"):
     gateway = None
     fixed = None
     root = Path(temporary)
-    progress = {}
+    progress = {"cache_state": cache_state, "strategy": strategy}
     from backend.task_evaluation.runner import CaseResult, CaseError, NetworkAttempt, execute_scenario
     from backend.task_evaluation.contracts import Scenario
     scenario = Scenario.model_validate(declaration)
@@ -50,6 +47,7 @@ def worker_main(channel, declaration, temporary):
                              interactive_entry_enabled='interactive_entry' in scenario.requires,
                              coach_conversations_enabled='coach_conversations' in scenario.requires,
                              coach_agent_mode='unified' if 'unified_coach' in scenario.requires else 'legacy',
+                             task_execution_strategy=strategy,
                              safety_review_mode='enforce' if scenario.initial_state.faults.unified_review_unavailable else 'off')
             get_settings.cache_clear()
             import backend.config as configuration
@@ -137,18 +135,15 @@ def worker_main(channel, declaration, temporary):
                                           supported_capabilities={'interactive_entry', 'coach_conversations', 'unified_coach'})
                 from dataclasses import replace
                 from backend.task_evaluation.metrics import runtime_metrics
+                from backend.task_evaluation.measurements import config_fingerprints
                 from backend.safety.gate import SAFETY_RULE_VERSION, default_pack
-                from backend.task_evaluation.provenance import fingerprint
                 executed = runtime_metrics(root)
                 if result.metrics.get("candidate_ms") is None and result.metrics.get("response_ready_ms") is not None and executed["run_succeeded"]:
                     result = replace(result, metrics={**result.metrics, "candidate_ms": result.metrics["response_ready_ms"], "candidate_reason": "response_ready_non_confirmation", "first_candidate": {"kind": "response_ready", "id": None}, "confirmed_candidate": None})
                 result = replace(result, status="budget_exceeded" if gateway.denied else result.status,
                     metrics={**result.metrics, **collect_metrics(root, fixed, gateway, progress), **executed,
                     "rule_version": SAFETY_RULE_VERSION, "rule_pack_version": default_pack().pack_version,
-                    "safe_config_fingerprint": fingerprint({"llm_enabled": fixed.llm_enabled,
-                        "safety_review_mode": fixed.safety_review_mode, "safety_grounding_mode": fixed.safety_grounding_mode,
-                        "interactive_entry_enabled": fixed.interactive_entry_enabled, "entry_task_ttl_days": fixed.entry_task_ttl_days,
-                        "coach_conversations_enabled": fixed.coach_conversations_enabled}),
+                    **config_fingerprints(fixed),
                     "gateway_attempts": gateway.attempts, "estimated_tokens": None if gateway.failed_attempts else gateway.estimated_tokens,
                     "known_estimated_tokens": gateway.estimated_tokens, "failed_attempts": gateway.failed_attempts,
                     "provider_usage": None, "mock_usage_estimated": True,

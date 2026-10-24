@@ -338,7 +338,8 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
     )
 
 
-def run_isolated_scenario(scenario, *, deadline, budget=None) -> CaseResult:
+def run_isolated_scenario(scenario, *, deadline, budget=None, strategy="reference",
+                          cache_state="cold") -> CaseResult:
     """Spawn a private worker; deadline is an absolute monotonic timestamp."""
     from backend.task_evaluation.worker import worker_main
     if budget is None:
@@ -348,7 +349,9 @@ def run_isolated_scenario(scenario, *, deadline, budget=None) -> CaseResult:
     context = multiprocessing.get_context("spawn")
     parent, child = context.Pipe(duplex=True)
     workspace = tempfile.TemporaryDirectory(prefix="fitlife-task-eval-")
-    process = context.Process(target=worker_main, args=(child, scenario.model_dump(mode="json", exclude_unset=True), workspace.name))
+    process = context.Process(target=worker_main, args=(
+        child, scenario.model_dump(mode="json", exclude_unset=True), workspace.name,
+        strategy, cache_state))
     outcome = None
     cleanup_status = "completed"
     owned_reservations = set()
@@ -408,7 +411,8 @@ def run_isolated_scenario(scenario, *, deadline, budget=None) -> CaseResult:
 
 
 def to_run_record(result: CaseResult, *, mode: str, git_sha: str | None = None,
-                  config_fingerprint: str | None = None):
+                  config_fingerprint: str | None = None, strategy: str | None = None,
+                  cache_state: str | None = None, repeat_index: int = 0):
     """Map a case result to a provenance-bearing report record.
 
     Successful mock calls carry character estimates, labelled separately from
@@ -428,12 +432,17 @@ def to_run_record(result: CaseResult, *, mode: str, git_sha: str | None = None,
         git_sha=git_sha,
         workspace_diff=source_digest(),
         prompt_version=prompt_digest(),
-        config_fingerprint=fingerprint({"batch": config_fingerprint, "worker": result.metrics.get("safe_config_fingerprint"), "policy": result.metrics.get("policy_version"), "policy_config": result.metrics.get("policy_config_digest")}),
+        config_fingerprint=fingerprint({"batch": config_fingerprint, "worker": result.metrics.get("invariant_config_fingerprint"), "policy": result.metrics.get("policy_version"), "policy_config": result.metrics.get("policy_config_digest")}),
+        strategy=strategy,
+        cache_state=cache_state,
+        repeat_index=repeat_index,
+        invariant_fingerprint=result.metrics.get("invariant_config_fingerprint"),
+        treatment_fingerprint=result.metrics.get("treatment_config_fingerprint"),
         candidate_ms=result.metrics.get("candidate_ms"),
         processing_ms=result.metrics.get("processing_ms"),
         calls=result.metrics.get("gateway_attempts"),
         retries=result.metrics.get("retries"),
-        details={**{key: value for key, value in result.metrics.items() if key in {"run_ids", "ledger", "elapsed_ms", "provider_usage", "mock_usage_estimated", "policy_version", "rule_pack_version", "candidate_reason", "token_measurement", "cleanup_status", "dataset_hash", "catalog_digest", "known_estimated_tokens", "failed_attempts", "started_at", "finished_at", "first_candidate", "confirmed_candidate", "tool_attempts", "tool_denials", "cache_hits", "decision_count", "protocol_failures", "tool_executions", "context_chars", "loaded_skill_ids", "resource_releases"}},
+        details={**{key: value for key, value in result.metrics.items() if key in {"run_ids", "ledger", "elapsed_ms", "provider_usage", "mock_usage_estimated", "policy_version", "rule_pack_version", "candidate_reason", "token_measurement", "cleanup_status", "dataset_hash", "catalog_digest", "known_estimated_tokens", "failed_attempts", "started_at", "finished_at", "first_candidate", "confirmed_candidate", "tool_attempts", "tool_denials", "cache_hits", "decision_count", "protocol_failures", "tool_executions", "context_chars", "loaded_skill_ids", "resource_releases", "attempts_started", "attempts_finished", "attempts_incomplete", "unknown_usage_count", "known_total_tokens", "usage_sources", "invariant_config_fingerprint", "treatment_config_fingerprint"}},
             "coach_invariants": {key: value for key, value in result.observed.items()
                 if key in {"coach_messages", "coach_turns", "coach_successes", "coach_cancelled",
                            "coach_failed", "coach_slot_holders", "coach_unapproved_answers",
@@ -448,7 +457,8 @@ def to_run_record(result: CaseResult, *, mode: str, git_sha: str | None = None,
 DEFINITE_STATUSES = frozenset({"passed", "failed", "unsupported"})
 
 
-def run_suite(scenarios, *, mode, deadline, budget, git_sha=None, config_fingerprint=None):
+def run_suite(scenarios, *, mode, deadline, budget, git_sha=None, config_fingerprint=None,
+              strategy="reference", cache_state="cold", repeat_index=0):
     """Run every scenario against the shared batch budget and one absolute deadline.
 
     Cases after the deadline are recorded as deadline_exceeded without spawning, so a
@@ -459,8 +469,11 @@ def run_suite(scenarios, *, mode, deadline, budget, git_sha=None, config_fingerp
         if time.monotonic() >= deadline:
             result = CaseResult(scenario.id, scenario.version, "deadline_exceeded", failures=("deadline_exceeded",))
         else:
-            result = run_isolated_scenario(scenario, deadline=deadline, budget=budget)
+            result = run_isolated_scenario(scenario, deadline=deadline, budget=budget,
+                                           strategy=strategy, cache_state=cache_state)
         from backend.task_evaluation.provenance import fingerprint, catalog_digest
         result = replace(result, metrics={**result.metrics, "dataset_hash": fingerprint(scenario.model_dump(mode="json")), "catalog_digest": catalog_digest()})
-        records.append(to_run_record(result, mode=mode, git_sha=git_sha, config_fingerprint=config_fingerprint))
+        records.append(to_run_record(result, mode=mode, git_sha=git_sha,
+                                     config_fingerprint=config_fingerprint, strategy=strategy,
+                                     cache_state=cache_state, repeat_index=repeat_index))
     return records
