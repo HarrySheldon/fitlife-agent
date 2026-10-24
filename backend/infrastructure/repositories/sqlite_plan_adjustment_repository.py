@@ -178,6 +178,23 @@ class SQLitePlanAdjustmentRepository:
             snapshot = self._snapshot(connection, owner, task_id)
             return self._expire(connection, snapshot)
 
+    def constraints(self, owner, task_id) -> dict:
+        """The hard constraints frozen when the task was created.
+
+        Validation must use this snapshot, not a fresh read of the user's
+        profile: a restriction added after the candidate was produced would
+        otherwise be checked against a plan the user never saw.
+        """
+        _identity(owner, task_id)
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                "SELECT constraints_json FROM plan_adjustment_sessions WHERE task_id=? AND user_id=?",
+                (task_id, owner),
+            ).fetchone()
+            if row is None:
+                raise KeyError(task_id)
+            return json.loads(row["constraints_json"])
+
     # -------------------------------------------------------------- mutations
 
     def grant(self, owner, task_id, expected_version, read_domains, change_domains, key) -> TaskSnapshot:

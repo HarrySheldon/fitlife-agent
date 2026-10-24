@@ -7,6 +7,7 @@ model says can widen the set.
 from backend.agent.tools.contracts import (
     SkillSearchArgs, ResourceReadArgs, QueryArgs, KnowledgeSearchArgs, CalculateArgs,
 )
+from backend.agent.plan_adjustment.tools import PLAN_TOOL_SPECS
 from backend.agent.tools.handlers import PROFILE_FIELDS, calculate
 from backend.agent.tools.spec import ToolSpec
 
@@ -68,6 +69,14 @@ SPECS: dict[str, ToolSpec] = {
 }
 
 
+# Task tools are published but not advertised by default: a plain advice chat
+# holds no task, so it must not see a tool it could only be denied.
+TASK_SPECS: dict[str, ToolSpec] = {**SPECS, **PLAN_TOOL_SPECS}
+
+RECORDED_TOOL_NAMES = frozenset(TASK_SPECS)
+
+
 def tool_descriptions(specs=None):
+    """Describe exactly the tools the run can execute, never a larger set."""
     published = SPECS if specs is None else specs
     return tuple(published[name].describe() for name in sorted(published))

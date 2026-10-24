@@ -29,7 +29,7 @@ class UnifiedCoachWorkflow:
         principal = self.executor.principal
         if command.user_id != principal.owner_id:
             raise PermissionError('OWNER_MISMATCH')
-        request = build_context(principal, command, tool_descriptions())
+        request = build_context(principal, command, tool_descriptions(self.executor.specs))
         context.set_model_metadata(provider=getattr(self.gateway, 'provider', None), model=self.gateway.model)
         failures = protocol_failures = 0
         for decision_index in range(1, 13):
@@ -122,10 +122,9 @@ class UnifiedCoachWorkflow:
                 'loaded_skill_ids': sorted({item['data']['resource_id'] for item in self.executor.observations.values()
                     if item['tool'] == 'resources.read' and item['status'] == 'ok'}),
             }
-            # The receipt is built by the session, not by the model, and is only
-            # present when a task actually produced one.
+            result = AgentResult(answer, 'coach_advice', metadata, {}, tuple(sources), self.gateway.model)
+            # The receipt is built by the session from persisted state, not by the
+            # model, and is only present when a task actually produced one.
             receipt = self.session.before_delivery(decision)
-            if receipt:
-                metadata['task_receipt'] = dict(receipt)
-            return AgentResult(answer, 'coach_advice', metadata, {}, tuple(sources), self.gateway.model)
+            return replace(result, task_receipt=dict(receipt)) if receipt else result
         raise BudgetExceeded('Agent decision budget exhausted')

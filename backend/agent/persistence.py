@@ -53,7 +53,7 @@ def safe_payload(payload: Mapping[str, object]) -> dict:
             raise ValueError("Invalid attempt identifier")
         elif key == "usage_source" and value not in {"provider", "mock_estimate", "unknown"}:
             raise ValueError("Invalid usage source")
-        elif key == 'agent_tool' and value not in {'skills.search', 'resources.read', 'fitness.query', 'knowledge.search', 'fitness.calculate', 'other'}:
+        elif key == 'agent_tool' and value not in {'skills.search', 'resources.read', 'fitness.query', 'knowledge.search', 'fitness.calculate', 'plan.read_base', 'plan.submit_candidate', 'other'}:
             raise ValueError('Invalid agent tool')
         elif key == 'resource_release' and (not isinstance(value, str) or re.fullmatch(r'[0-9a-f]{64}', value) is None):
             raise ValueError('Invalid resource release')

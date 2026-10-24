@@ -25,7 +25,7 @@ from pydantic import BaseModel
 Effect = Literal["public_read", "private_read", "calculate", "draft_write"]
 Replay = Literal["safe", "never"]
 
-_NAME = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$")
+_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _MAX_RESULT_CEILING = 200_000
 
 
@@ -54,6 +54,7 @@ class ToolContext:
     language: str
     evidence: Callable[[str], Mapping]
     domains: frozenset[str]
+    session: Any = None
 
 
 def require_domains(access: ToolAccess) -> None:

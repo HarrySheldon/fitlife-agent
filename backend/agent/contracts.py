@@ -47,6 +47,9 @@ class AgentResult:
     model: str
     request_id: str = ""
     run_id: str = ""
+    # Trusted projection of a persisted task candidate, or None for plain
+    # advice. It is never parsed out of the model's final text.
+    task_receipt: Mapping[str, object] | None = None
 
     def with_request_id(self) -> AgentResult:
         return self if self.request_id else replace(self, request_id=uuid4().hex)
@@ -61,6 +64,7 @@ class AgentResult:
             "model": self.model,
             "request_id": self.request_id,
             "run_id": self.run_id,
+            **({"task_receipt": dict(self.task_receipt)} if self.task_receipt else {}),
         }
 
 @dataclass(frozen=True)

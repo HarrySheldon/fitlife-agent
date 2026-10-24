@@ -6,7 +6,10 @@ from backend.agent.skills.catalog import SkillCatalog, SkillResourceError
 def test_metadata_then_selected_content_only():
     catalog = SkillCatalog()
     summaries = catalog.search('胸训练')
-    assert len(summaries) == 3
+    # Compare against the reviewed set rather than a count, so publishing a new
+    # Skill is a deliberate edit to this list.
+    assert {item['id'] for item in summaries} == {
+        'training-plan', 'nutrition-review', 'today-explanation', 'plan-adjustment'}
     assert all('text' not in item for item in summaries)
     text = catalog.read('skill:training-plan')['text']
     assert 'validate_training' in text

@@ -2,12 +2,7 @@
 from copy import deepcopy
 import json
 from pydantic import ValidationError
-from backend.agent.tools.registry import SPECS
-
-# The event payload allowlist enumerates the published tools. Anything else is
-# recorded as 'other' so a test-only or future tool cannot widen the redaction
-# boundary by existing.
-RECORDED_TOOL_NAMES = frozenset(SPECS)
+from backend.agent.tools.registry import RECORDED_TOOL_NAMES, SPECS
 from backend.agent.tools.handlers import version_of
 from backend.agent.tools.spec import ToolAccess, ToolContext, ToolSpec
 from backend.agent.skills.catalog import SkillResourceError
@@ -56,7 +51,8 @@ class ToolExecutor:
 
     def _context(self, domains):
         return ToolContext(catalog=self.catalog, reads=self.reads, retriever=self.retriever,
-                           language=self.language, evidence=self.evidence, domains=domains)
+                           language=self.language, evidence=self.evidence, domains=domains,
+                           session=self.session)
 
     async def execute(self, principal, call, context):
         context.raise_if_cancelled()

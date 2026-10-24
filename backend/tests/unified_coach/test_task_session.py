@@ -102,7 +102,7 @@ def test_advice_session_has_no_task_side_effects():
 def test_plain_advice_keeps_its_previous_trace():
     result, _, _ = _run([FinalDecision(body="按计划执行，注意身体反馈。")])
 
-    assert "task_receipt" not in result.trace
+    assert result.task_receipt is None
     assert result.trace["agent_mode"] == "unified"
 
 
@@ -113,7 +113,7 @@ def test_a_session_receipt_is_attached_to_the_result():
 
     result, _, _ = _run([FinalDecision(body="按计划执行，注意身体反馈。")], session=Recording())
 
-    assert result.trace["task_receipt"] == {"task_id": "t1", "state": "awaiting_confirmation"}
+    assert result.task_receipt == {"task_id": "t1", "state": "awaiting_confirmation"}
 
 
 def test_a_session_only_observes_validated_decisions():
