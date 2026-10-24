@@ -124,7 +124,9 @@ class UnifiedCoachWorkflow:
             }
             result = AgentResult(answer, 'coach_advice', metadata, {}, tuple(sources), self.gateway.model)
             # The receipt is built by the session from persisted state, not by the
-            # model, and is only present when a task actually produced one.
-            receipt = self.session.before_delivery(decision)
+            # model, and is only present when a task actually produced one. An
+            # answer the reviewer did not allow does not publish a candidate: the
+            # task would otherwise look confirmable through text alone.
+            receipt = self.session.before_delivery(decision) if verdict.outcome == 'allow' else {}
             return replace(result, task_receipt=dict(receipt)) if receipt else result
         raise BudgetExceeded('Agent decision budget exhausted')

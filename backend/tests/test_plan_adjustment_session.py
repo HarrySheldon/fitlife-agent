@@ -92,14 +92,18 @@ def _task(repo, *, read=frozenset({"training"}), change=frozenset({"training"}))
 
 
 class StubValidation:
-    """Stands in for Task 5's deterministic evaluator."""
+    """Stands in for Task 5's deterministic evaluator.
+
+    The real evaluator takes the grant and the round scope; this double ignores
+    them because the tests below are about the session, not about validation.
+    """
 
     def __init__(self, factory):
         self.factory = factory
         self.calls = []
 
-    def evaluate(self, base, bundle, constraints):
-        self.calls.append((deepcopy(base), bundle, constraints))
+    def evaluate(self, base, bundle, constraints, **scope):
+        self.calls.append((deepcopy(base), bundle, constraints, scope))
         return self.factory(bundle)
 
 

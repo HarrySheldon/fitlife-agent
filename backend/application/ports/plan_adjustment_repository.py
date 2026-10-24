@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Mapping, Protocol
 
 REPAIR_ROUND_LIMIT = 2
 
@@ -96,6 +96,44 @@ def _require_utc(value: datetime, name: str) -> None:
         raise ValueError(f"PLAN_TASK_FIELD_INVALID:{name}")
 
 
+@dataclass(frozen=True)
+class CandidateRecord:
+    """The last submission that produced a merged plan.
+
+    ``plan`` is the document that was validated, not the bundle that produced it.
+    A rejected bundle has no document, so it never becomes the base of the next
+    round: a candidate that could not be applied changed nothing.
+    """
+
+    round_index: int
+    candidate_id: str
+    digest: str
+    passed: bool
+    failed_domains: frozenset[str]
+    domain_digests: Mapping[str, str]
+    plan: Mapping[str, object] | None
+    violations: tuple[Mapping[str, object], ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.round_index) is not int or self.round_index < 0:
+            raise ValueError("PLAN_CANDIDATE_FIELD_INVALID:round_index")
+        for name in ("candidate_id", "digest"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"PLAN_CANDIDATE_FIELD_INVALID:{name}")
+        if not isinstance(self.failed_domains, frozenset):
+            raise ValueError("PLAN_CANDIDATE_FIELD_INVALID:failed_domains")
+        if any(domain not in {"training", "diet"} for domain in self.failed_domains):
+            raise ValueError("PLAN_CANDIDATE_FIELD_INVALID:failed_domains")
+        if self.plan is not None and not isinstance(self.plan, Mapping):
+            raise ValueError("PLAN_CANDIDATE_FIELD_INVALID:plan")
+
+    @property
+    def qualified_domains(self) -> frozenset[str]:
+        """Domains the candidate already passed, and which a repair may not touch."""
+        return frozenset(self.domain_digests) - self.failed_domains
+
+
 class PlanAdjustmentRepository(Protocol):
     def create_task(self, owner: str, *, base_plan_id: str, base_head_revision: int,
                     read_domains: frozenset[str], change_domains: frozenset[str],
@@ -112,9 +150,16 @@ class PlanAdjustmentRepository(Protocol):
                              operation_id: str, failed_domains: frozenset[str]) -> TaskSnapshot: ...
 
     def submit_bundle(self, owner: str, task_id: str, expected_version: int,
-                      operation_id: str, bundle, verdict) -> TaskSnapshot: ...
+                      operation_id: str, bundle, verdict, candidate: dict | None = None) -> TaskSnapshot: ...
 
     def transition(self, owner: str, task_id: str, expected_version: int,
                    state: str, key: str) -> TaskSnapshot: ...
+
+    def latest_candidate(self, owner: str, task_id: str) -> CandidateRecord | None: ...
+
+    def round_scope(self, owner: str, task_id: str) -> frozenset[str] | None: ...
+
+    def answer_constraints(self, owner: str, task_id: str, expected_version: int,
+                           answers: Mapping[str, object], key: str) -> TaskSnapshot: ...
 
     def delete_user_data(self, owner: str) -> dict[str, int]: ...

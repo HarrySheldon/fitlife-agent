@@ -1161,4 +1161,21 @@ RECORDS_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=10,
+        name='plan_candidate_documents',
+        statements=(
+            # The merged plan a round actually validated. Storing it is what makes
+            # "this round did not touch the domain that already passed" checkable
+            # across processes: the next round validates against these exact bytes
+            # instead of replaying a chain of bundles. Nullable because a bundle
+            # that could not be applied (stale old_value, out-of-scope path) has no
+            # merged plan -- and an absent document must not be read as an empty
+            # plan, so the reader treats NULL as "no candidate document".
+            "ALTER TABLE plan_candidate_submissions ADD COLUMN candidate_json TEXT "
+            "CHECK (candidate_json IS NULL OR (json_valid(candidate_json) "
+            "AND json_type(candidate_json) = 'object' "
+            "AND length(CAST(candidate_json AS BLOB)) <= 65536))",
+        ),
+    ),
 )

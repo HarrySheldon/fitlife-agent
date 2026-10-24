@@ -36,6 +36,25 @@ EXERCISE_NAMES = frozenset({
     "shoulder press", "incline dumbbell press", "row", "pull-up", "lat pulldown", "face pull",
 })
 
+# What each reviewed movement needs. Equipment is a hard constraint from trusted
+# storage, so a candidate that requires a barbell the user does not have is not
+# merely suboptimal -- it cannot be performed. Bodyweight movements need nothing.
+EQUIPMENT_TOKENS = frozenset({"barbell", "dumbbell", "machine", "cable", "pull-up bar", "bodyweight"})
+EXERCISE_EQUIPMENT: dict[str, str] = {
+    "深蹲": "barbell", "squat": "barbell",
+    "箭步蹲": "bodyweight", "lunge": "bodyweight",
+    "硬拉": "barbell", "deadlift": "barbell",
+    "腿举": "machine", "leg press": "machine",
+    "卧推": "barbell", "bench press": "barbell",
+    "俯卧撑": "bodyweight", "push-up": "bodyweight", "push-ups": "bodyweight",
+    "肩推": "dumbbell", "shoulder press": "dumbbell",
+    "上斜哑铃推举": "dumbbell", "incline dumbbell press": "dumbbell",
+    "划船": "machine", "row": "machine",
+    "引体向上": "pull-up bar", "pull-up": "pull-up bar",
+    "高位下拉": "machine", "lat pulldown": "machine",
+    "面拉": "cable", "face pull": "cable",
+}
+
 DAY_TYPES = frozenset({"strength", "cardio", "flexibility", "mobility", "rest", "other"})
 INTENSITIES = frozenset({"low", "medium", "high"})
 
@@ -120,7 +139,12 @@ class Violation(BaseModel):
 
 
 class CandidateVerdict(BaseModel):
-    """Deterministic answer for one bundle. It is not an activation."""
+    """Deterministic answer for one bundle. It is not an activation.
+
+    ``domain_digests`` is what makes "this round did not touch the domain that
+    already passed" checkable instead of merely intended: the next round compares
+    the recomputed digest against the recorded one.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -130,6 +154,7 @@ class CandidateVerdict(BaseModel):
     failed_domains: tuple[Domain, ...] = ()
     violations: tuple[Violation, ...] = ()
     dependency_digest: str
+    domain_digests: tuple[tuple[str, str], ...] = ()
 
 
 class PlanConstraints(BaseModel):
@@ -335,7 +360,6 @@ def preserves_targets(base: dict, patched: dict) -> tuple[Violation, ...]:
     return tuple(violations)
 
 
-# Bridge until the deterministic validator returns structured codes itself.
 # Prefixes are matched, the free text is dropped: a legacy message may quote the
 # user's own restriction back at us, and violations travel to the model.
 _LEGACY_CODES: tuple[tuple[str, str, str], ...] = (
@@ -349,7 +373,16 @@ _LEGACY_CODES: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _legacy_violations(plan: dict, constraints: PlanConstraints) -> list[Violation]:
+def legacy_violations(plan: dict, constraints: PlanConstraints) -> list[Violation]:
+    """The reviewed medical thresholds, reused rather than re-derived.
+
+    ``validate_generated_plan`` owns the numbers (calorie floor, protein per
+    kilogram, frequency, consecutive intensity, rest days). Re-implementing them
+    here would let two validators disagree, so this bridge keeps one source and
+    maps its messages to codes. The free text is dropped on purpose: those
+    messages quote the user's own restriction back at us, and violations travel
+    to the model.
+    """
     from backend.agent.validator import validate_generated_plan
 
     profile = {
@@ -394,6 +427,24 @@ def _required_constraints(domains: frozenset[str], constraints: PlanConstraints)
     return missing
 
 
+def bundle_identity(base: dict, bundle: CandidateBundle) -> tuple[str, str, str]:
+    """``(candidate_id, digest, dependency_digest)`` for one bundle.
+
+    Computed without touching the base, so it is available even when the bundle
+    cannot be applied. The dependency digest names what the verdict depended on:
+    the domains, the paths and the targets the candidate may not move.
+    """
+    digest = bundle.digest()
+    dependency = _digest({
+        "domains": sorted(bundle.domains()),
+        "paths": sorted(_path_label(patch.path) for patch in bundle.patches),
+        "targets": {key: (base.get(root) or {}).get(key)
+                    for root, keys in PROTECTED_PATHS.items() for key in keys}
+        if isinstance(base, dict) else {},
+    })
+    return digest[:32], digest, dependency
+
+
 def validate_bundle(base: dict, bundle: CandidateBundle, constraints: PlanConstraints,
                     *, change_domains: frozenset[str] = frozenset()) -> CandidateVerdict:
     """Check one bundle end to end and return a bounded verdict.
@@ -402,17 +453,11 @@ def validate_bundle(base: dict, bundle: CandidateBundle, constraints: PlanConstr
     forgets to pass the task's snapshot gets a rejection, not an open door.
     """
     domains = bundle.domains()
-    digest = bundle.digest()
-    dependency = _digest({
-        "domains": sorted(domains),
-        "paths": sorted(_path_label(patch.path) for patch in bundle.patches),
-        "targets": {key: (base.get(root) or {}).get(key)
-                    for root, keys in PROTECTED_PATHS.items() for key in keys},
-    })
+    candidate_id, digest, dependency = bundle_identity(base, bundle)
 
     def verdict(violations: list[Violation]) -> CandidateVerdict:
         failed = tuple(sorted({item.domain for item in violations}, key=lambda d: (d != "training", d)))
-        return CandidateVerdict(candidate_id=digest[:32], digest=digest, passed=not violations,
+        return CandidateVerdict(candidate_id=candidate_id, digest=digest, passed=not violations,
                                 failed_domains=failed if violations else (),
                                 violations=tuple(violations), dependency_digest=dependency)
 
@@ -436,5 +481,5 @@ def validate_bundle(base: dict, bundle: CandidateBundle, constraints: PlanConstr
 
     violations = list(preserves_targets(base, patched))
     if not violations:
-        violations = _legacy_violations(patched, constraints)
+        violations = legacy_violations(patched, constraints)
     return verdict(violations)

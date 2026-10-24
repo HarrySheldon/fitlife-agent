@@ -19,17 +19,26 @@ import hashlib
 import json
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from typing import Mapping
 from uuid import uuid4
 
 from backend.application.ports.plan_adjustment_repository import (
     REPAIR_ROUND_LIMIT,
     TASK_STATES,
     TERMINAL_STATES,
+    CandidateRecord,
     TaskSnapshot,
 )
 from backend.infrastructure.sqlite.database import SQLiteDatabase
 
 CREATE_SCOPE = "task_create"
+
+# The only constraint fields a task may ask the user to fill. Everything else is
+# either derived from trusted storage or not the user's to answer.
+ANSWERABLE_CONSTRAINTS = frozenset({
+    "allergies_or_restrictions", "action_restrictions", "available_equipment",
+    "forbidden_exercises", "session_minutes",
+})
 
 # Where a task may go next. Terminal states go nowhere: an activated task is
 # history, and a cancelled or expired one is closed.
@@ -212,7 +221,8 @@ class SQLitePlanAdjustmentRepository:
             snapshot = self._writable(connection, owner, task_id, expected_version)
             if snapshot.state not in {"collecting", "awaiting_scope_permission"}:
                 # Widening or narrowing the scope after generation started would
-                # silently reuse a candidate produced under different limits.
+                # silently reuse a candidate produced under different limits. The
+                # user may start a linked task instead; the model may not.
                 raise _task_error("REQUIRES_NEW_TASK")
             self._replace_permissions(connection, task_id, read_domains, change_domains)
             updated = self._write(connection, owner, snapshot, state="generating")
@@ -263,7 +273,8 @@ class SQLitePlanAdjustmentRepository:
             self._store_receipt(connection, owner, task_id, operation_id, task_id, fingerprint, updated, now)
             return updated
 
-    def submit_bundle(self, owner, task_id, expected_version, operation_id, bundle, verdict) -> TaskSnapshot:
+    def submit_bundle(self, owner, task_id, expected_version, operation_id, bundle, verdict,
+                      candidate=None) -> TaskSnapshot:
         _identity(owner, task_id, operation_id)
         _positive_int(expected_version, "expected_version")
         digest = bundle.digest()
@@ -271,6 +282,8 @@ class SQLitePlanAdjustmentRepository:
             "op": "submit", "owner": owner, "task_id": task_id, "version": expected_version,
             "operation_id": operation_id, "bundle": digest,
         })
+        document = None if candidate is None else json.dumps(
+            candidate, sort_keys=True, ensure_ascii=False, allow_nan=False)
         with self.database.transaction() as connection:
             replayed = self._replay(connection, owner, task_id, operation_id, fingerprint)
             if replayed is not None:
@@ -292,12 +305,12 @@ class SQLitePlanAdjustmentRepository:
                 """
                 INSERT INTO plan_candidate_submissions (
                     task_id, round_index, candidate_id, bundle_digest, dependency_digest,
-                    verdict_json, passed, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    verdict_json, passed, created_at, candidate_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (task_id, round_index, verdict.candidate_id, digest, verdict.dependency_digest,
                  json.dumps(verdict.model_dump(mode="json"), sort_keys=True, ensure_ascii=False),
-                 int(bool(verdict.passed)), _iso(now)),
+                 int(bool(verdict.passed)), _iso(now), document),
             )
             if snapshot.active_round_id is not None:
                 connection.execute(
@@ -316,6 +329,103 @@ class SQLitePlanAdjustmentRepository:
                                       active_round_id=None, candidate_id=None,
                                       candidate_digest=None, candidate_expires_at=None)
             self._store_receipt(connection, owner, task_id, operation_id, task_id, fingerprint, updated, now)
+            return updated
+
+    # ------------------------------------------------------------ projections
+
+    def latest_candidate(self, owner, task_id) -> CandidateRecord | None:
+        """The newest submission, whether or not it produced a merged plan.
+
+        ``plan`` is ``None`` when the bundle could not be applied (stale value,
+        out-of-scope path). The record still matters -- it says what the model
+        tried and why it was refused -- but the next round edits the last
+        document that exists, because a bundle that changed nothing is not a base.
+        """
+        _identity(owner, task_id)
+        with self.database.transaction() as connection:
+            self._snapshot(connection, owner, task_id)
+            row = connection.execute(
+                """
+                SELECT round_index, candidate_id, bundle_digest, passed, verdict_json, candidate_json
+                FROM plan_candidate_submissions
+                WHERE task_id=?
+                ORDER BY round_index DESC LIMIT 1
+                """,
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            verdict = json.loads(row["verdict_json"])
+            return CandidateRecord(
+                round_index=row["round_index"], candidate_id=row["candidate_id"],
+                digest=row["bundle_digest"], passed=bool(row["passed"]),
+                failed_domains=frozenset(verdict.get("failed_domains") or ()),
+                domain_digests={str(domain): str(digest)
+                                for domain, digest in verdict.get("domain_digests") or ()},
+                plan=json.loads(row["candidate_json"]) if row["candidate_json"] else None,
+                violations=tuple(dict(item) for item in verdict.get("violations") or ()),
+            )
+
+    def round_scope(self, owner, task_id) -> frozenset[str] | None:
+        """The domains the open round may touch, as recorded at reservation.
+
+        The reservation is the reason a domain may be revised: it was written
+        before the model was called, so a later bundle cannot invent a reason.
+        """
+        _identity(owner, task_id)
+        with self.database.transaction() as connection:
+            snapshot = self._snapshot(connection, owner, task_id)
+            if snapshot.active_round_id is None:
+                return None
+            row = connection.execute(
+                "SELECT failed_domains_json FROM plan_repair_rounds WHERE task_id=? AND round_id=?",
+                (task_id, snapshot.active_round_id),
+            ).fetchone()
+            if row is None:
+                raise _task_error("STATE_TRANSITION")
+            return frozenset(json.loads(row["failed_domains_json"]))
+
+    # --------------------------------------------------------------- answers
+
+    def answer_constraints(self, owner, task_id, expected_version, answers, key) -> TaskSnapshot:
+        """Fill the missing hard constraints a task asked about.
+
+        Answers are merged into the frozen snapshot and the digest moves with
+        them, so a later validation cannot tell itself the task still had the
+        unknowns it was created with.
+        """
+        _identity(owner, task_id, key)
+        _positive_int(expected_version, "expected_version")
+        if not isinstance(answers, Mapping) or not answers:
+            raise ValueError("PLAN_ANSWER_EMPTY")
+        if set(answers) - ANSWERABLE_CONSTRAINTS:
+            raise ValueError("PLAN_ANSWER_NOT_ALLOWED")
+        fingerprint = _fingerprint({
+            "op": "answer", "owner": owner, "task_id": task_id,
+            "version": expected_version, "answers": dict(answers),
+        })
+        with self.database.transaction() as connection:
+            replayed = self._replay(connection, owner, task_id, key, fingerprint)
+            if replayed is not None:
+                return replayed
+            snapshot = self._writable(connection, owner, task_id, expected_version)
+            if snapshot.state != "awaiting_user_decision":
+                raise _task_error("STATE_TRANSITION")
+            row = connection.execute(
+                "SELECT constraints_json FROM plan_adjustment_sessions WHERE task_id=? AND user_id=?",
+                (task_id, owner),
+            ).fetchone()
+            merged = json.loads(row["constraints_json"])
+            merged.update(dict(answers))
+            from backend.domain.plan_adjustment import PlanConstraints
+            validated = PlanConstraints.model_validate(merged).model_dump(mode="json")
+            now = self.clock()
+            updated = self._write(
+                connection, owner, snapshot, state="generating",
+                constraints_json=json.dumps(validated, sort_keys=True, ensure_ascii=False),
+                constraint_digest=_fingerprint(validated),
+            )
+            self._store_receipt(connection, owner, task_id, key, task_id, fingerprint, updated, now)
             return updated
 
     def transition(self, owner, task_id, expected_version, state, key) -> TaskSnapshot:
