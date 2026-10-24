@@ -12,7 +12,9 @@ def task_error(code: str) -> ApplicationError:
     from backend.domain.errors import ApplicationError
     statuses = {"TASK_NOT_FOUND": 404, "TASK_VERSION_CONFLICT": 409,
                 "IDEMPOTENCY_CONFLICT": 409, "TASK_EXPIRED": 410,
-                "TASK_BUDGET_EXHAUSTED": 409, "REPAIR_LIMIT": 409}
+                "TASK_BUDGET_EXHAUSTED": 409, "REPAIR_LIMIT": 409,
+                "REPAIR_ROUND_ACTIVE": 409, "REQUIRES_NEW_TASK": 409,
+                "STATE_TRANSITION": 409}
     return ApplicationError(code=code, message=code, status_code=statuses[code], processing_mode="agent")
 
 

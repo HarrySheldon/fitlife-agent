@@ -1052,4 +1052,113 @@ RECORDS_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=9,
+        name='plan_adjustment_tasks',
+        statements=(
+            # One row per plan task. ``version`` is the compare-and-swap token:
+            # every mutation reads the expected version and writes version+1 in
+            # the same transaction, so a stale writer loses instead of merging.
+            # ``repair_rounds`` counts *reserved* rounds, which is why it is
+            # incremented by the reservation and not by the submission.
+            """
+            CREATE TABLE plan_adjustment_sessions (
+                task_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                version INTEGER NOT NULL CHECK (version >= 1),
+                state TEXT NOT NULL CHECK (state IN (
+                    'collecting', 'awaiting_scope_permission', 'generating',
+                    'repairing', 'awaiting_confirmation', 'awaiting_user_decision',
+                    'activated', 'cancelled', 'expired'
+                )),
+                base_plan_id TEXT NOT NULL,
+                base_head_revision INTEGER NOT NULL CHECK (base_head_revision >= 1),
+                constraint_digest TEXT NOT NULL,
+                constraints_json TEXT NOT NULL
+                    CHECK (json_valid(constraints_json) AND json_type(constraints_json) = 'object'
+                           AND length(CAST(constraints_json AS BLOB)) <= 32768),
+                repair_rounds INTEGER NOT NULL DEFAULT 0 CHECK (repair_rounds BETWEEN 0 AND 2),
+                active_round_id TEXT,
+                candidate_id TEXT,
+                candidate_digest TEXT,
+                operation_id TEXT,
+                expires_at TEXT NOT NULL,
+                candidate_expires_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE INDEX idx_plan_adjustment_sessions_owner
+            ON plan_adjustment_sessions (user_id, state)
+            """,
+            # Reading and changing are separate grants. ``can_change`` implies
+            # ``can_read``: a task that may rewrite a domain it cannot read would
+            # have to invent the baseline.
+            """
+            CREATE TABLE plan_task_permissions (
+                task_id TEXT NOT NULL REFERENCES plan_adjustment_sessions(task_id) ON DELETE CASCADE,
+                domain TEXT NOT NULL CHECK (domain IN ('training', 'diet')),
+                can_read INTEGER NOT NULL CHECK (can_read IN (0, 1)),
+                can_change INTEGER NOT NULL CHECK (can_change IN (0, 1)),
+                PRIMARY KEY (task_id, domain),
+                CHECK (can_change = 0 OR can_read = 1)
+            )
+            """,
+            # Rounds are claimed, not counted after the fact. ``round_index`` is
+            # unique per task and ``operation_id`` is unique per task, so the same
+            # operation cannot claim a second round and two operations cannot
+            # share one.
+            """
+            CREATE TABLE plan_repair_rounds (
+                task_id TEXT NOT NULL REFERENCES plan_adjustment_sessions(task_id) ON DELETE CASCADE,
+                round_index INTEGER NOT NULL CHECK (round_index BETWEEN 1 AND 2),
+                round_id TEXT NOT NULL,
+                operation_id TEXT NOT NULL,
+                failed_domains_json TEXT NOT NULL
+                    CHECK (json_valid(failed_domains_json) AND json_type(failed_domains_json) = 'array'),
+                state TEXT NOT NULL CHECK (state IN ('reserved', 'accepted', 'abandoned')),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (task_id, round_index),
+                UNIQUE (task_id, round_id),
+                UNIQUE (task_id, operation_id)
+            )
+            """,
+            # One bundle per round. The primary key is what enforces it: a second
+            # insert for the same round fails even if the digest differs.
+            """
+            CREATE TABLE plan_candidate_submissions (
+                task_id TEXT NOT NULL REFERENCES plan_adjustment_sessions(task_id) ON DELETE CASCADE,
+                round_index INTEGER NOT NULL CHECK (round_index BETWEEN 0 AND 2),
+                candidate_id TEXT NOT NULL,
+                bundle_digest TEXT NOT NULL,
+                dependency_digest TEXT NOT NULL,
+                verdict_json TEXT NOT NULL
+                    CHECK (json_valid(verdict_json) AND json_type(verdict_json) = 'object'
+                           AND length(CAST(verdict_json AS BLOB)) <= 32768),
+                passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (task_id, round_index)
+            )
+            """,
+            # Idempotency receipts. ``scope`` is the task id for task-scoped
+            # operations and a fixed marker for task creation, where no task id
+            # exists yet. The fingerprint makes a same-key/different-payload
+            # request a conflict instead of a silent overwrite.
+            """
+            CREATE TABLE plan_task_receipts (
+                user_id TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                operation_key TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                request_fingerprint TEXT NOT NULL,
+                response_json TEXT NOT NULL
+                    CHECK (json_valid(response_json) AND json_type(response_json) = 'object'
+                           AND length(CAST(response_json AS BLOB)) <= 32768),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, scope, operation_key)
+            )
+            """,
+        ),
+    ),
 )

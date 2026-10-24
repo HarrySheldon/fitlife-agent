@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     coach_conversations_enabled: bool = False
     coach_agent_mode: Literal['legacy', 'unified'] = 'legacy'
     entry_task_ttl_days: int = Field(default=30, gt=0)
+    # Plan tasks and their candidates expire independently: a task lives for a
+    # month, a candidate is only confirmable for half an hour. Confirmation
+    # re-checks the snapshot it was shown, so a longer candidate life would widen
+    # the window between "the user saw this" and "this is what gets written".
+    plan_adjustment_task_ttl_days: int = Field(default=30, gt=0)
+    plan_candidate_ttl_minutes: int = Field(default=30, gt=0)
     # Which side of the S4 paired comparison this deployment runs. It stays
     # "reference" even after the unified coach became the default path: flipping
     # it would delete the baseline the optimisation is measured against. The
