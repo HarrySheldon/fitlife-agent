@@ -5,6 +5,7 @@ import pandas as pd
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.workout_analyzer import analyze_workouts
 from backend.agent.tasks.capabilities import AuthorizedTaskReads
+from backend.domain.plan_adjustment import EXERCISE_NAMES
 
 PROFILE_FIELDS = {
     'experience_level': 'training', 'training_preference': 'training',
@@ -19,12 +20,8 @@ RECORD_FIELDS = {
 
 # Reviewed exercise vocabulary, aligned with knowledge_base/exercise_library.md.
 # Extending content does not require a new per-exercise tool or workflow.
-EXERCISE_NAMES = frozenset({
-    '深蹲', '箭步蹲', '硬拉', '腿举', '卧推', '俯卧撑', '肩推', '上斜哑铃推举',
-    '划船', '引体向上', '高位下拉', '面拉',
-    'squat', 'lunge', 'deadlift', 'leg press', 'bench press', 'push-up', 'push-ups',
-    'shoulder press', 'incline dumbbell press', 'row', 'pull-up', 'lat pulldown', 'face pull',
-})
+# The list lives in the domain module so plan patches and the calculate tool
+# cannot drift apart.
 
 
 class BoundFitnessReads:

@@ -22,3 +22,27 @@ def test_repository_reads_always_use_bound_authenticated_owner():
         reads.read_meals("forged")
     with pytest.raises(PermissionError):
         reads.read_workouts()
+
+
+def test_read_grant_does_not_imply_change_grant():
+    from backend.agent.tasks.capabilities import AuthorizedPlanWrites
+
+    writes = AuthorizedPlanWrites("authenticated", frozenset({"training", "diet"}),
+                                  frozenset({"training"}))
+
+    # Reading diet history is allowed; changing it is not.
+    writes.require_read("diet")
+    writes.require_change("training")
+    with pytest.raises(PermissionError, match="CHANGE_DOMAIN_NOT_AUTHORIZED"):
+        writes.require_change("diet")
+
+
+def test_change_grant_must_be_readable_and_typed():
+    from backend.agent.tasks.capabilities import AuthorizedPlanWrites
+
+    with pytest.raises(ValueError, match="CHANGE_DOMAIN_NOT_READABLE"):
+        AuthorizedPlanWrites("authenticated", frozenset({"training"}), frozenset({"diet"}))
+    with pytest.raises(ValueError, match="TRUSTED_DOMAIN_SNAPSHOT_REQUIRED"):
+        AuthorizedPlanWrites("authenticated", frozenset({"training"}), {"training"})
+    with pytest.raises(ValueError, match="AUTHENTICATED_OWNER_REQUIRED"):
+        AuthorizedPlanWrites("", frozenset({"training"}), frozenset({"training"}))
