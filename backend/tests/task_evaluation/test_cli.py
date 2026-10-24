@@ -111,3 +111,83 @@ def test_invalid_suite_is_rejected_before_provider_or_artifacts(tmp_path, monkey
     assert cli.main(["--suite", str(suite_path), "--output", str(tmp_path / "out")]) == 2
     assert calls == []
     assert not (tmp_path / "out").exists()
+
+
+def test_strategy_repeat_and_cache_state_default_to_the_reference_side():
+    args = parse_args(["--suite", "s.json"])
+    assert args.strategy == "reference"
+    assert args.repeat == 1
+    assert args.cache_state == "cold"
+    assert args.compare is None
+
+
+def test_repeat_must_be_positive():
+    with pytest.raises(SystemExit):
+        parse_args(["--suite", "s.json", "--repeat", "0"])
+
+
+def test_unknown_strategy_or_cache_state_is_rejected():
+    with pytest.raises(SystemExit):
+        parse_args(["--suite", "s.json", "--strategy", "turbo"])
+    with pytest.raises(SystemExit):
+        parse_args(["--suite", "s.json", "--cache-state", "lukewarm"])
+
+
+def test_compare_does_not_require_a_suite_and_refuses_one():
+    args = parse_args(["--compare", "ref", "opt"])
+    assert args.compare == ("ref", "opt")
+    assert args.suite is None
+    with pytest.raises(SystemExit):
+        parse_args(["--compare", "ref", "opt", "--suite", "s.json"])
+
+
+def test_compare_never_builds_a_provider(tmp_path, monkeypatch):
+    import json
+
+    import backend.task_evaluation.cli as cli
+
+    built = []
+    monkeypatch.setattr(cli, "_build_provider", lambda mode: built.append(mode))
+    for name in ("ref", "opt"):
+        directory = tmp_path / name
+        directory.mkdir()
+        (directory / "report.json").write_text(json.dumps({"records": []}), encoding="utf-8")
+
+    code = cli.main(["--compare", str(tmp_path / "ref"), str(tmp_path / "opt"),
+                     "--output", str(tmp_path / "out")])
+
+    assert built == []
+    assert code == 1  # no matched pair is not a successful comparison
+
+
+def test_compare_writes_matched_pairs_and_a_quality_gate(tmp_path, monkeypatch):
+    import json
+
+    import backend.task_evaluation.cli as cli
+
+    def record(strategy, ms):
+        return {
+            "mode": "mock", "case_id": "perf-zh", "version": 1, "success": True,
+            "total_tokens": 100, "model": "synthetic", "rule_version": "fitlife-safety-v1",
+            "processing_ms": ms, "strategy": strategy, "cache_state": "cold",
+            "repeat_index": 0, "invariant_fingerprint": "a" * 64,
+        }
+
+    for name, payload in (("ref", [record("reference", 100.0)]),
+                          ("opt", [record("optimized", 80.0)])):
+        directory = tmp_path / name
+        directory.mkdir()
+        (directory / "report.json").write_text(json.dumps({"records": payload}), encoding="utf-8")
+
+    output = tmp_path / "out"
+    code = cli.main(["--compare", str(tmp_path / "ref"), str(tmp_path / "opt"),
+                     "--output", str(output)])
+
+    assert code == 0
+    payload = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
+    assert payload["summary"]["matched_count"] == 1
+    assert payload["summary"]["latency_reduction_percent"] == 20.0
+    assert payload["quality_gate"] == {"every_case_paired": True,
+                                       "no_rejected_pairs": True,
+                                       "has_successful_pair": True}
+    assert (output / "comparison.md").exists()

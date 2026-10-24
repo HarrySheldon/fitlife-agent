@@ -1,0 +1,1038 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "perf-quick-action",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "a",
+              "tool": "resources.read",
+              "arguments": {
+                "resource_id": "skill:today-explanation"
+              }
+            },
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-quick-action"
+          },
+          "body": {
+            "question": "解释今天",
+            "language": "zh-CN",
+            "answer_mode": "brief",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2
+      }
+    },
+    {
+      "id": "perf-open-task",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "a",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-open-task"
+          },
+          "body": {
+            "question": "我该怎么开始规律训练？",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2
+      }
+    },
+    {
+      "id": "perf-first-training",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "a",
+              "tool": "skills.search",
+              "arguments": {
+                "query": "训练"
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "b",
+              "tool": "resources.read",
+              "arguments": {
+                "resource_id": "skill:training-plan"
+              }
+            },
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-first-training"
+          },
+          "body": {
+            "question": "第一次练胸，给我一份完整训练计划",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2
+      }
+    },
+    {
+      "id": "perf-followup",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-followup-1"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-followup-2"
+          },
+          "body": {
+            "question": "有哑铃，没有身体限制",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 4
+      }
+    },
+    {
+      "id": "perf-zh",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-zh"
+          },
+          "body": {
+            "question": "今天练胸，帮我安排一下",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2
+      }
+    },
+    {
+      "id": "perf-en",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-en"
+          },
+          "body": {
+            "question": "How should I start training consistently?",
+            "language": "en-US",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2
+      }
+    },
+    {
+      "id": "perf-long-history",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "lh-1"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "lh-2"
+          },
+          "body": {
+            "question": "有哑铃",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "lh-3"
+          },
+          "body": {
+            "question": "没有身体限制，时间四十分钟",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 6
+      }
+    },
+    {
+      "id": "perf-expired-history",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            },
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ],
+          "expire_coach_messages_at_step": 4
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-expired-history-1"
+          },
+          "body": {
+            "question": "解释今天",
+            "language": "zh-CN",
+            "answer_mode": "brief",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-expired-history-2"
+          },
+          "body": {
+            "question": "解释今天",
+            "language": "zh-CN",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-20"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2
+      }
+    },
+    {
+      "id": "perf-permission-denied",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "bad",
+              "tool": "fitness.query",
+              "arguments": {
+                "domain": "diet",
+                "fields": [
+                  "food"
+                ],
+                "start_date": "2026-10-01",
+                "end_date": "2026-10-02"
+              }
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-permission-denied"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status",
+            "denials": "data.receipt.trace.tool_denials"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2,
+        "denials": 1
+      }
+    },
+    {
+      "id": "perf-review-unavailable",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "PRIVATE_SYNTHETIC_DRAFT"
+            }
+          ],
+          "unified_review_unavailable": true
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "perf-review-unavailable"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2,
+        "unified_draft_leaks": 0
+      }
+    },
+    {
+      "id": "perf-cancel",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "ask",
+              "question": "你可用的器械和训练时间是什么？是否有相关身体限制？"
+            },
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ],
+          "slow_coach_answer_seconds": 2
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "cancel-1"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-19",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/turns/{turn}/cancel",
+          "observe": {
+            "cancel_status": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "cancel-2"
+          },
+          "body": {
+            "question": "解释今天",
+            "action": "explain_today",
+            "surface": "today",
+            "date": "2026-10-20",
+            "language": "zh-CN"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 3,
+        "cancel_status": "running",
+        "coach_turns": 2,
+        "coach_cancelled": 1,
+        "coach_successes": 1,
+        "coach_messages": 3
+      }
+    },
+    {
+      "id": "perf-retry",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "initial_state": {
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "final",
+              "body": "根据你的条件，可以先从固定频率的全身训练开始。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "retry"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "retry"
+          },
+          "body": {
+            "question": "今天练胸",
+            "language": "zh-CN",
+            "answer_mode": "brief"
+          },
+          "observe": {
+            "replayed": "data.replayed"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_unapproved_answers": 0,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0,
+        "message_count": 2,
+        "replayed": true,
+        "coach_turns": 1,
+        "coach_messages": 2
+      }
+    }
+  ]
+}

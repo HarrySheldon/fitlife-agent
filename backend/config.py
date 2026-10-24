@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     coach_conversations_enabled: bool = False
     coach_agent_mode: Literal['legacy', 'unified'] = 'legacy'
     entry_task_ttl_days: int = Field(default=30, gt=0)
+    # Which side of the S4 paired comparison this deployment runs. It stays
+    # "reference" even after the unified coach became the default path: flipping
+    # it would delete the baseline the optimisation is measured against. The
+    # visibility switch and the experiment variable are separate decisions.
+    task_execution_strategy: Literal['reference', 'optimized'] = 'reference'
     agent_runtime_policy: dict[str, object] = Field(default_factory=dict)
     # How the semantic review treats an answer. "off" makes no extra call, which is the
     # default because it costs one provider request per answer. "shadow" records what it
