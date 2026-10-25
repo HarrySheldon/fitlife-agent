@@ -30,12 +30,23 @@ from backend.application.ports.plan_adjustment_repository import (
 from backend.application.ports.task_budget_repository import TaskBudgetBinding
 from backend.domain.errors import ApplicationError
 from backend.domain.plan_adjustment import PlanConstraints
+from backend.schemas import ValidationResult
 
 DOMAINS = frozenset({"training", "diet"})
 # States in which a model round may run. ``collecting`` and
 # ``awaiting_scope_permission`` are waiting for the user, not for the model.
 EXECUTABLE_STATES = frozenset({"generating", "repairing", "awaiting_user_decision"})
 MAX_INSTRUCTIONS = 1000
+# The constraints whose authority decides whether a candidate is *safe*, as
+# opposed to whether it hits a target. Confirmation requires each one to be
+# versioned: a safety check against a file cannot be reproduced at write time.
+_HARD_CONSTRAINT_FIELDS = (
+    "allergies_or_restrictions",
+    "action_restrictions",
+    "available_equipment",
+    "session_minutes",
+    "forbidden_exercises",
+)
 
 
 def _error(code: str, status: int = 409) -> ApplicationError:
@@ -68,21 +79,30 @@ class PlanAdjustmentService:
     # (the first plus two repairs) at the loop's twelve-decision bound. A task that
     # needs more has already failed to converge.
     def __init__(self, repository, plans: PlanStore, validation, *, constraints_source,
-                 head_revision, runner: Runner, budgets,
-                 reviewer=None, call_limit: int = 36, token_limit: int = 512000):
+                 head_revision, runner: Runner, budgets, activations=None,
+                 reviewer=None, call_limit: int = 36, token_limit: int = 512000,
+                 review_required: bool = False):
         self.repository = repository
         self.plans = plans
         self.validation = validation
-        # ``constraints_source(owner) -> mapping``: the trusted hard-constraint
-        # snapshot. Task 7 wires it to the versioned profile targets.
+        # ``constraints_source(owner) -> mapping``: the hard constraints a new
+        # task is created against. Task 7 wires it to the versioned profile
+        # targets; until then it is injected rather than guessed.
         self.constraints_source = constraints_source
         # ``head_revision(owner) -> int``: the authoritative head. Task 5 has no
         # head store yet, so it is injected rather than guessed from a file list.
         self.head_revision = head_revision
         self.runner = runner
         self.budgets = budgets
+        # ``activations``: the store that can confirm atomically. Absent means the
+        # deployment runs on a file store, which cannot, so ``confirm`` refuses.
+        self.activations = activations
         self.reviewer = reviewer
         self.call_limit, self.token_limit = call_limit, token_limit
+        # Whether the *current* safety policy wants a model review before a plan
+        # becomes official. Read at confirmation time, not at task creation: the
+        # policy can tighten while a candidate waits for the user.
+        self.review_required = review_required
         if call_limit < 1 or token_limit < 1:
             raise ValueError("PLAN_BUDGET_INVALID")
 
@@ -182,17 +202,43 @@ class PlanAdjustmentService:
 
     def confirm(self, owner: str, task_id: str, expected_version: int,
                 expected_head_revision: int, candidate_digest: str, key: str) -> dict:
-        """Refuse until Task 6 provides the atomic activation.
+        """Write the candidate as an official plan, atomically.
 
-        The refusal is the feature: a confirmation that wrote a plan through any
-        other path would be an activation nobody versioned. ``expected_version``,
-        ``expected_head_revision`` and ``candidate_digest`` are accepted so the
-        signature does not change when the transaction arrives; none of them is
-        used to decide anything yet.
+        Everything that decides *whether* happens inside the store's transaction:
+        the task's state and version, the head revision, the candidate digest and
+        the grant. The re-validation happens there too, through ``_verify``, so
+        the bytes checked are the bytes inserted. No model is constructed here --
+        a confirmation that needed a provider call would be a confirmation that
+        can fail after the user already agreed.
         """
-        _identity(owner, task_id, key)
+        _identity(owner, task_id, key, candidate_digest)
+        # Read first, so a task that belongs to somebody else is still "not found"
+        # rather than an answer about how this deployment is configured.
         self._read(owner, task_id)
-        raise _error("PLAN_CONFIRMATION_NOT_ENABLED", 409)
+        if self.activations is None:
+            # The refusal is the feature: a store without compare-and-swap cannot
+            # tell two confirmations apart, so it must not accept one.
+            raise _error("PLAN_CONFIRMATION_NOT_ENABLED", 409)
+        receipt = self.activations.activate(
+            owner,
+            task_id=task_id,
+            expected_version=expected_version,
+            expected_head_revision=expected_head_revision,
+            candidate_digest=candidate_digest,
+            operation_key=key,
+            verify=self._verify,
+        )
+        return {
+            "task": self._project(owner, self._read(owner, task_id)),
+            "plan": {
+                "plan_id": receipt.plan_id,
+                "head_revision": receipt.head_revision,
+                "activated_at": receipt.activated_at.isoformat(),
+                "kind": receipt.kind,
+                "based_on_plan_id": receipt.based_on_plan_id,
+            },
+            "replayed": receipt.replayed,
+        }
 
     def cancel(self, owner: str, task_id: str, expected_version: int, key: str) -> dict:
         _identity(owner, task_id, key)
@@ -228,6 +274,50 @@ class PlanAdjustmentService:
         except ValueError:
             raise _error("CONSTRAINT_SOURCE_INVALID", 409) from None
 
+    def _verify(self, context) -> dict:
+        """Re-check the candidate inside the confirmation transaction.
+
+        Runs on the bytes about to be inserted, against the task's own frozen
+        constraints. Pure code: no gateway, no provider, no repository write.
+        Returns the document to store, with its validation stamp, so the row and
+        the verdict cannot describe different plans.
+        """
+        snapshot = context.constraints_at_write
+        if snapshot is None:
+            # No versioned store, so the safety check cannot be repeated at write
+            # time. Approving on a check nobody can re-run is not a check.
+            raise _error("CONSTRAINT_SOURCE_UNVERSIONED", 409)
+        unversioned = _unversioned_hard_constraints(snapshot)
+        if unversioned:
+            # A file is still the authority for something that gates safety. The
+            # remedy is to version that write path, not to approve.
+            raise _error("CONSTRAINT_SOURCE_UNVERSIONED", 409)
+        try:
+            constraints = PlanConstraints.model_validate(dict(context.constraints))
+        except ValueError:
+            raise _error("CONSTRAINT_SOURCE_INVALID", 409) from None
+        drift = _constraint_drift(dict(context.constraints), dict(snapshot.constraints))
+        if drift:
+            # The profile moved under a candidate that was reviewed against the
+            # old values. Activating it would apply a decision to facts the user
+            # never saw, so the task must be restarted instead.
+            raise _error("CONSTRAINT_CHANGED", 409)
+        if self.review_required and context.reviewed_digest != context.candidate_digest:
+            # Tightened while the candidate waited. Asking for the review here
+            # would call a model inside the transaction, so the answer is "review
+            # this again", not a silent approval.
+            raise _error("CANDIDATE_REVIEW_REQUIRED", 409)
+        document = dict(context.candidate_plan)
+        base = (context.base_plan.plan.model_dump(mode="json")
+                if context.base_plan is not None else None)
+        violations = self.validation.review_document(document, constraints, base=base)
+        if violations:
+            raise _error("CANDIDATE_INVALID", 422)
+        document["validation"] = ValidationResult(
+            passed=True, warnings=[], violations=[], repair_suggestions=[],
+        ).model_dump()
+        return document
+
     def _project(self, owner: str, snapshot) -> dict:
         record = self.repository.latest_candidate(owner, snapshot.task_id)
         constraints = PlanConstraints.model_validate(self.repository.constraints(owner, snapshot.task_id))
@@ -258,3 +348,32 @@ class PlanAdjustmentService:
 def _identity(*values: str) -> None:
     if any(not isinstance(value, str) or not value.strip() for value in values):
         raise _error("PLAN_TASK_IDENTITY_REQUIRED", 422)
+
+
+def _unversioned_hard_constraints(snapshot) -> list[str]:
+    """Hard constraints whose authority the versioned store cannot name.
+
+    Only the fields that gate safety are listed. A target the store owns is
+    versioned by definition; a restriction, an equipment list, a session length or
+    a forbidden exercise that still comes from a file is not, and a plan approved
+    against it would be approved against a check that cannot be re-run.
+    """
+    return sorted(
+        field for field in _HARD_CONSTRAINT_FIELDS
+        if snapshot.versions.get(field) is None
+    )
+
+
+def _constraint_drift(snapshot: Mapping[str, object],
+                      source: Mapping[str, object]) -> list[str]:
+    """Fields the source now states differently from the task's snapshot.
+
+    Not an equality test: a task that asked the user about an unknown field holds
+    an answer the source never had, and comparing digests would refuse every
+    answered task. A field the source does not state cannot contradict anything,
+    so only stated-and-different counts as drift.
+    """
+    return sorted(
+        key for key, value in source.items()
+        if value is not None and snapshot.get(key) != value
+    )

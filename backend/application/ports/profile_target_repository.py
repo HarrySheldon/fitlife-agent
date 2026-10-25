@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from backend.domain.profile_targets import SafetyCondition
 
@@ -79,6 +80,26 @@ class ProfileTargetSetup:
 
 
 @dataclass(frozen=True)
+class ConstraintSnapshot:
+    """Hard constraints, and the versioned record each one was read from.
+
+    ``versions[field]`` names the row the value came from, or is ``None`` when
+    this store is not the authority for that field. ``None`` is not "no version":
+    it is "a version this deployment cannot name", which is what a confirmation
+    must refuse on -- a safety check against a hand-edited file cannot be
+    reproduced, so approving a plan on the strength of it is approving a check
+    nobody can re-run.
+
+    A field the snapshot does not state at all is absent from ``constraints``,
+    which is the different and already-handled case: unknown forces a
+    clarification instead of passing.
+    """
+
+    constraints: Mapping[str, Any]
+    versions: Mapping[str, str | None]
+
+
+@dataclass(frozen=True)
 class TargetConfirmationState:
     target: TargetVersion
     replayed: bool
@@ -102,6 +123,8 @@ class ProfileTargetRepository(Protocol):
     ) -> GoalVersion | None: ...
 
     def get_latest_target(self, user_id: str) -> TargetVersion | None: ...
+
+    def constraint_snapshot(self, user_id: str) -> ConstraintSnapshot: ...
 
     def append_profile(
         self,

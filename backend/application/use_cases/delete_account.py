@@ -29,11 +29,23 @@ class DeleteAccount:
         profile_targets: ProfileTargetRepository | None = None,
         *,
         coach_conversations: CoachConversationExportPort | None = None,
+        plans=None,
+        plan_tasks=None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
         self.profile_targets = profile_targets
         self.coach_conversations = coach_conversations
+        # The plan store, when plans live somewhere the quarantine above does not
+        # reach. A file-backed store is already inside the quarantined directory;
+        # a SQLite one is not, and deleting an account that left its plan history
+        # behind would be a deletion that did not delete.
+        self.plans = plans
+        # The adjustment tasks, rounds, candidates and receipts. Separate from the
+        # plans because they are separate rows: deleting the history but keeping
+        # the tasks would leave a record of what the user was trying to change,
+        # which is exactly the kind of residue a deletion must not leave.
+        self.plan_tasks = plan_tasks
 
     def execute(
         self,
@@ -120,6 +132,10 @@ class DeleteAccount:
                     self.profile_targets.delete_user_data(user_id)
                 if self.coach_conversations is not None:
                     self.coach_conversations.delete_user_data(user_id)
+                if self.plans is not None:
+                    self.plans.delete_user_data(user_id)
+                if self.plan_tasks is not None:
+                    self.plan_tasks.delete_user_data(user_id)
             except (OSError, ValueError, sqlite3.Error):
                 if staged_quarantine is not None:
                     _restore_quarantine(

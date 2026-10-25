@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from backend.application.ports.profile_target_repository import (
+    ConstraintSnapshot,
     GoalVersion,
     GoalVersionInput,
     ProfileTargetSetup,
@@ -252,6 +253,49 @@ class SQLiteProfileTargetRepository:
     def get_latest_target(self, user_id: str) -> TargetVersion | None:
         targets = self.list_targets(user_id, limit=1)
         return targets[0] if targets else None
+
+    def constraint_snapshot(self, user_id: str) -> ConstraintSnapshot:
+        with self.database.connection() as connection:
+            return self.constraint_snapshot_with(connection, user_id)
+
+    def constraint_snapshot_with(self, connection, user_id: str) -> ConstraintSnapshot:
+        """Hard constraints and where each came from, read on a given connection.
+
+        The connection is a parameter because a confirmation must read this
+        *inside* its own transaction: a snapshot taken on a second connection can
+        describe a profile the transaction is about to write against. The
+        ``versions`` map is the honest half of the answer -- this store owns the
+        goal, the weight and the two daily targets, and it does **not** own the
+        free-text restrictions, the equipment list, the session length or the
+        forbidden exercises. Those still live in the profile file, so their
+        version is ``None`` and a confirmation refuses on them rather than
+        pretending the check it just ran can be reproduced.
+        """
+        profile_row = _latest_profile_row(connection, user_id)
+        goal_row = _latest_goal_row(connection, user_id)
+        target_row = _latest_target_row(connection, user_id)
+
+        constraints: dict[str, object] = {}
+        versions: dict[str, str | None] = {}
+        if goal_row is not None:
+            constraints["goal"] = goal_row["goal"]
+            versions["goal"] = goal_row["id"]
+        if profile_row is not None:
+            constraints["weight_kg"] = profile_row["weight_kg"]
+            versions["weight_kg"] = profile_row["id"]
+        if target_row is not None:
+            constraints["daily_calorie_target"] = target_row["calories"]
+            constraints["daily_protein_target"] = target_row["protein"]
+            versions["daily_calorie_target"] = target_row["id"]
+            versions["daily_protein_target"] = target_row["id"]
+        for field in ("allergies_or_restrictions", "action_restrictions",
+                      "available_equipment", "session_minutes", "forbidden_exercises"):
+            # Stated as unversioned rather than omitted: omission means "unknown"
+            # and would be answered by asking the user, which is the wrong
+            # remedy. These values exist -- just not anywhere this store can
+            # point at.
+            versions[field] = None
+        return ConstraintSnapshot(constraints=constraints, versions=versions)
 
     def append_target(
         self,
@@ -687,6 +731,18 @@ def _latest_goal_row(connection, user_id: str):
     return connection.execute(
         f"""
         SELECT * FROM overall_goal_versions
+        WHERE user_id = ?
+        ORDER BY {_VERSION_ORDER_BY}
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+
+
+def _latest_target_row(connection, user_id: str):
+    return connection.execute(
+        f"""
+        SELECT * FROM daily_target_versions
         WHERE user_id = ?
         ORDER BY {_VERSION_ORDER_BY}
         LIMIT 1

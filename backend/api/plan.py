@@ -21,7 +21,7 @@ from backend.config import get_settings
 from backend.domain.errors import ApplicationError, model_gateway_error
 from backend.infrastructure.model_gateway.factory import resolve_user_model_gateway
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
-from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
+from backend.infrastructure.repositories.plan_repository_factory import build_plan_repository
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedUser, CoachActionResponse, GeneratedPlan, PlanActivationRequest, PlanAdjustmentDraftRequest
 
@@ -87,8 +87,10 @@ def _plans(request_id: str | None = None) -> Plans:
         with user_lifecycle_guard(get_settings().data_dir, user_id):
             return result
 
+    # One source of truth, chosen by ``plan_storage_mode``: the API must not
+    # read a file because a database row was missing, or the reverse.
     return Plans(
-        FilePlanRepository(get_settings().data_dir),
+        build_plan_repository(get_settings()),
         deterministic,
         adjusted,
         lambda user_id, plan: validate_generated_plan(

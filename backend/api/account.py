@@ -26,6 +26,9 @@ from backend.infrastructure.repositories.sqlite_coach_conversation_repository im
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.infrastructure.sqlite.runtime import get_database
 from backend.infrastructure.repositories.sqlite_entry_task_lifecycle import SQLiteEntryTaskLifecycleRepository
+from backend.infrastructure.repositories.plan_repository_factory import build_plan_repository
+from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import SQLitePlanAdjustmentRepository
+from backend.infrastructure.repositories.sqlite_plan_repository import SQLitePlanRepository
 from backend.schemas import (
     AccountDeleteRequest,
     AccountPasswordChangeRequest,
@@ -58,6 +61,13 @@ def delete_account(
         FileIdentityRepository(settings.data_dir),
         SQLiteProfileTargetRepository(get_database()),
         coach_conversations=SQLiteCoachConversationRepository(get_database()),
+        # Unconditional, not mode-dependent: a deletion must not depend on the
+        # plan store being configured correctly, and rows left behind are the one
+        # thing an account deletion cannot leave behind.
+        plans=SQLitePlanRepository(get_database()),
+        # Tasks, rounds, candidates and receipts. Without this the plans would be
+        # gone but the record of what the user asked to change would remain.
+        plan_tasks=SQLitePlanAdjustmentRepository(get_database()),
     ).execute(
         principal,
         password=payload.password,
@@ -81,6 +91,9 @@ def export_account_data(
         FileModelConnectionRepository(settings.data_dir),
         entry_tasks=SQLiteEntryTaskLifecycleRepository(get_database()),
         coach_conversations=SQLiteCoachConversationRepository(get_database()),
+        # The authoritative store, so an export of a SQLite-backed deployment
+        # contains the plans rather than an empty directory.
+        plans=build_plan_repository(settings),
     ).execute(principal.user.user_id)
     return Response(
         content=archive,

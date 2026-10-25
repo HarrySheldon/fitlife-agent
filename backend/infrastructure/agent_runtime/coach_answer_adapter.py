@@ -13,7 +13,7 @@ from backend.application.ports.coach_answer import CoachTurnAnswer, CoachTurnReq
 from backend.application.use_cases.coach_conversations import CoachConversations
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
-from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
+from backend.infrastructure.repositories.plan_repository_factory import build_plan_repository
 from backend.infrastructure.repositories.file_report_repository import FileReportRepository
 from backend.safety.business_scope import is_closed_followup
 
@@ -35,7 +35,8 @@ class RuntimeCoachAnswerAdapter:
             )
         if request.plan_id or request.report_week:
             if request.plan_id:
-                stored = (self.plans or FilePlanRepository(get_settings().data_dir)).get(request.user_id, request.plan_id)
+                stored = (self.plans or build_plan_repository(get_settings())).get(
+                    request.user_id, request.plan_id)
                 if stored is None:
                     raise ApplicationError(code="PLAN_NOT_FOUND", message="The saved plan was not found.", status_code=404)
                 facts = {"active_plan_id": request.plan_id, "active_plan": stored.plan.model_dump(mode="json")}

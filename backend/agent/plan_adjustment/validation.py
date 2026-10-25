@@ -37,6 +37,8 @@ from backend.domain.plan_adjustment import (
     Violation,
     apply_patches,
     bundle_identity,
+    legacy_violations,
+    preserves_targets,
     validate_bundle,
 )
 
@@ -205,6 +207,29 @@ class PlanValidation:
     produces the same verdict, which is what lets the repository treat a
     submission as replayable and the evaluation suite treat it as reproducible.
     """
+
+    def review_document(self, document: dict, constraints: PlanConstraints, *,
+                        base: dict | None = None) -> list[Violation]:
+        """Re-check a stored candidate as a document rather than as a bundle.
+
+        Confirmation holds the merged plan, not the patches that produced it, so
+        the bundle checks cannot be re-run. Every check that reads the plan
+        itself can be -- and the reviewed medical thresholds live in that set,
+        which is the part that matters. ``base`` enables the target-preservation
+        comparison, which is the only check that needs two documents.
+        """
+        violations = _format_violations(document)
+        if violations:
+            return violations
+        violations += _missing_constraints(constraints)
+        violations += _structure_violations(document)
+        violations += _training_constraints(document, constraints)
+        if not violations:
+            if base is not None:
+                violations += list(preserves_targets(base, document))
+            if not violations:
+                violations += legacy_violations(document, constraints)
+        return violations
 
     def evaluate(self, base: dict, bundle: CandidateBundle, constraints: PlanConstraints, *,
                  change_domains: frozenset[str],

@@ -448,6 +448,23 @@ class SQLitePlanAdjustmentRepository:
 
     # ------------------------------------------------------------- lifecycle
 
+    def record_review(self, owner, task_id, digest) -> None:
+        """Annotate the current candidate as reviewed. Not a state transition.
+
+        The version does not move: nothing a caller can observe changes, and
+        spending a version would turn "a review finished" into "the task moved",
+        which would invalidate a confirmation the user was about to send. The
+        digest in the WHERE clause is what keeps the annotation attached to the
+        candidate it describes.
+        """
+        _identity(owner, task_id, digest)
+        with self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE plan_adjustment_sessions SET reviewed_digest=? "
+                "WHERE task_id=? AND user_id=? AND candidate_digest=?",
+                (digest, task_id, owner, digest),
+            )
+
     def delete_user_data(self, owner) -> dict[str, int]:
         _identity(owner)
         counts: dict[str, int] = {}

@@ -221,9 +221,22 @@ class PlanTaskSession:
             return snapshot
         code = self._review_candidate(candidate)
         if code is None:
+            self._record_review(verdict.digest)
             return snapshot
         self._review = code
         return self._stop(snapshot, code)
+
+    def _record_review(self, digest: str) -> None:
+        """Note that a model review cleared this candidate, when the store can.
+
+        Confirmation later asks "was *this* candidate reviewed under the current
+        policy". Without a recorded digest the only honest answer is "unknown",
+        which would refuse every confirmation once the policy tightens. A store
+        without the column simply does not answer, and the refusal stays.
+        """
+        record = getattr(self.repository, "record_review", None)
+        if record is not None and isinstance(digest, str) and digest:
+            record(self.owner, self.task_id, digest)
 
     def _review_candidate(self, candidate: dict | None) -> str | None:
         if self.reviewer is None or candidate is None:

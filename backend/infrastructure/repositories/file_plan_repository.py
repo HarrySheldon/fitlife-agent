@@ -76,6 +76,40 @@ class FilePlanRepository:
             except (OSError, UnicodeError, json.JSONDecodeError, ValidationError):
                 raise self._storage_error() from None
 
+    def current_head(self, user_id: str):
+        """The head a directory has without a head row.
+
+        Computed from the files every time rather than cached: a cache here would
+        be a second authority, and the only reason this exists is to answer the
+        same question the SQLite head answers. ``legacy_head`` is shared with the
+        importer so a migrated directory does not change its head.
+        """
+        from backend.application.ports.plan_repository import legacy_head
+        return legacy_head(self.list(user_id))
+
+    def delete_user_data(self, user_id: str) -> dict[str, int]:
+        """Remove one owner's plans and drafts.
+
+        The account deletion path quarantines the whole user directory first, so
+        by the time this runs there is normally nothing left. It is still
+        implemented: a store whose deletion depends on another component having
+        already moved the files is a store that leaks when that component
+        changes.
+        """
+        counts: dict[str, int] = {}
+        with user_lifecycle_guard(self.data_dir, user_id):
+            for name, directory in (
+                ("plans", self._directory(user_id)),
+                ("plan-drafts", self.data_dir / "users" / user_id / "plan-drafts"),
+            ):
+                removed = 0
+                if directory.is_dir():
+                    for path in directory.glob("*.json"):
+                        path.unlink()
+                        removed += 1
+                counts[name] = removed
+        return counts
+
     def _read(self, path: Path) -> StoredPlan:
         try:
             with _lock_for(path):

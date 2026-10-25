@@ -16,7 +16,7 @@ from backend.application.ports.coach_conversation_repository import (
     CoachConversationExportPort,
 )
 from backend.application.ports.model_connection_repository import ModelConnectionRepository
-from backend.application.ports.plan_repository import StoredPlan
+from backend.application.ports.plan_repository import PlanRepository, StoredPlan
 from backend.application.ports.report_repository import StoredWeeklyReport
 from backend.domain.errors import account_export_failed_error
 
@@ -119,12 +119,18 @@ class ExportAccountData:
         *,
         entry_tasks: EntryTaskExportPort | None = None,
         coach_conversations: CoachConversationExportPort | None = None,
+        plans: PlanRepository | None = None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
         self.model_connections = model_connections
         self.entry_tasks = entry_tasks
         self.coach_conversations = coach_conversations
+        # The authoritative plan store, when the deployment has one. Without it
+        # the export reads the file layout, which is what it always did -- but a
+        # deployment serving plans from SQLite would then export an empty history
+        # and call it complete.
+        self.plans = plans
 
     def execute(self, user_id: str) -> bytes:
         try:
@@ -168,6 +174,10 @@ class ExportAccountData:
                 if snapshot is not None:
                     budget.add_entry(entries, archive_path, _stable_csv(snapshot, fields))
             for archive_root, directory_name, filename_pattern, model_type in _DIRECTORY_EXPORTS:
+                if archive_root == "plans" and self.plans is not None:
+                    # Read from the store, not the directory: the two disagree the
+                    # moment a deployment switches sources.
+                    continue
                 directory = user_root / directory_name
                 for filename in _safe_matching_snapshot_names(
                     directory,
@@ -210,6 +220,13 @@ class ExportAccountData:
                         if workspace.draft is not None:
                             budget.add_entry(entries, "model-connection-draft.json", _stable_json(
                                 _project_fields(workspace.draft.model_dump(mode="json"), _MODEL_CONNECTION_FIELDS)))
+        if self.plans is not None:
+            for plan in self.plans.list(user_id):
+                budget.add_entry(
+                    entries,
+                    f"plans/{plan.plan_id}.json",
+                    _stable_json(plan.model_dump(mode="json")),
+                )
         if self.entry_tasks is not None:
             remaining = max(0, MAX_EXPORT_BYTES - budget.source_bytes)
             limit = min(MAX_SOURCE_BYTES, remaining)

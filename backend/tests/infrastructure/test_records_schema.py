@@ -1001,6 +1001,7 @@ def test_records_migration_can_be_run_twice(tmp_path):
         (8, "coach_turn_execution"),
         (9, "plan_adjustment_tasks"),
         (10, "plan_candidate_documents"),
+        (11, "plan_history_and_head"),
     ]
     assert catalog_search_count == 1
 
@@ -1072,6 +1073,7 @@ def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
         (8, "coach_turn_execution"),
         (9, "plan_adjustment_tasks"),
         (10, "plan_candidate_documents"),
+        (11, "plan_history_and_head"),
     ]
     assert tuple(food) == ("user-a", "Rice")
     assert tuple(search_row) == (42, "food-1")

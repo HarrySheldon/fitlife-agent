@@ -901,3 +901,61 @@ def test_catalog_search_deletion_uses_kind_when_food_and_exercise_ids_collide(tm
     assert [row["catalog_kind"] for row in search_rows] == ["exercise"]
     assert food_count == 0
     assert exercise_count == 1
+
+
+def test_the_constraint_snapshot_names_the_rows_it_read(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    setup = repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01"),
+        GoalVersionInput(goal="fat_loss", effective_from="2026-07-01"),
+    )
+    target = repository.append_target(
+        "user-a", _target(setup.profile.id, setup.goal.id))
+
+    snapshot = repository.constraint_snapshot("user-a")
+
+    assert snapshot.versions["goal"] == setup.goal.id
+    assert snapshot.versions["weight_kg"] == setup.profile.id
+    assert snapshot.versions["daily_calorie_target"] == target.id
+    assert snapshot.versions["daily_protein_target"] == target.id
+    assert snapshot.constraints["goal"] == "fat_loss"
+    assert snapshot.constraints["daily_calorie_target"] == 2100
+
+
+def test_a_hard_constraint_this_store_does_not_own_has_no_version(tmp_path):
+    # The restrictions, the equipment list, the session length and the forbidden
+    # exercises still live in the profile file. Reporting them as versioned would
+    # let a confirmation approve on a check nobody can re-read, so they carry no
+    # version at all -- and a snapshot taken before any profile exists says the
+    # same thing rather than claiming "unchanged".
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01"),
+        GoalVersionInput(goal="maintenance", effective_from="2026-07-01"),
+    )
+
+    snapshot = repository.constraint_snapshot("user-a")
+    empty = repository.constraint_snapshot("user-b")
+
+    for field in ("allergies_or_restrictions", "action_restrictions",
+                  "available_equipment", "session_minutes", "forbidden_exercises"):
+        assert snapshot.versions[field] is None
+        assert empty.versions[field] is None
+    assert empty.constraints == {}
+
+
+def test_the_snapshot_reads_on_the_connection_it_is_given(tmp_path):
+    database = _database(tmp_path)
+    repository = SQLiteProfileTargetRepository(database)
+    setup = repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01"),
+        GoalVersionInput(goal="fat_loss", effective_from="2026-07-01"),
+    )
+
+    with database.transaction() as connection:
+        inside = repository.constraint_snapshot_with(connection, "user-a")
+
+    assert inside.versions["goal"] == setup.goal.id

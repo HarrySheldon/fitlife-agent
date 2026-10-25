@@ -80,6 +80,10 @@ def observe_database(path, *, actors=None, data_dir=None):
                 result["plan_draft_count"] = len(list((user_root / "plan-drafts").glob("*.json")))
                 result["plan_history_count"] = history
                 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
+                # Deliberately the file reader, not the plan repository factory:
+                # this observes a directory an evaluation run seeded, so the file
+                # layout *is* the subject. Routing it through the deployment's
+                # configured store would measure the wrong thing.
                 try:
                     plans = FilePlanRepository(data_dir).list(user_id)
                     result["plans_readable"] = len(plans) == history

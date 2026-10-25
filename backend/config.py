@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # the window between "the user saw this" and "this is what gets written".
     plan_adjustment_task_ttl_days: int = Field(default=30, gt=0)
     plan_candidate_ttl_minutes: int = Field(default=30, gt=0)
+    # Which store is the plan authority. This is a data-migration switch, not a
+    # feature flag: turning the coach on must not move anybody's history, and a
+    # merge must never migrate a database as a side effect. ``sqlite`` is refused
+    # until an import has completed against the configured data directory.
+    plan_storage_mode: Literal['file', 'sqlite'] = 'file'
     # Which side of the S4 paired comparison this deployment runs. It stays
     # "reference" even after the unified coach became the default path: flipping
     # it would delete the baseline the optimisation is measured against. The

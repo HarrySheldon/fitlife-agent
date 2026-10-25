@@ -158,7 +158,8 @@ def _runner(scripts):
     return run
 
 
-def _service(tmp_path, *, constraints=None, reviewer=None, scripts=(), plan=None):
+def _service(tmp_path, *, constraints=None, reviewer=None, scripts=(), plan=None,
+             activations=None, constraints_source=None, **confirm_options):
     database = SQLiteDatabase(tmp_path / "plan.sqlite3")
     run_migrations(database, RECORDS_MIGRATIONS)
     repository = SQLitePlanAdjustmentRepository(database, clock=lambda: NOW, ids=_ids())
@@ -167,9 +168,10 @@ def _service(tmp_path, *, constraints=None, reviewer=None, scripts=(), plan=None
     runner = _runner(scripts)
     service = PlanAdjustmentService(
         repository, store, PlanValidation(),
-        constraints_source=lambda owner: dict(constraints or CONSTRAINTS),
+        constraints_source=(constraints_source
+                            or (lambda owner: dict(constraints or CONSTRAINTS))),
         head_revision=lambda owner: 1, runner=runner, budgets=budgets,
-        reviewer=reviewer)
+        reviewer=reviewer, activations=activations, **confirm_options)
     return service, repository, store, runner
 
 
@@ -510,3 +512,222 @@ def test_cancel_is_terminal(tmp_path):
     assert cancelled["state"] == "cancelled"
     with pytest.raises(ApplicationError, match="STATE_TRANSITION"):
         asyncio.run(service.execute("alice", task["task_id"], cancelled["version"], "exec-1"))
+
+
+# ---------------------------------------------------------------- confirmation
+
+# A document that passes every check the confirmation re-runs. The rounds above
+# deliberately never produce one, because they are about repair; this one exists
+# so the confirmation path can be reached without a scripted model.
+CONFIRMABLE = {
+    "diet_plan": {"meals": ["燕麦粥配鸡蛋", "鸡胸沙拉", "糙米饭配牛肉"],
+                  "daily_calorie_target": 2000, "daily_protein_target": 150},
+    "workout_plan": {
+        "summary": "每周三练", "weekly_training_days": 3,
+        "rest_days": ["周三", "周六", "周日"],
+        "days": [
+            {"day": "周一", "type": "strength", "focus": "下肢", "intensity": "medium",
+             "exercises": [{"name": "深蹲", "sets": 4, "reps": 8}], "duration_min": 45},
+            {"day": "周二", "type": "cardio", "focus": "有氧", "intensity": "low",
+             "exercises": [{"name": "快走"}], "duration_min": 30},
+            {"day": "周四", "type": "strength", "focus": "上肢", "intensity": "medium",
+             "exercises": [{"name": "俯卧撑", "sets": 3, "reps": 12}], "duration_min": 40},
+        ],
+    },
+}
+
+
+HARD_FIELDS = ("allergies_or_restrictions", "action_restrictions",
+               "available_equipment", "session_minutes", "forbidden_exercises")
+
+
+class StubActivations:
+    """The store's half of a confirmation, without a database.
+
+    It does exactly what the real one does at this seam: read the constraint
+    snapshot, build the context the verifier reads, call it, and keep what it
+    produced. ``versioned=False`` is the deployment whose hard constraints are
+    still file-backed, and ``snapshot=False`` is one with no versioned store at
+    all -- two different refusals that must not be confused with "unchanged".
+    """
+
+    def __init__(self, *, reviewed="same", constraints=None, document=None,
+                 versioned=True, snapshot=True):
+        self.reviewed = reviewed
+        # ``constraints`` is the live source; ``frozen`` is what the task recorded
+        # when it was created. Keeping them apart is the whole point: the real
+        # repository reads the frozen copy out of the task row and the live one on
+        # its own connection, so a stub that shared one mapping would never be
+        # able to show drift.
+        self.constraints = constraints or CONSTRAINTS
+        self.frozen = dict(self.constraints)
+        self.document = document or CONFIRMABLE
+        self.versioned = versioned
+        self.snapshot = snapshot
+        self.documents = []
+        self.contexts = []
+
+    def _snapshot(self):
+        from backend.application.ports.profile_target_repository import (
+            ConstraintSnapshot,
+        )
+
+        versions = {field: (f"v-{field}" if self.versioned else None)
+                    for field in HARD_FIELDS}
+        return ConstraintSnapshot(constraints=dict(self.constraints), versions=versions)
+
+    def activate(self, owner, *, task_id, expected_version, expected_head_revision,
+                 candidate_digest, operation_key, verify):
+        from backend.application.ports.plan_repository import (
+            ActivationContext,
+            PlanActivationReceipt,
+            PlanHead,
+        )
+
+        context = ActivationContext(
+            user_id=owner, task_id=task_id, base_plan_id="p1",
+            base_head_revision=expected_head_revision,
+            constraints=dict(self.frozen),
+            reviewed_digest=(candidate_digest if self.reviewed == "same" else self.reviewed),
+            candidate_id="c1", candidate_digest=candidate_digest,
+            candidate_plan=deepcopy(self.document),
+            head=PlanHead(plan_id="p1", revision=expected_head_revision, updated_at=NOW),
+            base_plan=None,
+            constraints_at_write=self._snapshot() if self.snapshot else None,
+        )
+        self.contexts.append(context)
+        self.documents.append(verify(context))
+        return PlanActivationReceipt(
+            plan_id="plan-confirmed", head_revision=expected_head_revision + 1,
+            activated_at=NOW, kind="agent_adjusted", based_on_plan_id="p1")
+
+
+def _awaiting(tmp_path, **options):
+    """A task whose candidate passed and is waiting for the user."""
+    service, repo, store, runner = _service(tmp_path, scripts=[ROUND_0, ROUND_1, ROUND_2],
+                                            **options)
+    task = _start(service)
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"],
+                                         "exec-2"))
+    third = asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"],
+                                        "exec-3"))
+    return service, repo, task, third, runner
+
+
+def test_confirm_writes_the_reviewed_document(tmp_path):
+    activations = StubActivations()
+    service, repo, task, third, _ = _awaiting(tmp_path, activations=activations)
+
+    result = service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                             third["task"]["candidate"]["digest"], key="confirm-1")
+
+    assert result["plan"]["plan_id"] == "plan-confirmed"
+    assert result["plan"]["head_revision"] == 2
+    assert result["replayed"] is False
+    # The document the store would insert is the one the verifier re-checked,
+    # and it carries the stamp every stored plan needs.
+    assert activations.documents[0]["validation"]["passed"] is True
+    assert activations.documents[0]["diet_plan"] == CONFIRMABLE["diet_plan"]
+
+
+@pytest.mark.parametrize("stub", [{"versioned": False}, {"snapshot": False}],
+                         ids=["file-backed-constraints", "no-versioned-store"])
+def test_confirm_refuses_a_source_that_cannot_be_versioned(tmp_path, stub):
+    # Two shapes of the same refusal: a store that cannot name where a hard
+    # constraint came from, and a deployment with no such store at all. Neither
+    # may be read as "nothing changed".
+    activations = StubActivations(**stub)
+    service, _, task, third, _ = _awaiting(tmp_path, activations=activations)
+
+    with pytest.raises(ApplicationError, match="CONSTRAINT_SOURCE_UNVERSIONED"):
+        service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                        third["task"]["candidate"]["digest"], key="confirm-1")
+    assert activations.documents == []
+
+
+def test_confirm_refuses_when_the_profile_moved_under_the_candidate(tmp_path):
+    source = dict(CONSTRAINTS)
+    # The store reads the same live mapping the task was created from, so the
+    # mutation below is exactly what a profile write looks like from here.
+    activations = StubActivations(constraints=source)
+    service, _, task, third, _ = _awaiting(
+        tmp_path, activations=activations,
+        constraints_source=lambda owner: dict(source))
+    # The user added an allergy after the candidate was reviewed.
+    source["allergies_or_restrictions"] = ["花生", "海鲜"]
+
+    with pytest.raises(ApplicationError, match="CONSTRAINT_CHANGED"):
+        service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                        third["task"]["candidate"]["digest"], key="confirm-1")
+    assert activations.documents == []
+
+
+def test_confirm_requires_a_review_when_the_policy_tightens(tmp_path):
+    activations = StubActivations(reviewed="a-different-digest")
+    service, _, task, third, _ = _awaiting(
+        tmp_path, activations=activations, review_required=True)
+
+    with pytest.raises(ApplicationError, match="CANDIDATE_REVIEW_REQUIRED"):
+        service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                        third["task"]["candidate"]["digest"], key="confirm-1")
+    assert activations.documents == []
+
+
+def test_confirm_refuses_a_document_that_no_longer_validates(tmp_path):
+    broken = deepcopy(CONFIRMABLE)
+    # A document whose meals are no longer a list cannot be checked at all, so it
+    # must not be stored as if it had been.
+    broken["diet_plan"]["meals"] = "燕麦粥配鸡蛋"
+    activations = StubActivations(document=broken)
+    service, _, task, third, _ = _awaiting(tmp_path, activations=activations)
+
+    with pytest.raises(ApplicationError, match="CANDIDATE_INVALID"):
+        service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                        third["task"]["candidate"]["digest"], key="confirm-1")
+
+
+def test_the_real_constraint_source_refuses_a_hard_constraint_it_cannot_version(tmp_path):
+    """The production wiring, not a stub: today it must refuse.
+
+    The versioned profile owns the goal, the weight and the two daily targets. The
+    restrictions, the equipment list, the session length and the forbidden
+    exercises still come from the profile file, so the snapshot cannot name their
+    version -- and a confirmation on the strength of a check nobody can re-read is
+    not a check. This test is the reminder that wiring ``confirm`` into an HTTP
+    route is not enough: the constraint write path has to be versioned first.
+    """
+    from backend.application.ports.profile_target_repository import (
+        GoalVersionInput,
+        ProfileVersionInput,
+    )
+    from backend.application.ports.plan_repository import StoredPlan
+    from backend.infrastructure.repositories.sqlite_plan_repository import (
+        SQLitePlanRepository,
+    )
+    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+        SQLiteProfileTargetRepository,
+    )
+
+    service, repo, task, third, _ = _awaiting(tmp_path)
+    profiles = SQLiteProfileTargetRepository(repo.database)
+    profiles.bootstrap(
+        "alice",
+        ProfileVersionInput(age=30, height_cm=175.0, weight_kg=70.0,
+                            energy_parameter="male", activity_level="moderate",
+                            auto_target_disabled=False, safety_conditions=(),
+                            effective_from="2026-10-01"),
+        GoalVersionInput(goal="fat_loss", effective_from="2026-10-01"),
+    )
+    # Same clock as the task store, or the real one would judge the fixture's
+    # timestamps against today and call an unexpired candidate expired.
+    plans = SQLitePlanRepository(repo.database, clock=lambda: NOW,
+                                 constraints_reader=profiles.constraint_snapshot_with)
+    plans.save("alice", StoredPlan(plan_id="p1", activated_at=NOW,
+                                   kind="deterministic", plan=BASE))
+    service.activations = plans
+
+    with pytest.raises(ApplicationError, match="CONSTRAINT_SOURCE_UNVERSIONED"):
+        service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                        third["task"]["candidate"]["digest"], key="confirm-1")
+    assert len(plans.list("alice")) == 1

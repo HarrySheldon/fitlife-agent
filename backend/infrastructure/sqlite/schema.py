@@ -1178,4 +1178,101 @@ RECORDS_MIGRATIONS = (
             "AND length(CAST(candidate_json AS BLOB)) <= 65536))",
         ),
     ),
+    Migration(
+        version=11,
+        name='plan_history_and_head',
+        statements=(
+            # Official plan history. A plan id names one document for good, so the
+            # row is insert-only: ``content_digest`` is what makes "same id, same
+            # bytes" a no-op and "same id, different bytes" a conflict instead of
+            # an overwrite. Yesterday's answer has to keep existing for the head
+            # pointer and the account export to mean anything.
+            """
+            CREATE TABLE plans (
+                user_id TEXT NOT NULL,
+                plan_id TEXT NOT NULL,
+                activated_at TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('deterministic', 'agent_adjusted')),
+                based_on_plan_id TEXT,
+                plan_json TEXT NOT NULL
+                    CHECK (json_valid(plan_json) AND json_type(plan_json) = 'object'
+                           AND length(CAST(plan_json AS BLOB)) <= 262144),
+                content_digest TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, plan_id)
+            )
+            """,
+            """
+            CREATE INDEX idx_plans_owner_history
+            ON plans (user_id, activated_at DESC, plan_id DESC)
+            """,
+            # Exactly one head per owner. ``revision`` only grows, and a
+            # confirmation updates this row with ``WHERE revision = expected``:
+            # that comparison, not a process lock, is what stops two processes
+            # from both activating the same base.
+            """
+            CREATE TABLE plan_heads (
+                user_id TEXT PRIMARY KEY,
+                plan_id TEXT NOT NULL,
+                revision INTEGER NOT NULL CHECK (revision >= 1),
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (user_id, plan_id) REFERENCES plans (user_id, plan_id)
+            )
+            """,
+            # Drafts move with the port: the generate -> activate flow stores a
+            # draft before the user confirms it, and a store that could not hold
+            # one would break that flow the moment it became authoritative.
+            """
+            CREATE TABLE plan_drafts (
+                user_id TEXT NOT NULL,
+                draft_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('deterministic', 'agent_adjusted')),
+                based_on_plan_id TEXT,
+                draft_json TEXT NOT NULL
+                    CHECK (json_valid(draft_json) AND json_type(draft_json) = 'object'
+                           AND length(CAST(draft_json AS BLOB)) <= 262144),
+                PRIMARY KEY (user_id, draft_id)
+            )
+            """,
+            # One receipt per owner and operation key. It is written inside the
+            # same transaction as the plan, so a lost response can be replayed
+            # without a second plan, and a different payload under the same key is
+            # a conflict rather than a quiet second activation.
+            """
+            CREATE TABLE plan_activation_receipts (
+                user_id TEXT NOT NULL,
+                operation_key TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                request_fingerprint TEXT NOT NULL,
+                plan_id TEXT NOT NULL,
+                head_revision INTEGER NOT NULL CHECK (head_revision >= 1),
+                response_json TEXT NOT NULL
+                    CHECK (json_valid(response_json) AND json_type(response_json) = 'object'
+                           AND length(CAST(response_json AS BLOB)) <= 32768),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, operation_key)
+            )
+            """,
+            # Which data directory was imported, recorded once. The factory reads
+            # it to refuse ``plan_storage_mode='sqlite'`` before the migration has
+            # happened: an empty database is not an authority, it is an outage
+            # that looks like "the user has no plans".
+            """
+            CREATE TABLE plan_import_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                data_dir TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                owner_count INTEGER NOT NULL CHECK (owner_count >= 0),
+                plan_count INTEGER NOT NULL CHECK (plan_count >= 0),
+                draft_count INTEGER NOT NULL CHECK (draft_count >= 0)
+            )
+            """,
+            # Which candidate a model review actually cleared. Confirmation needs
+            # to tell "this candidate was reviewed under the current policy" from
+            # "review was off when it was produced"; the digest is the only thing
+            # that answers that for a specific candidate.
+            "ALTER TABLE plan_adjustment_sessions ADD COLUMN reviewed_digest TEXT",
+        ),
+    ),
 )

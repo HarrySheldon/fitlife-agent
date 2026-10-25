@@ -558,3 +558,39 @@ def test_identity_delete_failure_is_stable_and_preserves_atomic_identity(monkeyp
     )
 
     assert repository.get_by_id(user.user_id) is None
+
+
+class _RecordingStore:
+    def __init__(self, events: list[str], name: str) -> None:
+        self.events = events
+        self.name = name
+        self.users: list[str] = []
+
+    def delete_user_data(self, user_id: str) -> dict[str, int]:
+        self.events.append(f"{self.name}_deleted")
+        self.users.append(user_id)
+        return {}
+
+
+def test_deletion_removes_the_plan_store_and_the_adjustment_tasks():
+    # Two stores, not one: the plans are the history, the tasks are the record of
+    # what the user was trying to change. Keeping either is a deletion that did
+    # not delete, and the adjustment rows are not reachable from the plans.
+    data_dir = make_data_dir()
+    events: list[str] = []
+    repository = TrackingIdentityRepository(data_dir, events)
+    user = repository.register("plan-user", None, None, "password123", "Plan User")
+    other = repository.register("keep-plan-user", None, None, "password456", "Keep")
+    plans = _RecordingStore(events, "plans")
+    tasks = _RecordingStore(events, "plan_tasks")
+
+    DeleteAccount(data_dir, repository, plans=plans, plan_tasks=tasks).execute(
+        AuthenticatedPrincipal(user=user, token_version=0),
+        password="password123",
+        confirmation="DELETE",
+    )
+
+    assert plans.users == [user.user_id]
+    assert tasks.users == [user.user_id]
+    assert other.user_id not in plans.users + tasks.users
+    assert "plans_deleted" in events and "plan_tasks_deleted" in events
