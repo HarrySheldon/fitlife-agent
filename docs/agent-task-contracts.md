@@ -85,3 +85,17 @@ Recreating the repository/service against the same database restores the persist
 当前 manifest 有 16 个场景：中英文确定性边界、幂等/跨 owner 拒绝、缺失保存计划拒绝生成、中文快捷解释、账户语言与显式语言覆盖、超长输出拒绝、同聊天多轮、跨聊天隔离、跨标签页单槽冲突、停止清理、90 天读取窗口、聊天删除、账户删除、来源可见。模型解释类场景会产生 2 或 4 次 Mock 调用；边界与拒绝类场景仍要求零调用。故障注入（慢回答、超长回答、消息回拨）只在评估 worker 内生效，不改部署默认值。
 
 `business_task_ref={kind, task_id}` 已作为只读展示字段投影到消息元数据：仅保留受长度与字符集约束的 kind/task_id，候选、预算与权限不进入聊天；当前没有 S3 生产者，因此不构成聊天内的第二确认入口。范围及未覆盖项见[教练验收记录](evaluation/coach-conversation-acceptance.md)。
+
+## S3：计划调整任务的种子与可观察事实（2026-10-26）
+
+计划调整回放新增两项声明能力，都是数据形状，不是新工具。
+
+`InitialState.plan_constraints`（`PlanConstraintSeed`）声明任务被冻结的硬约束：年龄、身高体重、能量参数、活动水平、目标、四项宏量目标、过敏清单、已申报安全状况与生效时间。它经与设置表单相同的 `SQLiteProfileTargetRepository` 写入 profile/goal/target 三个版本，不经过预览令牌。过敏清单单独由 `seed_plan_safety` 写入，并且必须在旧数据导入之后：`activate_sqlite_plan_store` 会把账号 `user_profile.json` 的过敏清单迁成更新的一个版本，顺序反了就会让任务冻结在"已验证无过敏"上，饮食领域的过敏规则永不触发。`PlanConstraintSeed` 不含 `action_restrictions`/`available_equipment`/`session_minutes`/`forbidden_exercises`：这些字段在本部署没有任何文件权威，凭空造一个"版本"就是造权威，它们只能来自任务自身的澄清。
+
+`PlanSeeds.document` 声明一个已有的计划文档（与 `active_count`/`draft_count` 互斥，最多 64 KiB，必须有 `workout_plan` 与 `diet_plan` 根节点且不含未知顶层键），先写成文件再由 `activate_sqlite_plan_store` 走运营同一套导入。只有能 compare-and-swap head 的存储才能确认候选，所以任何要确认的场景都必须落在 SQLite 上。
+
+新增可观察事实（`observe_plan_tasks`）：`plan_tasks`、`plan_task_states`、`plan_rounds`、`plan_round_indices`、`plan_candidates`、`plan_activations`、`plan_head_revision`、`plan_history`，以及仅当账号恰好有一个任务时才给出的 `plan_domains_unchanged` 与 `plan_targets_unchanged`。轮次编号单独给出，是为了让"重连复用了已预留的轮次"可核对（`[1]`）而不是从计数推测。深比较读 `candidate_json` 与 `plans.plan_json` 的实际字节，不读同一段代码写的 digest。
+
+`to_run_record` 在 `coach_invariants` 之外新增 `plan_invariants`，随报告持久化；`worker` 另计 `plan_authorize_checks`/`plan_authorize_denials`，即 `ToolExecutor._domains` 的调用次数与拒绝次数——工具清单是静态声明，计数才是测量。
+
+`score_state` 拒绝以 `answer`/`answer_markdown`/`body`/`message`/`text`/`reason`/`summary`/`question`/`instructions`/`plan_document`/`constraints` 作为判分依据：散文不是结论。12 个场景与实测结果见[计划调整验收记录](evaluation/plan-adjustment-acceptance.md)。

@@ -29,8 +29,60 @@ class RecordSeeds(BaseModel):
 
 class PlanSeeds(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     active_count: int = Field(default=0, strict=True, ge=0, le=1)
     draft_count: int = Field(default=0, strict=True, ge=0, le=5)
+    # A plan the scenario declares, rather than one the deterministic generator
+    # produces. A patch names the exact element it replaces, so a candidate is
+    # only writable against a base whose shape the scenario already knows: with a
+    # generated plan every ``old_value`` would be a guess, and a guessed patch
+    # fails for staleness instead of for the rule under test.
+    document: dict[str, Any] | None = None
+    plan_id: str = Field(default="plan-00000001", pattern=r"^plan-[a-f0-9]{8,64}$")
+    activated_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def declared_document(self):
+        if self.document is None:
+            return self
+        if self.active_count or self.draft_count:
+            # Two sources for "the plan this account has" would make the head
+            # depend on which one happened to be written last.
+            raise ValueError("A declared plan document cannot be combined with generated plans")
+        if not isinstance(self.document.get("workout_plan"), dict) or not isinstance(
+                self.document.get("diet_plan"), dict):
+            raise ValueError("A declared plan document must hold both plan domains")
+        if set(self.document) - {"workout_plan", "diet_plan", "validation", "trace"}:
+            raise ValueError("A declared plan document has an unknown top-level field")
+        if len(json.dumps(self.document, ensure_ascii=False, allow_nan=False)) > 65536:
+            raise ValueError("A declared plan document exceeds the maximum size")
+        return self
+
+
+class PlanConstraintSeed(BaseModel):
+    """The versioned hard constraints a plan task is created against.
+
+    Written through the same repository the setup form writes, because the whole
+    safety argument of a plan task is that the values it was frozen with can be
+    re-read from a version at confirmation time. Seeding them anywhere else would
+    measure a deployment that cannot confirm anything.
+    """
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    age: int = Field(ge=18, le=100)
+    height_cm: float = Field(ge=120, le=230)
+    weight_kg: float = Field(ge=30, le=300)
+    energy_parameter: Literal["male", "female", "neutral"] = "neutral"
+    activity_level: Literal["sedentary", "light", "moderate", "high"] = "moderate"
+    goal: Literal["fat_loss", "muscle_gain", "maintenance"] = "fat_loss"
+    calories: int = Field(ge=800, le=6000)
+    carbs: int = Field(ge=0, le=1000)
+    protein: int = Field(ge=20, le=400)
+    fat: int = Field(ge=10, le=300)
+    allergies_or_restrictions: list[str] = Field(default_factory=list, max_length=8)
+    safety_conditions: list[SafetyCondition] = Field(default_factory=list, max_length=4)
+    effective_from: AwareDatetime
 
 
 class AuthorizationSeeds(BaseModel):
@@ -145,6 +197,10 @@ class InitialState(BaseModel):
     catalog: CatalogSeed | None = None
     records: RecordSeeds = Field(default_factory=RecordSeeds)
     plans: PlanSeeds = Field(default_factory=PlanSeeds)
+    # The versioned profile, goal, target and allergy rows a plan task reads its
+    # hard constraints from. Separate from ``profile`` on purpose: that one drives
+    # the setup form's own endpoint, and a plan scenario is not about the form.
+    plan_constraints: PlanConstraintSeed | None = None
     authorization: AuthorizationSeeds = Field(default_factory=AuthorizationSeeds)
     faults: FaultSeeds = Field(default_factory=FaultSeeds)
 

@@ -2,10 +2,20 @@
 
 A missing field fails and is named; it is never coerced to None so that two absent
 fields cannot be "equal". A keyword appearing anywhere is not success.
+
+Nor is prose. A model that says "两个部分都已通过校验" has said nothing a validator
+confirmed, so a scenario that scored on that sentence would be measuring fluency
+rather than the product. The keys below are refused outright.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+# Keys that only ever hold model text or user text.
+_PROSE_KEYS = frozenset({
+    "answer", "answer_markdown", "body", "message", "text", "reason", "summary",
+    "question", "instructions", "plan_document", "constraints",
+})
 
 
 @dataclass(frozen=True)
@@ -15,6 +25,11 @@ class Score:
 
 
 def score_state(expected: dict, actual: dict) -> Score:
+    prose = _PROSE_KEYS & set(expected)
+    if prose:
+        # Not a product result: a scenario is trying to score on text, and the
+        # only honest answer is to refuse the scenario.
+        raise ValueError(f"Scenario may not score on prose: {sorted(prose)}")
     failed = tuple(
         key for key, value in expected.items()
         if key not in actual or not _exact_equal(value, actual[key])

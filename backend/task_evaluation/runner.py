@@ -18,6 +18,64 @@ from dataclasses import replace
 
 from backend.task_evaluation.scorers import score_state
 
+# The closed vocabulary of response metadata a scenario may observe. See
+# ``_observe_response`` for why the absence of a pattern is the point.
+PLAN_DOMAINS = frozenset({"training", "diet"})
+PLAN_TASK_STATES = frozenset({
+    "collecting", "awaiting_scope_permission", "generating", "repairing",
+    "awaiting_confirmation", "awaiting_user_decision", "activated", "cancelled",
+    "expired",
+})
+_OBSERVABLE_INTS = (
+    r"data\.version",
+    r"data\.task\.version",
+    r"data\.base_head_revision",
+    r"data\.task\.base_head_revision",
+    r"data\.task\.repair_rounds",
+    r"data\.task\.rounds_remaining",
+    r"data\.task\.candidate\.round",
+    r"data\.plan\.head_revision",
+    r"data\.remaining_draft_version",
+    r"data\.(?:receipt\.)?trace\.(?:decision_count|tool_attempts|tool_executions|tool_denials|cache_hits|protocol_failures)",
+    r"data\.messages\.length",
+    r"data\.payload\.interaction\.clarification_rounds",
+    r"data\.payload\.interaction\.items\.[0-9]{1,3}\.revision",
+    r"data\.(?:task\.)?(?:failed_domains|read_domains|change_domains|violations|missing_constraints)\.length",
+)
+_OBSERVABLE_BOOLS = (r"data\.replayed",)
+_OBSERVABLE_DIGESTS = (r"data\.(?:task\.)?candidate\.digest",)
+_OBSERVABLE_DOMAIN_LISTS = (r"data\.(?:task\.)?(?:failed_domains|read_domains|change_domains)",)
+_OBSERVABLE_ENUMS = {
+    r"data\.status": frozenset({'queued', 'running', 'awaiting_user', 'succeeded', 'failed',
+                                'cancelled', 'timed_out', 'interrupted', 'expired'}),
+    r"data\.state": PLAN_TASK_STATES,
+    r"data\.task\.state": PLAN_TASK_STATES,
+    r"data\.receipt\.context\.language": frozenset({'zh-CN', 'en-US'}),
+    r"data\.payload\.interaction\.status": frozenset({'collecting', 'awaiting_clarification',
+        'awaiting_confirmation', 'partially_saved', 'completed', 'cancelled', 'expired'}),
+    r"data\.payload\.interaction\.items\.[0-9]{1,3}\.state": frozenset({'needs_clarification',
+        'ready', 'saved', 'discarded'}),
+    r"data\.(item_commits|commits)\.[0-9]{1,3}\.record_state": frozenset({'unchanged', 'changed', 'deleted'}),
+}
+
+# What a plan-task record may carry out of an observation. Bounded facts only:
+# counts, revisions, states and the two comparison verdicts.
+_PLAN_INVARIANT_KEYS = frozenset({
+    "plan_tasks", "plan_task_states", "plan_rounds", "plan_round_indices",
+    "plan_candidates", "plan_activations", "plan_head_revision", "plan_history",
+    "plan_domains_unchanged", "plan_targets_unchanged",
+    "plan_authorize_checks", "plan_authorize_denials",
+})
+
+
+def _bounded_plan_fact(value) -> bool:
+    """A plan fact that is safe to print: a number, a verdict or a short list."""
+    if type(value) is bool or (type(value) is int and 0 <= value <= 1_000_000):
+        return True
+    return (isinstance(value, list) and len(value) <= 8 and all(
+        (isinstance(item, str) and 1 <= len(item) <= 24)
+        or (type(item) is int and 0 <= item <= 1_000_000) for item in value))
+
 
 class CaseError(Exception):
     """A scenario cannot be executed as written - a script bug, not a product result."""
@@ -144,34 +202,43 @@ def _response_value(payload, path):
 
 
 def _observe_response(payload, mapping):
-    """Only closed business metadata can enter a desensitized report."""
+    """Only closed business metadata can enter a desensitized report.
+
+    Each observable path names the only kind of value it may carry. There is no
+    entry for an answer, a plan document, a constraint value or an arbitrary JSON
+    path, so a scenario cannot observe one by spelling its path -- and a report
+    cannot end up holding a copy of the user's plan under a weaker retention rule
+    than the database it came from.
+    """
     import re
-    integers = (r"data\.(version|remaining_draft_version)",
-                r"data\.(?:receipt\.)?trace\.(?:decision_count|tool_attempts|tool_executions|tool_denials|cache_hits|protocol_failures)",
-                r"data\.messages\.length",
-                r"data\.payload\.interaction\.clarification_rounds",
-                r"data\.payload\.interaction\.items\.[0-9]{1,3}\.revision")
-    enums = {
-        r"data\.status": {'queued', 'running', 'awaiting_user', 'succeeded', 'failed', 'cancelled', 'timed_out', 'interrupted', 'expired'},
-        r"data\.receipt\.context\.language": {'zh-CN', 'en-US'},
-        r"data\.payload\.interaction\.status": {'collecting', 'awaiting_clarification', 'awaiting_confirmation', 'partially_saved', 'completed', 'cancelled', 'expired'},
-        r"data\.payload\.interaction\.items\.[0-9]{1,3}\.state": {'needs_clarification', 'ready', 'saved', 'discarded'},
-        r"data\.(item_commits|commits)\.[0-9]{1,3}\.record_state": {'unchanged', 'changed', 'deleted'},
-    }
     result = {}
     for key, path in mapping.items():
         value = _response_value(payload, path)
-        if any(re.fullmatch(pattern, path) for pattern in integers):
+        if _matches(path, _OBSERVABLE_INTS):
             valid = type(value) is int and 0 <= value <= 1_000_000
-        elif path == 'data.replayed':
+        elif _matches(path, _OBSERVABLE_BOOLS):
             valid = type(value) is bool
+        elif _matches(path, _OBSERVABLE_DIGESTS):
+            # A digest is an identity, not content: it says two candidates are
+            # the same candidate without saying what either contains.
+            valid = isinstance(value, str) and re.fullmatch(r"[0-9a-f]{8,128}", value) is not None
+        elif _matches(path, _OBSERVABLE_DOMAIN_LISTS):
+            valid = (isinstance(value, list) and len(value) <= 2
+                     and all(isinstance(item, str) and item in PLAN_DOMAINS for item in value)
+                     and value == sorted(set(value)))
         else:
-            allowed = next((values for pattern, values in enums.items() if re.fullmatch(pattern, path)), None)
+            allowed = next((values for pattern, values in _OBSERVABLE_ENUMS.items()
+                            if re.fullmatch(pattern, path)), None)
             valid = allowed is not None and isinstance(value, str) and value in allowed
         if not valid:
             raise CaseError("Response observation is not allowed metadata")
         result[key] = value
     return result
+
+
+def _matches(path, patterns):
+    import re
+    return any(re.fullmatch(pattern, path) for pattern in patterns)
 
 
 def execute_scenario(scenario, client, *, headers_factory, observer=None, before_step=None, progress_metrics=None, supported_capabilities=frozenset()) -> CaseResult:
@@ -447,7 +514,9 @@ def to_run_record(result: CaseResult, *, mode: str, git_sha: str | None = None,
                 if key in {"coach_messages", "coach_turns", "coach_successes", "coach_cancelled",
                            "coach_failed", "coach_slot_holders", "coach_unapproved_answers",
                            "coach_boundary_replies", "coach_messages_with_sources", "gateway_attempts"}
-                and type(value) is int and value >= 0}},
+                and type(value) is int and value >= 0},
+            "plan_invariants": {key: value for key, value in result.observed.items()
+                if key in _PLAN_INVARIANT_KEYS and _bounded_plan_fact(value)}},
         error_class=None if passed else "cleanup_failed" if result.metrics.get("cleanup_status") == "failed" else result.status,
     )
 

@@ -3,6 +3,103 @@ import sqlite3
 import json
 from pathlib import Path
 
+# The two roots a plan patch may edit, in the order the product names them.
+PLAN_DOMAINS = (("training", "workout_plan"), ("diet", "diet_plan"))
+# Fields a candidate is forbidden to move. Comparing them is how a report can say
+# "the target did not change" without quoting the plan.
+PROTECTED_FIELDS = (
+    ("diet_plan", "daily_calorie_target"),
+    ("diet_plan", "daily_protein_target"),
+    ("workout_plan", "weekly_training_days"),
+    ("workout_plan", "rest_days"),
+)
+
+
+def observe_plan_tasks(connection, tables, user_id):
+    """Bounded facts about this account's plan task, never its documents.
+
+    The evidence a plan task produces is what persisted: how many rounds were
+    claimed, how many candidates survived, which head was written, and whether the
+    domain that already passed was left byte-identical. None of that needs the plan
+    text, and a report that carried the text would be a second copy of the user's
+    plan with a weaker retention rule than the one it came from.
+
+    Task-scoped facts are only reported when the account has exactly one task. With
+    zero or several, "the state of the task" is not a fact, and inventing one (the
+    newest? the first?) is how a scenario passes for the wrong reason.
+    """
+    facts = {}
+    if "plan_adjustment_sessions" not in tables:
+        return facts
+    tasks = connection.execute(
+        "SELECT task_id, state, repair_rounds, base_plan_id, candidate_id "
+        "FROM plan_adjustment_sessions WHERE user_id=? ORDER BY created_at, task_id",
+        (user_id,)).fetchall()
+    facts["plan_tasks"] = len(tasks)
+    facts["plan_task_states"] = sorted(row[1] for row in tasks)
+    if "plan_repair_rounds" in tables:
+        facts["plan_rounds"] = connection.execute(
+            "SELECT COUNT(*) FROM plan_repair_rounds r JOIN plan_adjustment_sessions s "
+            "ON s.task_id = r.task_id WHERE s.user_id=?", (user_id,)).fetchone()[0]
+        # Which rounds were claimed, in order. Two candidates and one index means
+        # the second used the round the first had already reserved -- the fact a
+        # reconnect has to preserve and a "claim a fresh round on retry" bug would
+        # turn into ``[1, 2]``.
+        facts["plan_round_indices"] = sorted(row[0] for row in connection.execute(
+            "SELECT r.round_index FROM plan_repair_rounds r JOIN plan_adjustment_sessions s "
+            "ON s.task_id = r.task_id WHERE s.user_id=?", (user_id,)))
+    if "plan_candidate_submissions" in tables:
+        facts["plan_candidates"] = connection.execute(
+            "SELECT COUNT(*) FROM plan_candidate_submissions c JOIN plan_adjustment_sessions s "
+            "ON s.task_id = c.task_id WHERE s.user_id=?", (user_id,)).fetchone()[0]
+    if "plan_activation_receipts" in tables:
+        facts["plan_activations"] = connection.execute(
+            "SELECT COUNT(*) FROM plan_activation_receipts WHERE user_id=?",
+            (user_id,)).fetchone()[0]
+    if "plan_heads" in tables:
+        row = connection.execute(
+            "SELECT revision FROM plan_heads WHERE user_id=?", (user_id,)).fetchone()
+        facts["plan_head_revision"] = 0 if row is None else row[0]
+    if "plans" in tables:
+        facts["plan_history"] = connection.execute(
+            "SELECT COUNT(*) FROM plans WHERE user_id=?", (user_id,)).fetchone()[0]
+    if len(tasks) == 1:
+        facts.update(_task_facts(connection, tables, user_id, tasks[0]))
+    return facts
+
+
+def _task_facts(connection, tables, user_id, task):
+    """The comparison facts a single task can answer about itself."""
+    facts = {}
+    documents = []
+    if "plan_candidate_submissions" in tables:
+        documents = [
+            (row[0], json.loads(row[1]))
+            for row in connection.execute(
+                "SELECT round_index, candidate_json FROM plan_candidate_submissions "
+                "WHERE task_id=? AND candidate_json IS NOT NULL ORDER BY round_index DESC LIMIT 2",
+                (task[0],))
+        ]
+    if len(documents) == 2:
+        # A deep comparison of the two most recent candidates, domain by domain.
+        # This is the claim "the round that fixed diet did not rewrite training",
+        # checked against the stored bytes instead of against the digest the same
+        # code wrote.
+        newer, older = documents[0][1], documents[1][1]
+        facts["plan_domains_unchanged"] = sorted(
+            domain for domain, root in PLAN_DOMAINS if newer.get(root) == older.get(root))
+    if documents and "plans" in tables:
+        row = connection.execute(
+            "SELECT plan_json FROM plans WHERE user_id=? AND plan_id=?",
+            (user_id, task[3])).fetchone()
+        if row is not None:
+            base = json.loads(row[0])
+            candidate = documents[0][1]
+            facts["plan_targets_unchanged"] = all(
+                (base.get(root) or {}).get(field) == (candidate.get(root) or {}).get(field)
+                for root, field in PROTECTED_FIELDS)
+    return facts
+
 
 def observe_database(path, *, actors=None, data_dir=None):
     path = Path(path).resolve()
@@ -95,6 +192,8 @@ def observe_database(path, *, actors=None, data_dir=None):
                 if runtime_path.exists():
                     with sqlite3.connect(runtime_path.resolve().as_uri() + "?mode=ro", uri=True) as runtime:
                         result["successful_runs"] = runtime.execute("SELECT COUNT(*) FROM agent_runs WHERE user_id=? AND status='succeeded'", (user_id,)).fetchone()[0]
+            if user_id is not None:
+                result.update(observe_plan_tasks(connection, tables, user_id))
             return result
         if actors is None:
             return observe()

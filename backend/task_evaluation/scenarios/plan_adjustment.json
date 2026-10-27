@@ -1,0 +1,4480 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "plan-task-training-only",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "燕麦粥",
+                "鸡蛋三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "training"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training"
+            ],
+            "change_domains": [
+              "training"
+            ],
+            "instructions": "把训练强度调低一点"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "把训练强度调低一点"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          },
+          "observe": {
+            "missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "把训练强度调低一点"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version",
+            "digest": "data.task.candidate.digest",
+            "head": "data.task.base_head_revision"
+          },
+          "observe": {
+            "state": "data.task.state",
+            "rounds": "data.task.repair_rounds",
+            "failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": {
+              "$ref": "head"
+            },
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 200,
+          "observe": {
+            "confirmed_head": "data.plan.head_revision",
+            "replayed": "data.replayed"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "missing": 2,
+        "state": "awaiting_confirmation",
+        "rounds": 0,
+        "failed": [],
+        "confirmed_head": 2,
+        "replayed": false,
+        "plan_tasks": 1,
+        "plan_task_states": [
+          "activated"
+        ],
+        "plan_rounds": 0,
+        "plan_candidates": 1,
+        "plan_activations": 1,
+        "plan_head_revision": 2,
+        "plan_history": 2,
+        "plan_targets_unchanged": true,
+        "plan_authorize_denials": 0,
+        "gateway_attempts": 5
+      }
+    },
+    {
+      "id": "plan-task-diet-only",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "medium",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "diet"
+            ],
+            "change_domains": [
+              "diet"
+            ],
+            "instructions": "把含花生的餐食换掉"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          },
+          "observe": {
+            "missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version",
+            "digest": "data.task.candidate.digest",
+            "head": "data.task.base_head_revision"
+          },
+          "observe": {
+            "state": "data.task.state",
+            "rounds": "data.task.repair_rounds",
+            "failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": {
+              "$ref": "head"
+            },
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 200,
+          "observe": {
+            "confirmed_head": "data.plan.head_revision"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "missing": 2,
+        "state": "awaiting_confirmation",
+        "rounds": 0,
+        "failed": [],
+        "confirmed_head": 2,
+        "plan_candidates": 1,
+        "plan_rounds": 0,
+        "plan_activations": 1,
+        "plan_head_revision": 2,
+        "plan_history": 2,
+        "gateway_attempts": 5
+      }
+    },
+    {
+      "id": "plan-task-cross-domain-refused",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "燕麦粥",
+                "鸡蛋三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "training"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training"
+            ],
+            "change_domains": [
+              "training"
+            ],
+            "instructions": "把训练强度调低一点"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "把训练强度调低一点"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version"
+          },
+          "observe": {
+            "failed_state": "data.task.state",
+            "failed_rounds": "data.task.repair_rounds",
+            "failed_domains": "data.task.failed_domains",
+            "violations": "data.task.violations.length"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "failed_state": "repairing",
+        "failed_rounds": 1,
+        "failed_domains": [
+          "diet"
+        ],
+        "violations": 1,
+        "plan_candidates": 1,
+        "plan_rounds": 1,
+        "plan_round_indices": [
+          1
+        ],
+        "plan_activations": 0,
+        "plan_head_revision": 1,
+        "plan_history": 1,
+        "gateway_attempts": 5
+      }
+    },
+    {
+      "id": "plan-task-read-only-no-grant",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": []
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training"
+            ],
+            "instructions": "先看看现在练得怎么样"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "先看看现在练得怎么样"
+          },
+          "expected_status": 409
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/scope",
+          "headers": {
+            "Idempotency-Key": "scope-deny"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training"
+            ],
+            "decision": "deny"
+          },
+          "capture": {
+            "v_denied": "data.version"
+          },
+          "observe": {
+            "denied_state": "data.state"
+          }
+        }
+      ],
+      "expected": {
+        "start_state": "collecting",
+        "denied_state": "collecting",
+        "plan_tasks": 1,
+        "plan_task_states": [
+          "collecting"
+        ],
+        "plan_candidates": 0,
+        "plan_rounds": 0,
+        "plan_head_revision": 1,
+        "plan_history": 1,
+        "gateway_attempts": 0
+      }
+    },
+    {
+      "id": "plan-task-first-candidate-passes",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "training",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training",
+              "diet"
+            ],
+            "instructions": "训练和饮食一起调整"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version",
+            "digest": "data.task.candidate.digest",
+            "head": "data.task.base_head_revision"
+          },
+          "observe": {
+            "state": "data.task.state",
+            "rounds": "data.task.repair_rounds",
+            "failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": {
+              "$ref": "head"
+            },
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 200,
+          "observe": {
+            "confirmed_head": "data.plan.head_revision"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "state": "awaiting_confirmation",
+        "rounds": 0,
+        "failed": [],
+        "confirmed_head": 2,
+        "plan_candidates": 1,
+        "plan_rounds": 0,
+        "plan_activations": 1,
+        "plan_head_revision": 2,
+        "plan_history": 2,
+        "plan_targets_unchanged": true,
+        "gateway_attempts": 5
+      }
+    },
+    {
+      "id": "plan-task-two-rounds",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "training",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c2",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c3",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training",
+              "diet"
+            ],
+            "instructions": "训练和饮食一起调整"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v2": "data.task.version"
+          },
+          "observe": {
+            "r0_state": "data.task.state",
+            "r0_failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-3"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v2"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v3": "data.task.version"
+          },
+          "observe": {
+            "r1_failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-4"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v3"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version",
+            "digest": "data.task.candidate.digest",
+            "head": "data.task.base_head_revision"
+          },
+          "observe": {
+            "state": "data.task.state",
+            "rounds": "data.task.repair_rounds",
+            "failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": {
+              "$ref": "head"
+            },
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 200,
+          "observe": {
+            "confirmed_head": "data.plan.head_revision"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "r0_state": "repairing",
+        "r0_failed": [
+          "diet",
+          "training"
+        ],
+        "r1_failed": [
+          "diet"
+        ],
+        "state": "awaiting_confirmation",
+        "rounds": 2,
+        "failed": [],
+        "confirmed_head": 2,
+        "plan_candidates": 3,
+        "plan_rounds": 2,
+        "plan_round_indices": [
+          1,
+          2
+        ],
+        "plan_domains_unchanged": [
+          "training"
+        ],
+        "plan_activations": 1,
+        "plan_head_revision": 2,
+        "plan_history": 2,
+        "gateway_attempts": 9
+      }
+    },
+    {
+      "id": "plan-task-rounds-exhausted",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "training",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c2",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c3",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "花生酱吐司",
+                    "reason": "换成吐司",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training",
+              "diet"
+            ],
+            "instructions": "训练和饮食一起调整"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v2": "data.task.version"
+          },
+          "observe": {
+            "r0_failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-3"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v2"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v3": "data.task.version"
+          },
+          "observe": {
+            "r1_failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-4"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v3"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v4": "data.task.version"
+          },
+          "observe": {
+            "r2_state": "data.task.state",
+            "r2_failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-5"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v4"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "observe": {
+            "exhausted": "data.task.state",
+            "exhausted_rounds": "data.task.repair_rounds"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "r0_failed": [
+          "diet",
+          "training"
+        ],
+        "r1_failed": [
+          "diet"
+        ],
+        "r2_state": "repairing",
+        "r2_failed": [
+          "diet"
+        ],
+        "exhausted": "awaiting_user_decision",
+        "exhausted_rounds": 2,
+        "plan_task_states": [
+          "awaiting_user_decision"
+        ],
+        "plan_candidates": 3,
+        "plan_rounds": 2,
+        "plan_round_indices": [
+          1,
+          2
+        ],
+        "plan_activations": 0,
+        "plan_head_revision": 1,
+        "plan_history": 1,
+        "plan_targets_unchanged": true,
+        "gateway_attempts": 9
+      }
+    },
+    {
+      "id": "plan-task-goal-conflict-asks",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "medium",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 1000,
+              "daily_protein_target": 140,
+              "meals": [
+                "燕麦粥",
+                "鸡蛋三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "燕麦粥",
+                    "new_value": "燕麦粥配鸡蛋",
+                    "reason": "增加蛋白质",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "鸡蛋三明治",
+                    "new_value": "鸡蛋全麦三明治",
+                    "reason": "换成全麦",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c2",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      2
+                    ],
+                    "old_value": "鸡胸沙拉",
+                    "new_value": "鸡胸沙拉配糙米",
+                    "reason": "增加主食",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training",
+              "diet"
+            ],
+            "instructions": "把饮食再优化一下"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "把饮食再优化一下"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v2": "data.task.version"
+          },
+          "observe": {
+            "r0_state": "data.task.state",
+            "r0_failed": "data.task.failed_domains",
+            "r0_violations": "data.task.violations.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v2"
+            },
+            "instructions": "把饮食再优化一下"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v3": "data.task.version"
+          },
+          "observe": {
+            "r1_failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-3"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v3"
+            },
+            "instructions": "把饮食再优化一下"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v4": "data.task.version"
+          },
+          "observe": {
+            "r2_state": "data.task.state"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-4"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v4"
+            },
+            "instructions": "把饮食再优化一下"
+          },
+          "expected_status": 200,
+          "observe": {
+            "exhausted": "data.task.state",
+            "exhausted_rounds": "data.task.repair_rounds"
+          }
+        }
+      ],
+      "expected": {
+        "r0_state": "repairing",
+        "r0_failed": [
+          "diet"
+        ],
+        "r0_violations": 1,
+        "r1_failed": [
+          "diet"
+        ],
+        "r2_state": "repairing",
+        "exhausted": "awaiting_user_decision",
+        "exhausted_rounds": 2,
+        "plan_task_states": [
+          "awaiting_user_decision"
+        ],
+        "plan_candidates": 3,
+        "plan_rounds": 2,
+        "plan_round_indices": [
+          1,
+          2
+        ],
+        "plan_activations": 0,
+        "plan_head_revision": 1,
+        "plan_history": 1,
+        "plan_targets_unchanged": true,
+        "gateway_attempts": 7
+      }
+    },
+    {
+      "id": "plan-task-stale-head-refused",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "medium",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training",
+              "diet"
+            ],
+            "instructions": "把含花生的餐食换掉"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version",
+            "digest": "data.task.candidate.digest",
+            "head": "data.task.base_head_revision"
+          },
+          "observe": {
+            "state": "data.task.state",
+            "rounds": "data.task.repair_rounds",
+            "failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm-stale"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": 2,
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 409
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm-right"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": {
+              "$ref": "head"
+            },
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 200,
+          "observe": {
+            "confirmed_head": "data.plan.head_revision"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "state": "awaiting_confirmation",
+        "rounds": 0,
+        "failed": [],
+        "confirmed_head": 2,
+        "plan_candidates": 1,
+        "plan_activations": 1,
+        "plan_head_revision": 2,
+        "plan_history": 2,
+        "gateway_attempts": 5
+      }
+    },
+    {
+      "id": "plan-task-confirm-replay",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "medium",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training",
+              "diet"
+            ],
+            "instructions": "把含花生的餐食换掉"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version",
+            "digest": "data.task.candidate.digest",
+            "head": "data.task.base_head_revision"
+          },
+          "observe": {
+            "state": "data.task.state",
+            "rounds": "data.task.repair_rounds",
+            "failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm-once"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": {
+              "$ref": "head"
+            },
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 200,
+          "observe": {
+            "first_head": "data.plan.head_revision",
+            "first_replayed": "data.replayed"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "confirm-once"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": {
+              "$ref": "head"
+            },
+            "candidate_digest": {
+              "$ref": "digest"
+            }
+          },
+          "expected_status": 200,
+          "observe": {
+            "second_head": "data.plan.head_revision",
+            "second_replayed": "data.replayed"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "state": "awaiting_confirmation",
+        "rounds": 0,
+        "first_head": 2,
+        "first_replayed": false,
+        "second_head": 2,
+        "second_replayed": true,
+        "plan_candidates": 1,
+        "plan_activations": 1,
+        "plan_head_revision": 2,
+        "plan_history": 2,
+        "gateway_attempts": 5
+      }
+    },
+    {
+      "id": "plan-task-same-round-recovery",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "花生燕麦粥",
+                "花生酱三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": []
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "training",
+                  "diet"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c2",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  },
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      1
+                    ],
+                    "old_value": "花生酱三明治",
+                    "new_value": "鸡蛋三明治",
+                    "reason": "替换含花生的三明治",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training",
+              "diet"
+            ],
+            "change_domains": [
+              "training",
+              "diet"
+            ],
+            "instructions": "训练和饮食一起调整"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v2": "data.task.version"
+          },
+          "observe": {
+            "r0_failed": "data.task.failed_domains"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-3"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v2"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v3": "data.task.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-4"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v3"
+            },
+            "instructions": "训练和饮食一起调整"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version",
+            "digest": "data.task.candidate.digest",
+            "head": "data.task.base_head_revision"
+          },
+          "observe": {
+            "state": "data.task.state",
+            "rounds": "data.task.repair_rounds",
+            "failed": "data.task.failed_domains"
+          }
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "r0_failed": [
+          "diet",
+          "training"
+        ],
+        "state": "awaiting_confirmation",
+        "rounds": 1,
+        "failed": [],
+        "plan_candidates": 2,
+        "plan_rounds": 1,
+        "plan_round_indices": [
+          1
+        ],
+        "plan_activations": 0,
+        "plan_head_revision": 1,
+        "plan_history": 1,
+        "gateway_attempts": 8
+      }
+    },
+    {
+      "id": "plan-task-unauthorized-and-forged-confirm",
+      "version": 1,
+      "requires": [
+        "plan_adjustment"
+      ],
+      "initial_state": {
+        "plan_constraints": {
+          "age": 30,
+          "height_cm": 175.0,
+          "weight_kg": 70.0,
+          "goal": "fat_loss",
+          "calories": 2000,
+          "carbs": 250,
+          "protein": 140,
+          "fat": 60,
+          "allergies_or_restrictions": [
+            "花生"
+          ],
+          "effective_from": "2026-01-01T00:00:00Z"
+        },
+        "plans": {
+          "document": {
+            "workout_plan": {
+              "summary": "每周四练",
+              "weekly_training_days": 4,
+              "rest_days": [
+                "周日"
+              ],
+              "days": [
+                {
+                  "day": "周一",
+                  "type": "strength",
+                  "focus": "下肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "深蹲",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周二",
+                  "type": "strength",
+                  "focus": "上肢",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "卧推",
+                      "sets": 4,
+                      "reps": 8
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周三",
+                  "type": "strength",
+                  "focus": "全身",
+                  "intensity": "high",
+                  "exercises": [
+                    {
+                      "name": "硬拉",
+                      "sets": 3,
+                      "reps": 6
+                    }
+                  ],
+                  "duration_min": 50
+                },
+                {
+                  "day": "周四",
+                  "type": "cardio",
+                  "focus": "有氧",
+                  "intensity": "low",
+                  "exercises": [
+                    {
+                      "name": "划船",
+                      "sets": 1,
+                      "reps": 1,
+                      "duration_min": 20
+                    }
+                  ],
+                  "duration_min": 30
+                }
+              ]
+            },
+            "diet_plan": {
+              "daily_calorie_target": 2000,
+              "daily_protein_target": 140,
+              "meals": [
+                "燕麦粥",
+                "鸡蛋三明治",
+                "鸡胸沙拉"
+              ]
+            },
+            "validation": {
+              "passed": false,
+              "warnings": [],
+              "violations": [],
+              "repair_suggestions": []
+            },
+            "trace": {}
+          },
+          "plan_id": "plan-00000001"
+        },
+        "authorization": {
+          "additional_users": [
+            "other"
+          ]
+        },
+        "faults": {
+          "unified_decisions": [
+            {
+              "kind": "call",
+              "call_id": "read",
+              "tool": "plan.read_base",
+              "arguments": {
+                "fields": [
+                  "meta",
+                  "constraints",
+                  "training"
+                ]
+              }
+            },
+            {
+              "kind": "call",
+              "call_id": "c0",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "training",
+                    "path": [
+                      "workout_plan",
+                      "days",
+                      2
+                    ],
+                    "old_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "high",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "new_value": {
+                      "day": "周三",
+                      "type": "strength",
+                      "focus": "全身",
+                      "intensity": "medium",
+                      "exercises": [
+                        {
+                          "name": "硬拉",
+                          "sets": 3,
+                          "reps": 6
+                        }
+                      ],
+                      "duration_min": 50
+                    },
+                    "reason": "在高强度日之间插入中等强度",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            },
+            {
+              "kind": "call",
+              "call_id": "c1",
+              "tool": "plan.submit_candidate",
+              "arguments": {
+                "patches": [
+                  {
+                    "domain": "diet",
+                    "path": [
+                      "diet_plan",
+                      "meals",
+                      0
+                    ],
+                    "old_value": "花生燕麦粥",
+                    "new_value": "燕麦粥",
+                    "reason": "去掉含花生的餐食",
+                    "evidence_refs": []
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "final",
+              "body": "这一版已经按你的要求处理，等你确认后才会生效。"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks",
+          "headers": {
+            "Idempotency-Key": "create"
+          },
+          "body": {
+            "base_plan_id": "plan-00000001",
+            "read_domains": [
+              "training"
+            ],
+            "change_domains": [
+              "training"
+            ],
+            "instructions": "把训练强度调低一点"
+          },
+          "capture": {
+            "task": "data.task_id",
+            "v1": "data.version"
+          },
+          "observe": {
+            "start_state": "data.state",
+            "start_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "actor": "other",
+          "expected_status": 404
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-1"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v1"
+            },
+            "instructions": "把训练强度调低一点"
+          },
+          "expected_status": 200,
+          "observe": {
+            "stopped": "data.task.state"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/plan-adjustment-tasks/{task}",
+          "capture": {
+            "v_stop": "data.version"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/answers",
+          "headers": {
+            "Idempotency-Key": "answer"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_stop"
+            },
+            "answers": {
+              "action_restrictions": [],
+              "available_equipment": [
+                "barbell",
+                "machine",
+                "bodyweight",
+                "dumbbell",
+                "pull-up bar",
+                "cable"
+              ]
+            }
+          },
+          "capture": {
+            "v_answer": "data.version"
+          },
+          "observe": {
+            "answer_missing": "data.missing_constraints.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/execute",
+          "headers": {
+            "Idempotency-Key": "exec-2"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_answer"
+            },
+            "instructions": "把含花生的餐食换掉"
+          },
+          "expected_status": 200,
+          "capture": {
+            "v_after": "data.task.version"
+          },
+          "observe": {
+            "failed_state": "data.task.state",
+            "failed_rounds": "data.task.repair_rounds",
+            "failed_domains": "data.task.failed_domains",
+            "violations": "data.task.violations.length"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/plan-adjustment-tasks/{task}/confirm",
+          "headers": {
+            "Idempotency-Key": "forged-confirm"
+          },
+          "body": {
+            "expected_version": {
+              "$ref": "v_after"
+            },
+            "expected_head_revision": 1,
+            "candidate_digest": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "expected_status": 409
+        }
+      ],
+      "expected": {
+        "stopped": "awaiting_user_decision",
+        "failed_state": "repairing",
+        "failed_rounds": 1,
+        "failed_domains": [
+          "diet"
+        ],
+        "violations": 1,
+        "plan_candidates": 1,
+        "plan_rounds": 1,
+        "plan_activations": 0,
+        "plan_head_revision": 1,
+        "plan_history": 1,
+        "gateway_attempts": 5
+      }
+    }
+  ]
+}

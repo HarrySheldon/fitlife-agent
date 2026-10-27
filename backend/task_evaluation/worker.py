@@ -4,6 +4,30 @@ import time
 from pathlib import Path
 
 
+def _install_authorization_spy(counter):
+    """Count the authorization checks a plan round makes, and any denial.
+
+    The claim under test is not "the tool list looks closed" but "every decision
+    was re-authorized before it was forwarded, and a revocation stopped the round".
+    A counter is the only form of that claim a report can carry: the count is
+    exact, and a denial shows up as a round that produced nothing rather than as
+    prose about being blocked.
+    """
+    from backend.agent.tools.executor import ToolExecutor
+    from backend.api import plan_adjustment as plan_adjustment_api
+
+    class CountingExecutor(ToolExecutor):
+        def _domains(self):
+            counter["checks"] += 1
+            try:
+                return super()._domains()
+            except PermissionError:
+                counter["denied"] += 1
+                raise
+
+    plan_adjustment_api.ToolExecutor = CountingExecutor
+
+
 def collect_metrics(root, fixed, gateway, progress):
     from backend.task_evaluation.metrics import runtime_metrics
     from backend.task_evaluation.measurements import config_fingerprints
@@ -30,6 +54,9 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
     fixed = None
     root = Path(temporary)
     progress = {"cache_state": cache_state, "strategy": strategy}
+    # Exact counts of the authorization checks a plan round made. A closed tool
+    # list is a static claim; this is the measurement of it.
+    authorization = {"checks": 0, "denied": 0}
     from backend.task_evaluation.runner import CaseResult, CaseError, NetworkAttempt, execute_scenario
     from backend.task_evaluation.contracts import Scenario
     scenario = Scenario.model_validate(declaration)
@@ -59,11 +86,14 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
             install_network_guard()
             from backend.main import create_app
             from backend.agent import graph
-            from backend.api import plan, smart_entry
+            from backend.api import plan, plan_adjustment, smart_entry
             from backend.task_evaluation.budget import MeteredMockGateway, RemoteBudget
+            scripted = ('unified_coach' in scenario.requires or 'plan_adjustment' in scenario.requires)
             gateway = MeteredMockGateway(RemoteBudget(channel),
-                unified_decisions=scenario.initial_state.faults.unified_decisions if 'unified_coach' in scenario.requires else None)
+                unified_decisions=scenario.initial_state.faults.unified_decisions if scripted else None)
             faults = scenario.initial_state.faults
+            if 'plan_adjustment' in scenario.requires:
+                _install_authorization_spy(authorization)
             if 'unified_coach' in scenario.requires:
                 if faults.unified_revoke_at_call:
                     from backend.agent import coach_composition
@@ -102,6 +132,11 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                 gateway.write_answer = faulted_write
             graph._resolve_gateway = lambda *args, **kwargs: gateway
             plan.resolve_user_model_gateway = lambda *args, **kwargs: gateway
+            # The plan-task composition root resolves the gateway in its own
+            # module. Patching the two older entries only would leave a plan round
+            # reaching for a real provider, which the network guard turns into a
+            # refusal rather than a measurement.
+            plan_adjustment.resolve_user_model_gateway = lambda *args, **kwargs: gateway
             smart_entry.resolve_user_model_gateway = lambda *args, **kwargs: gateway
             if scenario.initial_state.faults.crash_worker:
                 os._exit(23)
@@ -111,6 +146,24 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
             from backend.task_evaluation.observation import observe_database
             with TestClient(create_app()) as client:
                 headers = seed_environment(client, scenario, root)
+                if 'plan_adjustment' in scenario.requires:
+                    # The seeded directory becomes the authoritative plan store
+                    # here, through the same import an operator runs. A file store
+                    # cannot compare-and-swap a head, so a scenario that confirms
+                    # a candidate has to run on the store that can.
+                    from backend.task_evaluation.seeding import (
+                        activate_sqlite_plan_store,
+                        seed_plan_safety,
+                    )
+                    activate_sqlite_plan_store(fixed, root)
+                    if scenario.initial_state.plan_constraints is not None:
+                        # The import also migrates the allergy list out of the
+                        # account's profile file, which is empty here. Written
+                        # again afterwards so the declared restrictions -- not a
+                        # file nobody authored -- are the version the task is
+                        # frozen against.
+                        seed_plan_safety(root, headers.user_ids["primary"],
+                                         scenario.initial_state.plan_constraints)
                 step_number = 0
                 def before_step(step):
                     nonlocal step_number
@@ -125,6 +178,9 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                             connection.execute("UPDATE coach_messages SET created_at='2000-01-01T00:00:00Z'")
                 def observations():
                     values = {**observe_database(fixed.database_path, actors=headers.user_ids, data_dir=root), 'gateway_attempts': gateway.attempts}
+                    if 'plan_adjustment' in scenario.requires:
+                        values['plan_authorize_checks'] = authorization['checks']
+                        values['plan_authorize_denials'] = authorization['denied']
                     if faults.unified_review_unavailable:
                         import sqlite3
                         with sqlite3.connect(fixed.database_path) as connection:
@@ -132,7 +188,7 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                                 "SELECT COUNT(*) FROM coach_messages WHERE role='coach' AND body LIKE '%PRIVATE_SYNTHETIC_DRAFT%'").fetchone()[0]
                     return values
                 result = execute_scenario(scenario, client, headers_factory=lambda actor: headers[actor], observer=observations, before_step=before_step, progress_metrics=progress,
-                                          supported_capabilities={'interactive_entry', 'coach_conversations', 'unified_coach'})
+                                          supported_capabilities={'interactive_entry', 'coach_conversations', 'unified_coach', 'plan_adjustment'})
                 from dataclasses import replace
                 from backend.task_evaluation.metrics import runtime_metrics
                 from backend.task_evaluation.measurements import config_fingerprints
