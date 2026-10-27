@@ -47,6 +47,11 @@ from backend.application.ports.plan_repository import StoredPlan
 
 NOW = datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc)
 
+# What every round in this file is asked to do. The prose is not task state --
+# the task owns the grant, the constraints and the rounds -- so the tests restate
+# the same request each time they spend one.
+INSTRUCTIONS = "把训练和饮食都调整一下"
+
 # Both domains start broken on purpose. Training has three consecutive
 # high-intensity days; diet mentions the user's allergen in two meals.
 BASE = {
@@ -81,6 +86,7 @@ CONSTRAINTS = {
     "daily_calorie_target": 2000.0,
     "daily_protein_target": 140.0,
     "allergies_or_restrictions": ["花生"],
+    "safety_conditions": [],
     "action_restrictions": [],
     "available_equipment": ["barbell", "machine", "bodyweight", "dumbbell", "pull-up bar", "cable"],
     "session_minutes": 60,
@@ -144,12 +150,12 @@ def _runner(scripts):
     queue = list(scripts)
     runs = []
 
-    async def run(session, binding):
+    async def run(session, binding, request):
         gateway = ScriptedGateway(queue.pop(0))
         runs.append(gateway)
         runtime = AgentRuntime(
             task_budget_binding_factory=lambda user, ref: binding)
-        command = AgentCommand("chat", "把训练和饮食都调整一下", "alice", language="zh-CN",
+        command = AgentCommand("chat", request.instructions, "alice", language="zh-CN",
                                task_ref=TaskRef(binding.task_id, session.current().version))
         return await runtime.execute(command, UnifiedCoachWorkflow(gateway, _executor(session),
                                                                    session=session))
@@ -200,6 +206,12 @@ def _read(call_id="read"):
 ROUND_0_PATCHES = [_day(0, focus="下肢力量"), _meal(2, "鸡胸沙拉配糙米")]
 ROUND_1_PATCHES = [_day(2, intensity="medium"), _meal(0, "燕麦粥")]
 ROUND_2_PATCHES = [_meal(1, "鸡蛋三明治")]
+# Two rounds that fix nothing: each bundle edits an element the previous round
+# left alone, so the old value is still what the working base holds, and both
+# domains stay broken. This is what a model that has not found the problem looks
+# like, and it must end in a stop rather than a third attempt.
+FAIL_1_PATCHES = [_day(3, duration_min=35), _meal(1, "花生酱吐司")]
+FAIL_2_PATCHES = [_day(2, duration_min=55), _meal(0, "花生燕麦粥加糖")]
 # Everything fixed in one bundle: used where the only remaining problem is a
 # constraint the plan cannot contain.
 ROUND_FIX = ROUND_1_PATCHES + ROUND_2_PATCHES
@@ -230,7 +242,7 @@ def test_two_rounds_converge_and_still_wait_for_the_user(tmp_path):
     before = deepcopy(store.plan)
     task = _start(service)
 
-    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
     assert first["task"]["failed_domains"] == ["diet", "training"]
     # The first candidate is round 0 and costs nothing, but seeing it fail claims
     # the first repair round before the next model call -- not after it.
@@ -239,7 +251,7 @@ def test_two_rounds_converge_and_still_wait_for_the_user(tmp_path):
     assert round_0.round_index == 0 and round_0.passed is False
 
     second = asyncio.run(service.execute("alice", task["task_id"],
-                                         first["task"]["version"], "exec-2"))
+                                         first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
     # Round 1 fixed training; the second round was claimed for diet alone.
     assert second["task"]["repair_rounds"] == 2
     assert second["task"]["failed_domains"] == ["diet"]
@@ -248,7 +260,7 @@ def test_two_rounds_converge_and_still_wait_for_the_user(tmp_path):
     assert round_1.round_index == 1 and round_1.passed is False
 
     third = asyncio.run(service.execute("alice", task["task_id"],
-                                        second["task"]["version"], "exec-3"))
+                                        second["task"]["version"], "exec-3", instructions=INSTRUCTIONS))
     snapshot = repo.get("alice", task["task_id"])
     assert snapshot.repair_rounds == 2
     assert snapshot.state == "awaiting_confirmation"
@@ -277,16 +289,51 @@ def test_a_bundle_cannot_rewrite_the_domain_that_already_passed(tmp_path):
     service, repo, store, _ = _service(tmp_path, scripts=[ROUND_0, ROUND_1, rewrite_training])
     before = deepcopy(store.plan)
     task = _start(service)
-    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
-    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2"))
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
+    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
 
-    third = asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"], "exec-3"))
+    third = asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"], "exec-3", instructions=INSTRUCTIONS))
 
     assert third["task"]["failed_domains"] == ["training"]
     assert [item["code"] for item in third["task"]["violations"]] == ["DOMAIN_FROZEN"]
     assert third["task"]["candidate"] is None
     assert repo.get("alice", task["task_id"]).repair_rounds == 2
     assert store.plan == before
+
+
+def test_the_last_repair_ends_in_a_stop_instead_of_another_model_call(tmp_path):
+    """Two failed repairs are a decision for the user, not a third attempt.
+
+    The session could only *tell* a model the rounds were gone, and the loop
+    discarded that frame: the next ``execute`` still ran a provider call whose
+    every submission the store had to refuse. The stop is now written where it is
+    decided, so the fourth ``execute`` costs nothing and the projection says what
+    actually happened.
+    """
+    fail_1 = [_submit("c1", FAIL_1_PATCHES), FinalDecision(body="训练和饮食都还没通过。")]
+    fail_2 = [_submit("c2", FAIL_2_PATCHES), FinalDecision(body="仍然没有通过。")]
+    service, repo, store, runner = _service(tmp_path, scripts=[ROUND_0, fail_1, fail_2])
+    before = deepcopy(store.plan)
+    task = _start(service)
+
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
+    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
+    third = asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"], "exec-3", instructions=INSTRUCTIONS))
+
+    assert third["task"]["repair_rounds"] == 2
+    assert third["task"]["failed_domains"] == ["diet", "training"]
+    assert third["task"]["candidate"] is None
+    assert repo.get("alice", task["task_id"]).state == "repairing"
+
+    stopped = asyncio.run(service.execute("alice", task["task_id"],
+                                          third["task"]["version"], "exec-4", instructions=INSTRUCTIONS))
+
+    assert stopped["task"]["state"] == "awaiting_user_decision"
+    assert stopped["task"]["repair_rounds"] == 2
+    # No fourth run, and no plan written by a task that never produced a candidate.
+    assert len(runner.gateways) == 3
+    assert store.plan == before
+    assert repo.get("alice", task["task_id"]).state == "awaiting_user_decision"
 
 
 def test_a_missing_constraint_stops_without_spending_a_round(tmp_path):
@@ -297,7 +344,7 @@ def test_a_missing_constraint_stops_without_spending_a_round(tmp_path):
         scripts=[[_submit("c0", ROUND_FIX), FinalDecision(body="缺一项信息。")]])
     task = _start(service)
 
-    result = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    result = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
 
     # A patch cannot invent equipment, so the task asks instead of looping. No
     # round is spent and no candidate is recorded: this was not an attempt at the
@@ -316,7 +363,7 @@ def test_answers_resume_the_task_that_asked(tmp_path):
         tmp_path, constraints=unknown_equipment,
         scripts=[[_submit("c0", ROUND_FIX), FinalDecision(body="缺一项信息。")], fix])
     task = _start(service)
-    stopped = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    stopped = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
 
     answered = service.answer("alice", task["task_id"], stopped["task"]["version"],
                               {"available_equipment": CONSTRAINTS["available_equipment"]},
@@ -324,7 +371,7 @@ def test_answers_resume_the_task_that_asked(tmp_path):
     assert answered["state"] == "generating"
     assert repo.constraints("alice", task["task_id"])["available_equipment"]
 
-    resumed = asyncio.run(service.execute("alice", task["task_id"], answered["version"], "exec-2"))
+    resumed = asyncio.run(service.execute("alice", task["task_id"], answered["version"], "exec-2", instructions=INSTRUCTIONS))
     assert resumed["task"]["state"] == "awaiting_confirmation"
     assert resumed["task"]["candidate"]
 
@@ -335,17 +382,17 @@ def test_a_reserved_round_is_reused_after_a_disconnect(tmp_path):
     gave_up = [FinalDecision(body="这一版没能通过校验，先说明问题。")]
     service, repo, _, _ = _service(tmp_path, scripts=[ROUND_0, gave_up, ROUND_1])
     task = _start(service)
-    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
     reserved = repo.get("alice", task["task_id"])
     assert reserved.repair_rounds == 1 and reserved.active_round_id
     # The reservation recorded the domains that failed, before any revision call.
     assert repo.round_scope("alice", task["task_id"]) == frozenset({"training", "diet"})
 
-    asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2"))
+    asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
     assert repo.get("alice", task["task_id"]).repair_rounds == 1
 
     asyncio.run(service.execute("alice", task["task_id"],
-                                first["task"]["version"], "exec-3"))
+                                first["task"]["version"], "exec-3", instructions=INSTRUCTIONS))
     # The submission landed in the round that was already claimed, not in a new one.
     assert repo.latest_candidate("alice", task["task_id"]).round_index == 1
 
@@ -377,7 +424,7 @@ def test_an_unreviewed_candidate_is_not_published(tmp_path):
         scripts=[[_submit("c0", ROUND_FIX), FinalDecision(body="两个部分都已通过校验，等你确认。")]])
     task = _start(service)
 
-    result = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    result = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
 
     assert result["task"]["state"] == "awaiting_user_decision"
     assert result["receipt"] is None
@@ -393,7 +440,7 @@ def test_an_unavailable_reviewer_publishes_nothing(tmp_path):
         scripts=[[_submit("c0", ROUND_FIX), FinalDecision(body="两个部分都已通过校验。")]])
     task = _start(service)
 
-    result = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    result = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
 
     assert result["task"]["state"] == "awaiting_user_decision"
     assert result["receipt"] is None
@@ -416,7 +463,7 @@ def test_a_training_only_task_cannot_touch_diet(tmp_path):
                             "allow", key="grant-1")
     assert granted["state"] == "generating"
 
-    result = asyncio.run(service.execute("alice", task["task_id"], granted["version"], "exec-1"))
+    result = asyncio.run(service.execute("alice", task["task_id"], granted["version"], "exec-1", instructions=INSTRUCTIONS))
 
     assert [item["code"] for item in result["task"]["violations"]] == ["PATCH_SCOPE"]
     # The refusal is on record, but it produced no candidate document.
@@ -427,9 +474,9 @@ def test_confirm_refuses_before_the_atomic_activation_exists(tmp_path):
     service, _, store, _ = _service(tmp_path, scripts=[ROUND_0, ROUND_1, ROUND_2])
     before = deepcopy(store.plan)
     task = _start(service)
-    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
-    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2"))
-    third = asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"], "exec-3"))
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
+    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
+    third = asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"], "exec-3", instructions=INSTRUCTIONS))
 
     with pytest.raises(ApplicationError, match="PLAN_CONFIRMATION_NOT_ENABLED"):
         service.confirm("alice", task["task_id"], third["task"]["version"], 1,
@@ -440,9 +487,9 @@ def test_confirm_refuses_before_the_atomic_activation_exists(tmp_path):
 def test_a_candidate_arriving_after_confirmation_is_refused(tmp_path):
     service, repo, _, _ = _service(tmp_path, scripts=[ROUND_0, ROUND_1, ROUND_2])
     task = _start(service)
-    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
-    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2"))
-    asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"], "exec-3"))
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
+    second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
+    asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"], "exec-3", instructions=INSTRUCTIONS))
     snapshot = repo.get("alice", task["task_id"])
 
     with pytest.raises(ApplicationError, match="STATE_TRANSITION"):
@@ -471,7 +518,7 @@ def test_a_second_protocol_failure_ends_the_run_but_keeps_the_budget(tmp_path):
     task = _start(service)
 
     with pytest.raises(ValueError, match="AGENT_PROTOCOL_FAILED"):
-        asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+        asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
 
     snapshot = repo.get("alice", task["task_id"])
     assert snapshot.state == "generating"
@@ -483,9 +530,9 @@ def test_a_second_protocol_failure_ends_the_run_but_keeps_the_budget(tmp_path):
 def test_execute_reuses_one_budget_per_task(tmp_path):
     service, repo, _, _ = _service(tmp_path, scripts=[ROUND_0, ROUND_1, ROUND_2])
     task = _start(service)
-    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
     after_first = SQLiteTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
-    asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2"))
+    asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
     after_second = SQLiteTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
 
     assert after_second.call_limit == after_first.call_limit
@@ -511,7 +558,7 @@ def test_cancel_is_terminal(tmp_path):
 
     assert cancelled["state"] == "cancelled"
     with pytest.raises(ApplicationError, match="STATE_TRANSITION"):
-        asyncio.run(service.execute("alice", task["task_id"], cancelled["version"], "exec-1"))
+        asyncio.run(service.execute("alice", task["task_id"], cancelled["version"], "exec-1", instructions=INSTRUCTIONS))
 
 
 # ---------------------------------------------------------------- confirmation
@@ -521,7 +568,7 @@ def test_cancel_is_terminal(tmp_path):
 # so the confirmation path can be reached without a scripted model.
 CONFIRMABLE = {
     "diet_plan": {"meals": ["燕麦粥配鸡蛋", "鸡胸沙拉", "糙米饭配牛肉"],
-                  "daily_calorie_target": 2000, "daily_protein_target": 150},
+                  "daily_calorie_target": 2000, "daily_protein_target": 140},
     "workout_plan": {
         "summary": "每周三练", "weekly_training_days": 3,
         "rest_days": ["周三", "周六", "周日"],
@@ -537,7 +584,7 @@ CONFIRMABLE = {
 }
 
 
-HARD_FIELDS = ("allergies_or_restrictions", "action_restrictions",
+HARD_FIELDS = ("allergies_or_restrictions", "safety_conditions", "action_restrictions",
                "available_equipment", "session_minutes", "forbidden_exercises")
 
 
@@ -607,11 +654,11 @@ def _awaiting(tmp_path, **options):
     service, repo, store, runner = _service(tmp_path, scripts=[ROUND_0, ROUND_1, ROUND_2],
                                             **options)
     task = _start(service)
-    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1"))
+    first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
     second = asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"],
-                                         "exec-2"))
+                                         "exec-2", instructions=INSTRUCTIONS))
     third = asyncio.run(service.execute("alice", task["task_id"], second["task"]["version"],
-                                        "exec-3"))
+                                        "exec-3", instructions=INSTRUCTIONS))
     return service, repo, task, third, runner
 
 
@@ -663,6 +710,25 @@ def test_confirm_refuses_when_the_profile_moved_under_the_candidate(tmp_path):
     assert activations.documents == []
 
 
+def test_confirm_refuses_when_a_safety_condition_is_declared_after_the_review(tmp_path):
+    """A declared condition changes what the candidate was reviewed against.
+
+    It gates the diet, so adding one is not a cosmetic profile edit: the meal plan
+    on screen was produced under a rule that no longer applies.
+    """
+    source = dict(CONSTRAINTS)
+    activations = StubActivations(constraints=source)
+    service, _, task, third, _ = _awaiting(
+        tmp_path, activations=activations,
+        constraints_source=lambda owner: dict(source))
+    source["safety_conditions"] = ["pregnancy"]
+
+    with pytest.raises(ApplicationError, match="CONSTRAINT_CHANGED"):
+        service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                        third["task"]["candidate"]["digest"], key="confirm-1")
+    assert activations.documents == []
+
+
 def test_confirm_requires_a_review_when_the_policy_tightens(tmp_path):
     activations = StubActivations(reviewed="a-different-digest")
     service, _, task, third, _ = _awaiting(
@@ -687,21 +753,19 @@ def test_confirm_refuses_a_document_that_no_longer_validates(tmp_path):
                         third["task"]["candidate"]["digest"], key="confirm-1")
 
 
-def test_the_real_constraint_source_refuses_a_hard_constraint_it_cannot_version(tmp_path):
-    """The production wiring, not a stub: today it must refuse.
+def _real_wiring(tmp_path, *, allergies=None):
+    """The production store, not a stub: real database, real profile reader.
 
-    The versioned profile owns the goal, the weight and the two daily targets. The
-    restrictions, the equipment list, the session length and the forbidden
-    exercises still come from the profile file, so the snapshot cannot name their
-    version -- and a confirmation on the strength of a check nobody can re-read is
-    not a check. This test is the reminder that wiring ``confirm`` into an HTTP
-    route is not enough: the constraint write path has to be versioned first.
+    ``allergies`` is what the versioned safety record holds. ``None`` leaves the
+    account unmigrated, which is the state of every account whose restrictions
+    still live only in ``user_profile.json``.
     """
     from backend.application.ports.profile_target_repository import (
         GoalVersionInput,
         ProfileVersionInput,
+        SafetyVersionInput,
+        TargetVersionInput,
     )
-    from backend.application.ports.plan_repository import StoredPlan
     from backend.infrastructure.repositories.sqlite_plan_repository import (
         SQLitePlanRepository,
     )
@@ -710,8 +774,8 @@ def test_the_real_constraint_source_refuses_a_hard_constraint_it_cannot_version(
     )
 
     service, repo, task, third, _ = _awaiting(tmp_path)
-    profiles = SQLiteProfileTargetRepository(repo.database)
-    profiles.bootstrap(
+    profiles = SQLiteProfileTargetRepository(repo.database, clock=lambda: NOW)
+    setup = profiles.bootstrap(
         "alice",
         ProfileVersionInput(age=30, height_cm=175.0, weight_kg=70.0,
                             energy_parameter="male", activity_level="moderate",
@@ -719,6 +783,15 @@ def test_the_real_constraint_source_refuses_a_hard_constraint_it_cannot_version(
                             effective_from="2026-10-01"),
         GoalVersionInput(goal="fat_loss", effective_from="2026-10-01"),
     )
+    profiles.append_target("alice", TargetVersionInput(
+        profile_version_id=setup.profile.id,
+        overall_goal_version_id=setup.goal.id,
+        calories=2000, carbs=250, protein=140, fat=60,
+        source="manual", formula_version=None,
+        rationale={"confirmed_warnings": []}, effective_from="2026-10-02"))
+    if allergies is not None:
+        profiles.append_safety_if_changed(
+            "alice", SafetyVersionInput(allergies_or_restrictions=allergies))
     # Same clock as the task store, or the real one would judge the fixture's
     # timestamps against today and call an unexpired candidate expired.
     plans = SQLitePlanRepository(repo.database, clock=lambda: NOW,
@@ -726,8 +799,43 @@ def test_the_real_constraint_source_refuses_a_hard_constraint_it_cannot_version(
     plans.save("alice", StoredPlan(plan_id="p1", activated_at=NOW,
                                    kind="deterministic", plan=BASE))
     service.activations = plans
+    return service, plans, task, third
+
+
+def test_confirmation_refuses_while_the_allergy_list_has_no_version(tmp_path):
+    """The state of every account that has not been migrated or re-saved.
+
+    The list still lives only in ``user_profile.json``, which has no version, so
+    "these are the restrictions the candidate was reviewed against" has no answer
+    that can be reproduced. Approving on the strength of it is approving a check
+    nobody can re-run.
+    """
+    service, plans, task, third = _real_wiring(tmp_path)
 
     with pytest.raises(ApplicationError, match="CONSTRAINT_SOURCE_UNVERSIONED"):
         service.confirm("alice", task["task_id"], third["task"]["version"], 1,
                         third["task"]["candidate"]["digest"], key="confirm-1")
     assert len(plans.list("alice")) == 1
+
+
+def test_versioning_the_allergy_list_is_what_unblocks_confirmation(tmp_path):
+    """The end of the write path this task exists for.
+
+    Same account, same candidate, same everything -- one extra row. That row is
+    the whole difference between "refused because the check cannot be reproduced"
+    and a confirmed plan, which is why the profile save now writes it.
+    """
+    service, plans, task, third = _real_wiring(tmp_path, allergies=("花生",))
+
+    result = service.confirm("alice", task["task_id"], third["task"]["version"], 1,
+                             third["task"]["candidate"]["digest"], key="confirm-1")
+
+    assert result["plan"]["head_revision"] == 2
+    assert result["plan"]["based_on_plan_id"] == "p1"
+    stored = plans.get("alice", result["plan"]["plan_id"])
+    candidate = service.repository.latest_candidate("alice", task["task_id"]).plan
+    # What was stored is the document the verifier re-checked, not the bundle the
+    # model sent: the two are equal only because the merge was applied once.
+    assert stored.plan.diet_plan == candidate["diet_plan"]
+    assert stored.plan.validation.passed is True
+    assert plans.current_head("alice").revision == 2

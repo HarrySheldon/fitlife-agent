@@ -455,6 +455,114 @@ export interface StoredPlan {
   plan: GeneratedPlan
 }
 
+export type PlanDomain = 'training' | 'diet'
+
+export type PlanTaskState =
+  | 'collecting'
+  | 'awaiting_scope_permission'
+  | 'generating'
+  | 'repairing'
+  | 'awaiting_confirmation'
+  | 'awaiting_user_decision'
+  | 'activated'
+  | 'cancelled'
+  | 'expired'
+
+/** A bounded reason: code, domain and path. Never free text, never private data. */
+export interface PlanTaskViolation {
+  code: string
+  domain: PlanDomain
+  path: string
+}
+
+export interface PlanTaskCandidate {
+  candidate_id: string
+  digest: string
+  expires_at: string | null
+  round: number | null
+}
+
+/**
+ * What a plan task is, as the server projects it.
+ *
+ * `read_domains` and `change_domains` are separate on purpose: reading a domain
+ * is how the model reasons, changing it is what the user granted. A domain in the
+ * first list only must never be presented as modified.
+ */
+export interface PlanTask {
+  task_id: string
+  version: number
+  state: PlanTaskState
+  base_plan_id: string
+  base_head_revision: number
+  read_domains: PlanDomain[]
+  change_domains: PlanDomain[]
+  repair_rounds: number
+  rounds_remaining: number
+  expires_at: string
+  missing_constraints: string[]
+  candidate: PlanTaskCandidate | null
+  failed_domains: PlanDomain[]
+  violations: PlanTaskViolation[]
+}
+
+export interface PlanTaskExecution {
+  task: PlanTask
+  answer: string | null
+  receipt: Record<string, unknown> | null
+}
+
+export interface PlanTaskConfirmation {
+  task: PlanTask
+  plan: {
+    plan_id: string
+    head_revision: number
+    activated_at: string
+    kind: PlanKind
+    based_on_plan_id: string | null
+  }
+  replayed: boolean
+}
+
+export interface CurrentPlan {
+  plan: StoredPlan
+  head_revision: number
+}
+
+export interface PlanTaskStartInput {
+  base_plan_id: string
+  read_domains: PlanDomain[]
+  change_domains: PlanDomain[]
+  instructions: string
+}
+
+export interface PlanTaskScopeInput {
+  expected_version: number
+  read_domains: PlanDomain[]
+  change_domains: PlanDomain[]
+  decision: 'allow' | 'deny'
+}
+
+export interface PlanTaskAnswerInput {
+  expected_version: number
+  answers: Record<string, unknown>
+}
+
+export interface PlanTaskExecuteInput {
+  expected_version: number
+  instructions: string
+}
+
+export interface PlanTaskConfirmInput {
+  expected_version: number
+  expected_head_revision: number
+  candidate_digest: string
+}
+
+export interface PlanTaskCancelInput {
+  expected_version: number
+}
+
 export interface EvalResult {
   total_tests: number
   pass_rate: number

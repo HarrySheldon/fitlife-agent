@@ -44,7 +44,8 @@ from backend.domain.plan_adjustment import (
 
 # A patch cannot repair these. Retrying costs a round and tells the model to
 # solve a problem that lives outside the plan, so the task stops and asks.
-UNFIXABLE_CODES = frozenset({"CONSTRAINT_MISSING", "PLAN_FORMAT_UNSUPPORTED"})
+UNFIXABLE_CODES = frozenset({"CONSTRAINT_MISSING", "PLAN_FORMAT_UNSUPPORTED",
+                             "SAFETY_CONDITION_BLOCKS_DIET"})
 
 _DOMAIN_ROOTS = {"training": "workout_plan", "diet": "diet_plan"}
 
@@ -200,6 +201,25 @@ def _frozen_changes(patched: dict, frozen_digests: Mapping[str, str]) -> list[Vi
             if domain in actual and actual[domain] != expected]
 
 
+def _safety_condition_diet(document: dict, constraints: PlanConstraints,
+                           base: dict | None) -> list[Violation]:
+    """A declared safety condition makes the diet domain non-adjustable.
+
+    The bundle path refuses this before the patches are applied. Confirmation holds
+    a merged document instead of a bundle, so it has to answer the same question a
+    different way: did the diet change at all?
+
+    Without a base the answer is not knowable, and an unprovable diet change is
+    refused rather than assumed absent -- that is the whole point of the check.
+    """
+    if not constraints.safety_conditions:
+        return []
+    if base is None or document.get("diet_plan") != base.get("diet_plan"):
+        return [Violation(code="SAFETY_CONDITION_BLOCKS_DIET", domain="diet",
+                          path="diet_plan")]
+    return []
+
+
 class PlanValidation:
     """The deterministic evaluator a ``PlanTaskSession`` is given.
 
@@ -222,6 +242,7 @@ class PlanValidation:
         if violations:
             return violations
         violations += _missing_constraints(constraints)
+        violations += _safety_condition_diet(document, constraints, base)
         violations += _structure_violations(document)
         violations += _training_constraints(document, constraints)
         if not violations:

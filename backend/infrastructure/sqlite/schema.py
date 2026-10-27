@@ -1275,4 +1275,36 @@ RECORDS_MIGRATIONS = (
             "ALTER TABLE plan_adjustment_sessions ADD COLUMN reviewed_digest TEXT",
         ),
     ),
+    Migration(
+        version=12,
+        name='profile_safety_versions',
+        statements=(
+            # The allergy list, versioned. It was the last hard constraint whose
+            # only authority was ``user_profile.json``, which is why a plan
+            # confirmation could not re-run the check it was approving: the file
+            # has no version, so "these are the restrictions the candidate was
+            # reviewed against" had no answer that could be reproduced tomorrow.
+            #
+            # Append-only, and ordered by ``created_at`` then ``id`` rather than by
+            # an invented effective date: the file this is copied from never had
+            # one, and synthesising one would make two writes at the same instant
+            # collide for no reason. An unchanged list writes nothing, so a profile
+            # save that does not touch allergies does not spend a version.
+            """
+            CREATE TABLE profile_safety_versions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                allergies_or_restrictions_json TEXT NOT NULL
+                    CHECK (json_valid(allergies_or_restrictions_json)
+                           AND json_type(allergies_or_restrictions_json) = 'array'
+                           AND length(CAST(allergies_or_restrictions_json AS BLOB)) <= 8192),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE INDEX idx_profile_safety_owner
+            ON profile_safety_versions (user_id, created_at DESC, id DESC)
+            """,
+        ),
+    ),
 )

@@ -25,6 +25,7 @@ class Plans:
         new_id: Callable[[], str] | None = None,
         new_draft_id: Callable[[], str] | None = None,
         draft_ttl: timedelta = timedelta(minutes=30),
+        require_task_confirmation: bool = False,
     ) -> None:
         self.repository = repository
         self.generate_deterministic = generate_deterministic
@@ -34,6 +35,12 @@ class Plans:
         self.new_id = new_id or (lambda: f"plan-{uuid4().hex}")
         self.new_draft_id = new_draft_id or (lambda: f"draft-{uuid4().hex}")
         self.draft_ttl = draft_ttl
+        # When the versioned task entry is on, an adjusted plan may only become
+        # official through its candidate confirmation. The old draft path is not
+        # an alternative route to the same write: it has no head compare-and-swap,
+        # no frozen constraints and no reviewed digest, so activating a draft it
+        # produced would be activating something nobody re-checked.
+        self.require_task_confirmation = require_task_confirmation
 
     def draft(self, user_id: str) -> PlanDraft:
         return self._validated_draft(user_id, "deterministic", self.generate_deterministic(user_id))
@@ -56,6 +63,10 @@ class Plans:
         return plan
 
     def adjustment_draft(self, user_id: str, plan_id: str, instructions: str) -> PlanDraft:
+        if self.require_task_confirmation:
+            # Refused before the model call, not after: a draft that could never
+            # be activated is a provider request spent on nothing.
+            self._refuse_moved_entry()
         active = self.get(user_id, plan_id)
         payload = self.generate_adjusted(user_id, active, instructions)
         return self._validated_draft(user_id, "agent_adjusted", payload, based_on_plan_id=plan_id)
@@ -69,6 +80,10 @@ class Plans:
                 status_code=404,
                 processing_mode="deterministic",
             )
+        if self.require_task_confirmation and draft.kind == "agent_adjusted":
+            # Refused after the draft is found, so a missing draft still reads as
+            # missing and this refusal only describes a draft that exists.
+            self._refuse_moved_entry()
         if self.now() - draft.created_at > self.draft_ttl:
             raise ApplicationError(
                 code="PLAN_DRAFT_EXPIRED",
@@ -107,6 +122,14 @@ class Plans:
             self.repository.save_draft(user_id, consumed)
             raise
         return stored
+
+    def _refuse_moved_entry(self) -> None:
+        raise ApplicationError(
+            code="PLAN_ADJUSTMENT_ENTRY_MOVED",
+            message="Adjustments are confirmed through a plan task, not a draft.",
+            status_code=409,
+            processing_mode="agent",
+        )
 
     def _validated_draft(
         self,

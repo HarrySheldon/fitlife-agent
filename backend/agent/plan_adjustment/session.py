@@ -166,8 +166,17 @@ class PlanTaskSession:
             # The submission is not recorded against the round slot: it is not an
             # attempt at the plan, and the retry after ``answer`` must be able to
             # use the round the task still has.
-            self._review = "CONSTRAINT_REQUIRED"
-            updated = self._stop(snapshot, "CONSTRAINT_REQUIRED")
+            #
+            # A declared safety condition is unfixable for a different reason, and
+            # saying CONSTRAINT_REQUIRED would ask the user to answer a question
+            # whose answer cannot change: the task is not missing an input, the
+            # product does not design nutrition for this account. The state is the
+            # same -- the decision goes back to the user -- but the reason says so.
+            blocked = all(item.code == "SAFETY_CONDITION_BLOCKS_DIET"
+                          for item in verdict.violations)
+            reason = "SAFETY_CONDITION_BLOCKS_DIET" if blocked else "CONSTRAINT_REQUIRED"
+            self._review = reason
+            updated = self._stop(snapshot, reason)
             return self._submission(verdict, updated, candidate_id=None)
 
         candidate = candidate_plan(base, bundle, snapshot.change_domains)

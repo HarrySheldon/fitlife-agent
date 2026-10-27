@@ -77,15 +77,17 @@ describe('plan task routes', () => {
     expect(await screen.findByRole('heading', { name: /plan-00000001/ })).toBeInTheDocument()
   })
 
-  it('creates an Agent adjustment draft without replacing the active plan until confirmation', async () => {
+  it('offers the task entry instead of an adjustment draft', async () => {
+    // An adjusted plan becomes official only through a task candidate
+    // confirmation, so the page must not offer the old draft path at all.
     renderRoute('/plan/plan-00000001')
     expect(await screen.findByRole('heading', { name: /plan-00000001/ })).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText(/adjustment instructions/i), { target: { value: 'Make Friday lighter' } })
-    fireEvent.click(screen.getByRole('button', { name: /generate adjustment draft/i }))
-    await waitFor(() => expect(api.createPlanAdjustmentDraft).toHaveBeenCalledWith('plan-00000001', 'Make Friday lighter'))
+
+    fireEvent.click(screen.getByRole('button', { name: /adjust this plan/i }))
+
+    expect(screen.getByRole('dialog', { name: /adjust this plan/i })).toBeInTheDocument()
+    expect(api.createPlanAdjustmentDraft).not.toHaveBeenCalled()
     expect(api.activatePlan).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: /confirm adjusted plan/i }))
-    await waitFor(() => expect(api.activatePlan).toHaveBeenCalled())
   })
 
   it('asks the plan-specific Coach endpoint to interpret the persisted plan', async () => {

@@ -17,6 +17,7 @@ two rounds of one task share one ceiling.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Mapping, Protocol
 
 from backend.agent.plan_adjustment.session import PlanTaskSession
@@ -42,6 +43,7 @@ MAX_INSTRUCTIONS = 1000
 # versioned: a safety check against a file cannot be reproduced at write time.
 _HARD_CONSTRAINT_FIELDS = (
     "allergies_or_restrictions",
+    "safety_conditions",
     "action_restrictions",
     "available_equipment",
     "session_minutes",
@@ -57,10 +59,23 @@ class PlanStore(Protocol):
     def get(self, user_id: str, plan_id: str): ...
 
 
-# ``runner(session, binding) -> AgentResult``: the composition root owns the
-# runtime, gateway and tools. The service never constructs a model, and never
+@dataclass(frozen=True)
+class RoundRequest:
+    """What this round is being asked to do.
+
+    The prose is *not* stored on the task. The task owns the decision state -- the
+    grant, the frozen constraints, the rounds -- and the conversation owns the
+    words. A round therefore carries the request it serves, so a repair after a
+    failed candidate is asked about the same thing the first attempt was.
+    """
+
+    instructions: str
+
+
+# ``runner(session, binding, request) -> AgentResult``: the composition root owns
+# the runtime, gateway and tools. The service never constructs a model, and never
 # builds a second runtime for a second round.
-Runner = Callable[[PlanTaskSession, TaskBudgetBinding], Awaitable[Any]]
+Runner = Callable[[PlanTaskSession, TaskBudgetBinding, RoundRequest], Awaitable[Any]]
 
 
 def _grant(read_domains, change_domains) -> tuple[frozenset[str], frozenset[str]]:
@@ -81,7 +96,7 @@ class PlanAdjustmentService:
     def __init__(self, repository, plans: PlanStore, validation, *, constraints_source,
                  head_revision, runner: Runner, budgets, activations=None,
                  reviewer=None, call_limit: int = 36, token_limit: int = 512000,
-                 review_required: bool = False):
+                 review_required: bool = False, admission=None):
         self.repository = repository
         self.plans = plans
         self.validation = validation
@@ -103,6 +118,11 @@ class PlanAdjustmentService:
         # becomes official. Read at confirmation time, not at task creation: the
         # policy can tighten while a candidate waits for the user.
         self.review_required = review_required
+        # ``admission``: the account's single model slot. A plan round is a model
+        # call, so it queues behind -- and is refused beside -- a coach turn. It is
+        # optional only so the service can be exercised without one; every
+        # deployment path passes it, and the HTTP tests prove the slot is held.
+        self.admission = admission
         if call_limit < 1 or token_limit < 1:
             raise ValueError("PLAN_BUDGET_INVALID")
 
@@ -180,9 +200,21 @@ class PlanAdjustmentService:
         return self._project(owner, self.repository.answer_constraints(
             owner, task_id, expected_version, answers, key))
 
-    async def execute(self, owner: str, task_id: str, expected_version: int, key: str) -> dict:
-        """Run one model round for this task, on this task's budget."""
+    async def execute(self, owner: str, task_id: str, expected_version: int, key: str,
+                      *, instructions: str | None = None, lease: str | None = None) -> dict:
+        """Run one model round for this task, on this task's budget.
+
+        The round takes the account's single slot. ``lease`` is how a caller that
+        *already* holds it says so -- the coach, in the middle of a turn, deciding
+        to hand work to a plan task. It is the turn id the caller holds, verified
+        against the slot's own record; it is never a flag a request body can set,
+        because "I am already admitted" is exactly the claim a second concurrent
+        call would like to make for free.
+        """
         _identity(owner, task_id, key)
+        if not isinstance(instructions, str) or not 1 <= len(instructions.strip()) <= MAX_INSTRUCTIONS:
+            raise _error("INSTRUCTIONS_INVALID", 422)
+        check_input(instructions)
         snapshot = self._read(owner, task_id)
         if snapshot.state in TERMINAL_STATES:
             raise task_error("STATE_TRANSITION")
@@ -190,15 +222,50 @@ class PlanAdjustmentService:
             raise _error("SCOPE_GRANT_REQUIRED", 409)
         if snapshot.version != expected_version:
             raise task_error("TASK_VERSION_CONFLICT")
+        if (snapshot.state == "repairing" and snapshot.repair_rounds >= REPAIR_ROUND_LIMIT
+                and snapshot.active_round_id is None):
+            # Both repairs are spent and the last candidate failed. Running
+            # another round would spend a model call on a submission the store
+            # must refuse, so the stop is written here instead of being merely
+            # reported to a model that has nothing left to submit.
+            stopped = self.repository.transition(
+                owner, task_id, snapshot.version, "awaiting_user_decision",
+                key=f"{task_id}:rounds-exhausted:{snapshot.version}")
+            return {"task": self._project(owner, stopped), "answer": None, "receipt": None,
+                    "answer_markdown": f"plan task {task_id}: {stopped.state}", "model": ""}
+        request = RoundRequest(instructions=instructions)
+        if self.admission is None:
+            return await self._round(owner, task_id, request)
+        if lease is not None:
+            held = self.admission.active(owner)
+            if held is None or held.turn_id != lease:
+                # The lease named a turn this account is not running. Running
+                # anyway would be a second model call beside somebody's turn.
+                raise _error("PLAN_EXECUTION_LEASE_INVALID", 409)
+            return await self._round(owner, task_id, request)
+        return await self.admission.run_task(
+            owner,
+            question=f"Execute plan adjustment task {task_id}",
+            action="plan_adjustment",
+            surface="plan",
+            produce=lambda: self._round(owner, task_id, request),
+        )
+
+    async def _round(self, owner: str, task_id: str, request: RoundRequest) -> dict:
         # One budget per task, initialized once: a second round of the same task
         # continues the same ceiling instead of opening a fresh one.
         self.budgets.initialize(owner, task_id, self.call_limit, self.token_limit)
         binding = TaskBudgetBinding(self.budgets, owner, task_id)
-        result = await self.runner(self.session(owner, task_id), binding)
+        result = await self.runner(self.session(owner, task_id), binding, request)
         current = self._read(owner, task_id)
         return {"task": self._project(owner, current),
                 "answer": getattr(result, "answer", None),
-                "receipt": getattr(result, "task_receipt", None)}
+                "receipt": getattr(result, "task_receipt", None),
+                # What the slot publishes. A task round has no prose answer of its
+                # own, so the record says what the task now is, not what a model
+                # said about it.
+                "answer_markdown": f"plan task {task_id}: {current.state}",
+                "model": getattr(result, "model", "")}
 
     def confirm(self, owner: str, task_id: str, expected_version: int,
                 expected_head_revision: int, candidate_digest: str, key: str) -> dict:
@@ -353,14 +420,16 @@ def _identity(*values: str) -> None:
 def _unversioned_hard_constraints(snapshot) -> list[str]:
     """Hard constraints whose authority the versioned store cannot name.
 
-    Only the fields that gate safety are listed. A target the store owns is
-    versioned by definition; a restriction, an equipment list, a session length or
-    a forbidden exercise that still comes from a file is not, and a plan approved
-    against it would be approved against a check that cannot be re-run.
+    Only a field the snapshot *claims* can be unversioned. A field missing from
+    ``versions`` has no authority anywhere -- it can only come from the task's own
+    clarification, and the task row is already its record -- so refusing on it
+    would block confirmation for a check that has nothing to reproduce. A field
+    present with ``None`` is the real case: the value exists, the store just cannot
+    say which version of it the candidate was reviewed against.
     """
     return sorted(
         field for field in _HARD_CONSTRAINT_FIELDS
-        if snapshot.versions.get(field) is None
+        if field in snapshot.versions and snapshot.versions[field] is None
     )
 
 

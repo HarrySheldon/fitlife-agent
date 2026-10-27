@@ -13,7 +13,7 @@ from backend.api.dependencies import optional_current_user, require_current_user
 from backend.api.preference_context import preferences_for
 from backend.api.utils import ok, request_id_for
 from backend.application.ports.model_gateway import ConfigurableModelGateway
-from backend.application.ports.plan_repository import StoredPlan
+from backend.application.ports.plan_repository import StoredPlan, legacy_head
 from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.application.use_cases.generate_plan import GeneratePlan
 from backend.application.use_cases.plans import Plans
@@ -97,6 +97,9 @@ def _plans(request_id: str | None = None) -> Plans:
             plan,
             fitness.read_profile(user_id).model_dump(),
         ),
+        # One confirmation path per deployment: while the task entry is on, an
+        # adjusted plan becomes official only through its candidate confirmation.
+        require_task_confirmation=get_settings().plan_adjustment_tasks_enabled,
     )
 
 
@@ -182,6 +185,29 @@ def interpret_plan(
             run_id=result.get("run_id", ""),
         )
         return ok(response.model_dump(), processing_mode="agent")
+
+
+@router.get("/current")
+def current_plan(user: AuthenticatedUser = Depends(require_current_user)):
+    """The plan a new task must be based on, with the revision that pins it.
+
+    Registered before ``/{plan_id}`` so "current" is never read as a plan id.
+    A read: no provider is constructed and nothing is written.
+    """
+    repository = build_plan_repository(get_settings())
+    head = repository.current_head(user.user_id)
+    if head is None and get_settings().plan_storage_mode == "file":
+        head = legacy_head(repository.list(user.user_id))
+    if head is None:
+        raise ApplicationError(code="PLAN_NOT_FOUND", message="No active plan.",
+                               status_code=404, processing_mode="deterministic")
+    stored = repository.get(user.user_id, head.plan_id)
+    if stored is None:
+        # A head that names a missing plan is a broken store, not an empty one.
+        raise ApplicationError(code="PLAN_NOT_FOUND", message="No active plan.",
+                               status_code=404, processing_mode="deterministic")
+    return ok({"plan": stored.model_dump(mode="json"), "head_revision": head.revision},
+              processing_mode="deterministic")
 
 
 @router.get("/{plan_id}")

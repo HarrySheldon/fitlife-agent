@@ -165,7 +165,7 @@ def test_apply_copies_history_and_records_the_import(tmp_path):
 
     imported = apply(data_dir, database)
 
-    assert imported == {"owners": 1, "plans": 2, "drafts": 1}
+    assert imported == {"owners": 1, "plans": 2, "drafts": 1, "safety": 0}
     repository = SQLitePlanRepository(database)
     assert [plan.plan_id for plan in repository.list("alice")] == [
         "plan-bbbbbbbb", "plan-aaaaaaaa"]
@@ -196,7 +196,7 @@ def test_applying_twice_does_not_duplicate_history(tmp_path):
 
     assert first["plans"] == 2
     # The second run copies nothing new: identical rows are no-ops.
-    assert second == {"owners": 1, "plans": 0, "drafts": 0}
+    assert second == {"owners": 1, "plans": 0, "drafts": 0, "safety": 0}
     assert len(SQLitePlanRepository(database).list("alice")) == 2
     assert SQLitePlanRepository(database).current_head("alice").revision == 2
 
@@ -276,3 +276,46 @@ def test_apply_runs_the_migrations_it_needs(tmp_path, capsys):
     assert exit_code == 0
     database = SQLiteDatabase(data_dir / "fitlife.sqlite3")
     assert len(SQLitePlanRepository(database).list("alice")) == 2
+
+
+def test_apply_versions_the_allergy_list_from_the_profile(tmp_path):
+    """The restrictions move with the plans, in the same authorized command.
+
+    A confirmation cannot approve a candidate reviewed against a value whose
+    version it cannot name, so an import that moved only the plans would leave
+    every migrated account unable to confirm anything.
+    """
+    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+        SQLiteProfileTargetRepository,
+    )
+    from backend.tools.data_access import DEFAULT_PROFILE
+
+    data_dir = _seeded(tmp_path)
+    profile = DEFAULT_PROFILE.model_copy(update={"allergies_or_restrictions": ["花生"]})
+    (data_dir / "users" / "alice" / "user_profile.json").write_text(
+        json.dumps(profile.model_dump(), ensure_ascii=False), encoding="utf-8")
+    database = _database(tmp_path)
+
+    imported = apply(data_dir, database)
+
+    assert imported["safety"] == 1
+    safety = SQLiteProfileTargetRepository(database).get_latest_safety("alice")
+    assert safety.allergies_or_restrictions == ("花生",)
+    # A second run is not a second decision.
+    assert apply(data_dir, database)["safety"] == 0
+
+
+def test_a_missing_profile_leaves_the_restrictions_unknown(tmp_path):
+    # Plans without a profile means the restrictions are unknown, not empty.
+    # Writing an empty list would claim "verified to have no allergies".
+    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+        SQLiteProfileTargetRepository,
+    )
+
+    data_dir = _seeded(tmp_path)
+    database = _database(tmp_path)
+
+    imported = apply(data_dir, database)
+
+    assert imported["safety"] == 0
+    assert SQLiteProfileTargetRepository(database).get_latest_safety("alice") is None

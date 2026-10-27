@@ -183,4 +183,7 @@ def test_the_activation_store_reads_the_versioned_profile(tmp_path):
     with database.connection() as connection:
         snapshot = repository.constraints_reader(connection, "alice")
     assert snapshot.versions["goal"] == setup.goal.id
-    assert snapshot.versions["available_equipment"] is None
+    # No safety row has been written, so the allergy list is present-but-unversioned
+    # rather than absent: the value exists, its version does not.
+    assert snapshot.versions["allergies_or_restrictions"] is None
+    assert "available_equipment" not in snapshot.versions

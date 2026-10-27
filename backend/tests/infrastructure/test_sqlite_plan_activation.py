@@ -323,13 +323,19 @@ def test_a_candidate_that_changed_an_ungranted_domain_is_refused(tmp_path):
 # -------------------------------------------------------------- the two writers
 
 
-def _spawn_activate(path, task_id, version, head, digest, barrier, results):
+def _spawn_activate(path, task_id, version, head, digest, barrier, results, now):
     from backend.infrastructure.repositories.sqlite_plan_repository import (
         SQLitePlanRepository,
     )
     from backend.infrastructure.sqlite.database import SQLiteDatabase
 
-    repository = SQLitePlanRepository(SQLiteDatabase(path))
+    # The clock has to cross the process boundary. The candidate was submitted at
+    # a fixed instant and expires thirty minutes later, so a child reading the wall
+    # clock reports CANDIDATE_EXPIRED long before it reaches the guard this test is
+    # about -- and the assertion then fails for a reason that has nothing to do
+    # with two writers. ``now`` is a datetime rather than a callable because only
+    # the former survives ``spawn``.
+    repository = SQLitePlanRepository(SQLiteDatabase(path), clock=lambda: now)
     barrier.wait(timeout=30)
     try:
         receipt = repository.activate(
@@ -355,7 +361,7 @@ def test_two_processes_cannot_both_confirm_the_same_head(tmp_path):
     results = context.Queue()
     processes = [context.Process(target=_spawn_activate,
                                  args=(path, task_id, submitted.version, 1, digest,
-                                       barrier, results))
+                                       barrier, results, NOW))
                  for _ in range(2)]
     outcomes = []
     try:

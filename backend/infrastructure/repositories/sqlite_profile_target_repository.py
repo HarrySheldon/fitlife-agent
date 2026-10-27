@@ -15,6 +15,8 @@ from backend.application.ports.profile_target_repository import (
     ProfileTargetRepositoryError,
     ProfileVersion,
     ProfileVersionInput,
+    SafetyVersion,
+    SafetyVersionInput,
     TargetConfirmationState,
     TargetVersion,
     TargetVersionInput,
@@ -254,6 +256,41 @@ class SQLiteProfileTargetRepository:
         targets = self.list_targets(user_id, limit=1)
         return targets[0] if targets else None
 
+    def get_latest_safety(self, user_id: str) -> SafetyVersion | None:
+        with self.database.connection() as connection:
+            row = _latest_safety_row(connection, user_id)
+        return None if row is None else _safety_from_row(row)
+
+    def append_safety_if_changed(
+        self, user_id: str, safety: SafetyVersionInput
+    ) -> SafetyVersion:
+        """Record the restrictions, unless the last version already says this.
+
+        Content comparison, not timestamp comparison: a profile save that leaves
+        the allergy list alone must not spend a version, or the history becomes a
+        log of form submissions rather than a log of decisions.
+        """
+        values = tuple(safety.allergies_or_restrictions)
+        safety_id = self._id_factory()
+        created_at = _utc_timestamp(self._clock())
+        with self.database.transaction() as connection:
+            current_row = _latest_safety_row(connection, user_id)
+            if current_row is not None:
+                current = _safety_from_row(current_row)
+                if current.allergies_or_restrictions == values:
+                    return current
+            connection.execute(
+                """
+                INSERT INTO profile_safety_versions (
+                    id, user_id, allergies_or_restrictions_json, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (safety_id, user_id, json.dumps(list(values), ensure_ascii=False),
+                 created_at),
+            )
+        return SafetyVersion(allergies_or_restrictions=values, id=safety_id,
+                             user_id=user_id, created_at=created_at)
+
     def constraint_snapshot(self, user_id: str) -> ConstraintSnapshot:
         with self.database.connection() as connection:
             return self.constraint_snapshot_with(connection, user_id)
@@ -263,17 +300,30 @@ class SQLiteProfileTargetRepository:
 
         The connection is a parameter because a confirmation must read this
         *inside* its own transaction: a snapshot taken on a second connection can
-        describe a profile the transaction is about to write against. The
-        ``versions`` map is the honest half of the answer -- this store owns the
-        goal, the weight and the two daily targets, and it does **not** own the
-        free-text restrictions, the equipment list, the session length or the
-        forbidden exercises. Those still live in the profile file, so their
-        version is ``None`` and a confirmation refuses on them rather than
-        pretending the check it just ran can be reproduced.
+        describe a profile the transaction is about to write against.
+
+        ``versions`` is the honest half of the answer, and it has three states,
+        each of which the confirmation treats differently:
+
+        * a row id -- this store owns the value, so the check is reproducible;
+        * ``None`` -- the value exists somewhere this store cannot name. Today that
+          is the allergy list before a ``profile_safety_versions`` row has been
+          written (an account that has not been migrated or has not saved its
+          profile since), and the safety conditions when there is no profile
+          version at all. Confirmation refuses on both;
+        * absent -- nothing owns the value, so it can only come from the task's
+          own clarification. There is no external authority to reproduce, and the
+          task row is already the record.
+
+        The last state is why ``available_equipment``, ``session_minutes`` and
+        ``forbidden_exercises`` are not listed: they have no file field anywhere in
+        this deployment, so inventing a "version" for them would be inventing an
+        authority.
         """
         profile_row = _latest_profile_row(connection, user_id)
         goal_row = _latest_goal_row(connection, user_id)
         target_row = _latest_target_row(connection, user_id)
+        safety_row = _latest_safety_row(connection, user_id)
 
         constraints: dict[str, object] = {}
         versions: dict[str, str | None] = {}
@@ -282,19 +332,27 @@ class SQLiteProfileTargetRepository:
             versions["goal"] = goal_row["id"]
         if profile_row is not None:
             constraints["weight_kg"] = profile_row["weight_kg"]
+            # The declared safety conditions share the profile row's version: the
+            # row that states the weight also states the pregnancy, so one id names
+            # both. They gate nutrition rather than training, which is why the
+            # validation refuses a *diet* change instead of refusing everything.
+            constraints["safety_conditions"] = list(
+                json.loads(profile_row["safety_conditions_json"]))
             versions["weight_kg"] = profile_row["id"]
+            versions["safety_conditions"] = profile_row["id"]
+        else:
+            versions["safety_conditions"] = None
         if target_row is not None:
             constraints["daily_calorie_target"] = target_row["calories"]
             constraints["daily_protein_target"] = target_row["protein"]
             versions["daily_calorie_target"] = target_row["id"]
             versions["daily_protein_target"] = target_row["id"]
-        for field in ("allergies_or_restrictions", "action_restrictions",
-                      "available_equipment", "session_minutes", "forbidden_exercises"):
-            # Stated as unversioned rather than omitted: omission means "unknown"
-            # and would be answered by asking the user, which is the wrong
-            # remedy. These values exist -- just not anywhere this store can
-            # point at.
-            versions[field] = None
+        if safety_row is not None:
+            constraints["allergies_or_restrictions"] = list(
+                json.loads(safety_row["allergies_or_restrictions_json"]))
+            versions["allergies_or_restrictions"] = safety_row["id"]
+        else:
+            versions["allergies_or_restrictions"] = None
         return ConstraintSnapshot(constraints=constraints, versions=versions)
 
     def append_target(
@@ -529,6 +587,10 @@ class SQLiteProfileTargetRepository:
                 "DELETE FROM daily_target_versions WHERE user_id = ?",
                 "DELETE FROM user_profile_versions WHERE user_id = ?",
                 "DELETE FROM overall_goal_versions WHERE user_id = ?",
+                # The allergy list is health data and belongs to the account, so it
+                # leaves with it. A versioned table is still user data: history is
+                # kept for the owner's sake, not after the owner is gone.
+                "DELETE FROM profile_safety_versions WHERE user_id = ?",
             ):
                 connection.execute(statement, (user_id,))
             connection.execute(
@@ -749,6 +811,27 @@ def _latest_target_row(connection, user_id: str):
         """,
         (user_id,),
     ).fetchone()
+
+
+def _latest_safety_row(connection, user_id: str):
+    return connection.execute(
+        """
+        SELECT * FROM profile_safety_versions
+        WHERE user_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+
+
+def _safety_from_row(row) -> SafetyVersion:
+    return SafetyVersion(
+        allergies_or_restrictions=tuple(json.loads(row["allergies_or_restrictions_json"])),
+        id=row["id"],
+        user_id=row["user_id"],
+        created_at=row["created_at"],
+    )
 
 
 def _profile_at_effective_from(connection, user_id: str, effective_from: str):

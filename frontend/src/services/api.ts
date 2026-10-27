@@ -29,6 +29,16 @@ import type {
   OverallGoalVersion,
   OverallGoalVersionUpdate,
   PlanDraft,
+  PlanTask,
+  PlanTaskAnswerInput,
+  PlanTaskCancelInput,
+  PlanTaskConfirmation,
+  PlanTaskConfirmInput,
+  PlanTaskExecuteInput,
+  PlanTaskExecution,
+  PlanTaskScopeInput,
+  PlanTaskStartInput,
+  CurrentPlan,
   ProfileSetup,
   ProfileSetupMutation,
   ProfileVersionUpdate,
@@ -88,8 +98,24 @@ async function requestAccountExport(): Promise<AccountDataExport> {
   }
 }
 
-function requestHeaders(init?: RequestInit): Headers {
-  const token = tokenStorage.get()
+const PLAN_TASKS = '/plan-adjustment-tasks'
+
+/**
+ * Every task mutation carries a key the caller keeps.
+ *
+ * A retry after an unknown network result must reuse the key it started with, or
+ * the server cannot tell "the request I already applied" from "a second request"
+ * and will refuse the second one as a version conflict the user cannot resolve.
+ */
+function planTaskRequest<T>(path: string, key: string, body: unknown): Promise<T> {
+  return requestV1<T>(`${PLAN_TASKS}${path}`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: JSON.stringify(body),
+  })
+}
+
+function requestHeaders(init?: RequestInit): Headers {  const token = tokenStorage.get()
   const headers = new Headers(init?.headers)
   headers.set('Accept-Language', languageStorage.get())
   headers.set('X-Timezone', browserTimezone())
@@ -204,6 +230,20 @@ export const api = {
     request<CoachActionResponse>(`/plan/${encodeURIComponent(planId)}/interpret`, { method: 'POST' }),
   activatePlan: (draftId: string) =>
     request<StoredPlan>('/plan/activate', { method: 'POST', body: JSON.stringify({ draft_id: draftId }) }),
+  getCurrentPlan: () => request<CurrentPlan>('/plan/current'),
+  startPlanTask: (input: PlanTaskStartInput, key: string) =>
+    planTaskRequest<PlanTask>('', key, input),
+  getPlanTask: (taskId: string) => requestV1<PlanTask>(`${PLAN_TASKS}/${encodeURIComponent(taskId)}`),
+  decidePlanTaskScope: (taskId: string, input: PlanTaskScopeInput, key: string) =>
+    planTaskRequest<PlanTask>(`/${encodeURIComponent(taskId)}/scope`, key, input),
+  answerPlanTask: (taskId: string, input: PlanTaskAnswerInput, key: string) =>
+    planTaskRequest<PlanTask>(`/${encodeURIComponent(taskId)}/answers`, key, input),
+  executePlanTask: (taskId: string, input: PlanTaskExecuteInput, key: string) =>
+    planTaskRequest<PlanTaskExecution>(`/${encodeURIComponent(taskId)}/execute`, key, input),
+  confirmPlanTask: (taskId: string, input: PlanTaskConfirmInput, key: string) =>
+    planTaskRequest<PlanTaskConfirmation>(`/${encodeURIComponent(taskId)}/confirm`, key, input),
+  cancelPlanTask: (taskId: string, input: PlanTaskCancelInput, key: string) =>
+    planTaskRequest<PlanTask>(`/${encodeURIComponent(taskId)}/cancel`, key, input),
   runEval: (limit = 20) => request<EvalResult>('/eval/run', { method: 'POST', body: JSON.stringify({ limit }) }),
   calendarDays: (start: string, end: string) => request<DailySummary[]>(`/calendar/days?start=${start}&end=${end}`),
   calendarDay: (date: string) => request<DailyDetail>(`/calendar/day/${date}`),

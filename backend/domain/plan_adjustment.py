@@ -172,6 +172,12 @@ class PlanConstraints(BaseModel):
     daily_calorie_target: float | None = Field(default=None, ge=0)
     daily_protein_target: float | None = Field(default=None, ge=0)
     allergies_or_restrictions: tuple[str, ...] | None = None
+    # Declared medical conditions that affect nutrition (pregnancy, breastfeeding,
+    # eating-disorder history, a condition affecting nutrition). Kept as opaque
+    # strings rather than the literal enum on purpose: the rule below does not need
+    # to know *which* condition it is, and naming them here would make an added
+    # code a breaking change for stored tasks.
+    safety_conditions: tuple[str, ...] | None = None
     action_restrictions: tuple[str, ...] | None = None
     available_equipment: tuple[str, ...] | None = None
     session_minutes: int | None = Field(default=None, gt=0)
@@ -416,11 +422,32 @@ def _legacy_path(code: str) -> str:
 
 
 def _required_constraints(domains: frozenset[str], constraints: PlanConstraints) -> list[Violation]:
-    """Unknown restrictions block the candidate; they are never filled with a default."""
+    """Reasons the candidate cannot be judged at all -- before any value is read.
+
+    Two different refusals share this slot because both must stop the round rather
+    than send it back to the model.
+
+    ``CONSTRAINT_MISSING``: the value is unknown, so the check cannot run and the
+    task has to ask. Unknown is never treated as empty.
+
+    ``SAFETY_CONDITION_BLOCKS_DIET``: the value is known and it says this account's
+    nutrition must not be designed here. The rest of the product already says so --
+    ``calculate_daily_targets`` refuses outright for a declared safety condition
+    rather than computing a target -- so a model rewriting the meals would be
+    doing, unsupervised, the one thing the deterministic path declines to do.
+    Training is untouched: the four conditions are nutrition conditions.
+    """
     missing: list[Violation] = []
-    if "diet" in domains and constraints.allergies_or_restrictions is None:
-        missing.append(Violation(code="CONSTRAINT_MISSING", domain="diet",
-                                 path="constraints.allergies_or_restrictions"))
+    if "diet" in domains:
+        if constraints.allergies_or_restrictions is None:
+            missing.append(Violation(code="CONSTRAINT_MISSING", domain="diet",
+                                     path="constraints.allergies_or_restrictions"))
+        if constraints.safety_conditions is None:
+            missing.append(Violation(code="CONSTRAINT_MISSING", domain="diet",
+                                     path="constraints.safety_conditions"))
+        elif constraints.safety_conditions:
+            missing.append(Violation(code="SAFETY_CONDITION_BLOCKS_DIET", domain="diet",
+                                     path="constraints.safety_conditions"))
     if "training" in domains and constraints.action_restrictions is None:
         missing.append(Violation(code="CONSTRAINT_MISSING", domain="training",
                                  path="constraints.action_restrictions"))

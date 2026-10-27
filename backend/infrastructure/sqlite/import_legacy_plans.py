@@ -142,23 +142,35 @@ def apply(data_dir: Path, database) -> dict:
     The completion record is written last and only if every owner succeeded: the
     factory reads it to decide whether ``sqlite`` may be authoritative, so a
     partial import must leave it absent and keep the deployment on files.
+
+    The allergy list is copied too. It is the last hard constraint whose only
+    authority is a file, and a confirmation cannot approve a candidate reviewed
+    against a value it cannot name the version of -- so the same authorized,
+    explicit migration that moves the plans moves the restrictions with them.
     """
     from backend.infrastructure.repositories.sqlite_plan_repository import (
         SQLitePlanRepository,
     )
+    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+        SQLiteProfileTargetRepository,
+    )
+    from backend.tools.profile_loader import load_profile
 
     found = inventory(data_dir)
     if found.refused:
         raise SystemExit(_refusals(found))
 
     repository = SQLitePlanRepository(database)
-    imported = {"owners": 0, "plans": 0, "drafts": 0}
+    profiles = SQLiteProfileTargetRepository(database)
+    imported = {"owners": 0, "plans": 0, "drafts": 0, "safety": 0}
     for user_id, owner in sorted(found.owners.items()):
         counts = repository.import_history(user_id, owner.plans, owner.drafts,
                                            head=owner.head)
         imported["owners"] += 1
         imported["plans"] += counts["plans"]
         imported["drafts"] += counts["drafts"]
+        imported["safety"] += _import_safety(profiles, load_profile,
+                                             data_dir, user_id)
 
     with database.transaction() as connection:
         connection.execute(
@@ -175,6 +187,33 @@ def apply(data_dir: Path, database) -> dict:
              found.plan_count, found.draft_count),
         )
     return imported
+
+
+def _import_safety(profiles, load_profile, data_dir: Path, user_id: str) -> int:
+    """One versioned allergy list per owner, or zero when it already matches.
+
+    A missing profile file is not an error: the account has plans but no profile,
+    which means its restrictions are unknown rather than empty. Writing an empty
+    list would be inventing "verified to have no allergies", so nothing is written
+    and a later confirmation refuses until the profile is saved.
+    """
+    from backend.application.ports.profile_target_repository import SafetyVersionInput
+
+    path = Path(data_dir) / "users" / user_id / "user_profile.json"
+    if not path.is_file():
+        return 0
+    try:
+        profile = load_profile(path)
+    except (OSError, UnicodeError, ValueError):
+        raise SystemExit(
+            f"refusing to import: {path} is not a readable profile") from None
+    before = profiles.get_latest_safety(user_id)
+    after = profiles.append_safety_if_changed(
+        user_id,
+        SafetyVersionInput(
+            allergies_or_restrictions=tuple(profile.allergies_or_restrictions)),
+    )
+    return 0 if before is not None and before.id == after.id else 1
 
 
 def _now() -> str:

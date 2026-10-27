@@ -140,3 +140,58 @@ def _workout(exercise: str) -> WorkoutRecord:
         date="2026-07-02", type="strength", exercise=exercise,
         muscle_group="back", sets=4, reps=6, weight=80, duration_min=50,
     )
+
+
+def test_saving_a_profile_versions_the_allergy_list(tmp_path, monkeypatch):
+    """The write path a plan confirmation depends on.
+
+    The allergy list is the last hard constraint whose only authority was a file.
+    Saving the profile is where that file is written, so it is where the version
+    has to be appended -- otherwise a confirmation has nothing to name and refuses
+    for a reason the user cannot fix from the UI.
+    """
+    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+        SQLiteProfileTargetRepository,
+    )
+
+    data, root, database, _ = _setup(tmp_path, monkeypatch)
+    sqlite_repository = SQLiteFitnessRepository(
+        database, profiles=FileFitnessRepository(), data_dir=data)
+    profiles = SQLiteProfileTargetRepository(database)
+    profile = sqlite_repository.read_profile(USER).model_copy(
+        update={"allergies_or_restrictions": ["花生"]})
+    assert profiles.get_latest_safety(USER) is None
+
+    sqlite_repository.write_profile(profile, USER)
+
+    first = profiles.get_latest_safety(USER)
+    assert first.allergies_or_restrictions == ("花生",)
+
+    # A second save that leaves the list alone is not a new decision.
+    sqlite_repository.write_profile(profile, USER)
+    assert profiles.get_latest_safety(USER).id == first.id
+
+    changed = profile.model_copy(update={"allergies_or_restrictions": ["花生", "海鲜"]})
+    sqlite_repository.write_profile(changed, USER)
+    assert profiles.get_latest_safety(USER).id != first.id
+    assert profiles.get_latest_safety(USER).allergies_or_restrictions == ("花生", "海鲜")
+
+
+def test_the_ownerless_default_profile_has_no_version(tmp_path, monkeypatch):
+    # ``user_id=None`` is the template profile, not an account. Versioning it
+    # would attribute one user's restrictions to nobody.
+    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+        SQLiteProfileTargetRepository,
+    )
+
+    data, root, database, _ = _setup(tmp_path, monkeypatch)
+    sqlite_repository = SQLiteFitnessRepository(
+        database, profiles=FileFitnessRepository(), data_dir=data)
+    profile = sqlite_repository.read_profile(USER).model_copy(
+        update={"allergies_or_restrictions": ["花生"]})
+
+    sqlite_repository.write_profile(profile, None)
+
+    with database.connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM profile_safety_versions").fetchone()["n"] == 0

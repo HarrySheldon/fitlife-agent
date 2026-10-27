@@ -274,26 +274,78 @@ class CoachTurnService:
         means "take the slot, produce, publish, or fail" has exactly one
         implementation, so a new legacy caller cannot forget one of the steps.
         """
+        turn, execution, token = self._enter_slot(
+            user_id, question=question, action=action, surface=surface
+        )
+        try:
+            self._slot_ready(user_id, turn, execution)
+            result = produce()
+        except BaseException as error:  # noqa: BLE001 - the slot must always be freed
+            self._finish_failed(user_id, turn.turn_id, execution, error)
+            raise
+        finally:
+            self._leave_slot(turn, execution, token)
+        return self._publish(user_id, turn, execution, result)
+
+    async def run_task(
+        self,
+        user_id: str,
+        *,
+        question: str,
+        action: str,
+        surface: str,
+        produce,
+    ) -> dict:
+        """Run an asynchronous task round under the same single slot.
+
+        A plan task is a model call like any other, so it may not run beside a
+        coach turn: two concurrent generations for one account is exactly what the
+        slot exists to prevent. The only difference from ``run_legacy`` is that
+        ``produce`` is awaited, because a plan round is asynchronous; everything
+        around it -- taking the slot, the cancellation pre-check, releasing it and
+        publishing -- is the same code.
+        """
+        turn, execution, token = self._enter_slot(
+            user_id, question=question, action=action, surface=surface
+        )
+        try:
+            self._slot_ready(user_id, turn, execution)
+            result = await produce()
+        except BaseException as error:  # noqa: BLE001 - the slot must always be freed
+            self._finish_failed(user_id, turn.turn_id, execution, error)
+            raise
+        finally:
+            self._leave_slot(turn, execution, token)
+        return self._publish(user_id, turn, execution, result)
+
+    # -- the slot, in one place -------------------------------------------
+    def _enter_slot(self, user_id: str, *, question: str, action: str, surface: str):
         turn = self.begin_legacy(
             user_id, question=question, action=action, surface=surface
         )
         execution = _Execution()
         with self._lock:
             self._running[turn.turn_id] = execution
-        token = current_abort.set(execution.abort)
-        try:
-            latest = self.repository.get_turn(user_id, turn.turn_id)
-            if latest.cancel_requested_at is not None or execution.abort.aborted:
-                execution.abort.abort()
-                raise LegacyAnswerDiscarded("the request was cancelled before production")
-            result = produce()
-        except BaseException as error:  # noqa: BLE001 - the slot must always be freed
-            self._finish_failed(user_id, turn.turn_id, execution, error)
-            raise
-        finally:
-            current_abort.reset(token)
-            with self._lock:
-                self._running.pop(turn.turn_id, None)
+        return turn, execution, current_abort.set(execution.abort)
+
+    def _slot_ready(self, user_id: str, turn: TurnRecord, execution: _Execution) -> None:
+        """Re-read the turn immediately before producing.
+
+        A cancellation that arrived between claiming the slot and starting the
+        model must not still produce: the user asked for the work to stop, not for
+        a shorter answer.
+        """
+        latest = self.repository.get_turn(user_id, turn.turn_id)
+        if latest.cancel_requested_at is not None or execution.abort.aborted:
+            execution.abort.abort()
+            raise LegacyAnswerDiscarded("the request was cancelled before production")
+
+    def _leave_slot(self, turn: TurnRecord, execution: _Execution, token) -> None:
+        current_abort.reset(token)
+        with self._lock:
+            self._running.pop(turn.turn_id, None)
+
+    def _publish(self, user_id: str, turn: TurnRecord, execution: _Execution, result: dict) -> dict:
         published = self.finish_legacy(
             user_id,
             turn,

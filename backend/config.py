@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # the window between "the user saw this" and "this is what gets written".
     plan_adjustment_task_ttl_days: int = Field(default=30, gt=0)
     plan_candidate_ttl_minutes: int = Field(default=30, gt=0)
+    # Plan tasks are a delivery, not an experiment, so the entry is on by default:
+    # shipping a feature nobody can open and calling it done is how the last three
+    # checkpoints ended up invisible. Storage is a different decision -- see
+    # ``plan_storage_mode`` -- and stays a data migration behind an explicit import.
+    plan_adjustment_tasks_enabled: bool = True
     # Which store is the plan authority. This is a data-migration switch, not a
     # feature flag: turning the coach on must not move anybody's history, and a
     # merge must never migrate a database as a side effect. ``sqlite`` is refused

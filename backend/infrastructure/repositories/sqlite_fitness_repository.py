@@ -60,13 +60,43 @@ class SQLiteFitnessRepository:
 
     def write_profile(self, profile: UserProfile, user_id: str | None = None) -> None:
         self.profiles.write_profile(profile, user_id)
+        self._record_safety(profile, user_id)
 
     def update_profile_atomically(
         self,
         update: Callable[[UserProfile], UserProfile],
         user_id: str | None = None,
     ) -> UserProfile:
-        return self.profiles.update_profile_atomically(update, user_id)
+        updated = self.profiles.update_profile_atomically(update, user_id)
+        self._record_safety(updated, user_id)
+        return updated
+
+    def _record_safety(self, profile: UserProfile, user_id: str | None) -> None:
+        """Version the allergy list whenever the profile write changed it.
+
+        This is the write path the plan confirmation depends on: without it the
+        restrictions stay a fact about a file, and no confirmation can prove which
+        version of them a candidate was reviewed against. ``None`` means the
+        default, ownerless profile, which no plan task can belong to.
+
+        A failure here is not swallowed. The profile itself is already written, so
+        raising leaves the account with a saved profile and an unversioned safety
+        record -- which refuses confirmation until the next save, and that is the
+        safe direction: the alternative is reporting success for a write that did
+        not happen.
+        """
+        if user_id is None:
+            return
+        from backend.application.ports.profile_target_repository import SafetyVersionInput
+        from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+            SQLiteProfileTargetRepository,
+        )
+
+        SQLiteProfileTargetRepository(self.database).append_safety_if_changed(
+            user_id,
+            SafetyVersionInput(
+                allergies_or_restrictions=tuple(profile.allergies_or_restrictions)),
+        )
 
     def read_meals(self, user_id: str | None = None) -> pd.DataFrame:
         if user_id is None:

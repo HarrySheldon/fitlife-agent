@@ -11,6 +11,7 @@ from backend.application.ports.profile_target_repository import (
     GoalVersionInput,
     ProfileTargetRepositoryError,
     ProfileVersionInput,
+    SafetyVersionInput,
     TargetVersionInput,
 )
 from backend.infrastructure.repositories.sqlite_profile_target_repository import (
@@ -923,12 +924,10 @@ def test_the_constraint_snapshot_names_the_rows_it_read(tmp_path):
     assert snapshot.constraints["daily_calorie_target"] == 2100
 
 
-def test_a_hard_constraint_this_store_does_not_own_has_no_version(tmp_path):
-    # The restrictions, the equipment list, the session length and the forbidden
-    # exercises still live in the profile file. Reporting them as versioned would
-    # let a confirmation approve on a check nobody can re-read, so they carry no
-    # version at all -- and a snapshot taken before any profile exists says the
-    # same thing rather than claiming "unchanged".
+def test_an_unmigrated_allergy_list_is_reported_as_unversioned(tmp_path):
+    # Before any safety row exists the list still lives only in the profile file.
+    # Reporting it as absent would read as "nothing owns it"; reporting a version
+    # would read as "reproducible". It is neither, so it is present and None.
     repository = SQLiteProfileTargetRepository(_database(tmp_path))
     repository.bootstrap(
         "user-a",
@@ -939,11 +938,58 @@ def test_a_hard_constraint_this_store_does_not_own_has_no_version(tmp_path):
     snapshot = repository.constraint_snapshot("user-a")
     empty = repository.constraint_snapshot("user-b")
 
-    for field in ("allergies_or_restrictions", "action_restrictions",
-                  "available_equipment", "session_minutes", "forbidden_exercises"):
-        assert snapshot.versions[field] is None
-        assert empty.versions[field] is None
+    assert snapshot.versions["allergies_or_restrictions"] is None
+    assert empty.versions["allergies_or_restrictions"] is None
     assert empty.constraints == {}
+
+
+def test_a_constraint_no_store_owns_is_absent_rather_than_unversioned(tmp_path):
+    # Equipment, session length, forbidden exercises and action restrictions have
+    # no file field anywhere: they can only come from the task's own
+    # clarification, and the task row is already their record. Listing them as
+    # unversioned would block confirmation over a check that has nothing to
+    # reproduce.
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01"),
+        GoalVersionInput(goal="maintenance", effective_from="2026-07-01"),
+    )
+
+    versions = repository.constraint_snapshot("user-a").versions
+
+    for field in ("action_restrictions", "available_equipment", "session_minutes",
+                  "forbidden_exercises"):
+        assert field not in versions
+
+
+def test_the_allergy_list_is_versioned_once_and_only_when_it_changes(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+
+    first = repository.append_safety_if_changed(
+        "user-a", SafetyVersionInput(allergies_or_restrictions=("花生",)))
+    same = repository.append_safety_if_changed(
+        "user-a", SafetyVersionInput(allergies_or_restrictions=("花生",)))
+    changed = repository.append_safety_if_changed(
+        "user-a", SafetyVersionInput(allergies_or_restrictions=("花生", "海鲜")))
+
+    assert same.id == first.id
+    assert changed.id != first.id
+    latest = repository.get_latest_safety("user-a")
+    assert latest.id == changed.id
+    assert latest.allergies_or_restrictions == ("花生", "海鲜")
+    assert repository.get_latest_safety("user-b") is None
+
+
+def test_the_versioned_allergy_list_reaches_the_snapshot(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    safety = repository.append_safety_if_changed(
+        "user-a", SafetyVersionInput(allergies_or_restrictions=("花生",)))
+
+    snapshot = repository.constraint_snapshot("user-a")
+
+    assert snapshot.versions["allergies_or_restrictions"] == safety.id
+    assert snapshot.constraints["allergies_or_restrictions"] == ["花生"]
 
 
 def test_the_snapshot_reads_on_the_connection_it_is_given(tmp_path):
@@ -959,3 +1005,51 @@ def test_the_snapshot_reads_on_the_connection_it_is_given(tmp_path):
         inside = repository.constraint_snapshot_with(connection, "user-a")
 
     assert inside.versions["goal"] == setup.goal.id
+
+
+def test_deleting_an_account_removes_the_allergy_versions(tmp_path):
+    """A versioned table is still the user's data.
+
+    The allergy list is health information. Keeping its history after the account
+    is gone would mean the deletion removed the profile and left the one fact the
+    profile was mostly there for.
+    """
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository.append_safety_if_changed(
+        "user-a", SafetyVersionInput(allergies_or_restrictions=("花生",)))
+    repository.append_safety_if_changed(
+        "user-b", SafetyVersionInput(allergies_or_restrictions=("海鲜",)))
+
+    repository.delete_user_data("user-a")
+
+    assert repository.get_latest_safety("user-a") is None
+    assert repository.get_latest_safety("user-b") is not None
+
+
+def test_the_declared_safety_conditions_reach_the_snapshot(tmp_path):
+    """They share the profile row's version.
+
+    The row that states the weight also states the pregnancy, so one id names
+    both -- and a confirmation can say which version of them it approved against
+    instead of discovering the fact only in the file.
+    """
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    setup = repository.bootstrap(
+        "user-a",
+        _profile("2026-07-01", safety_conditions=("pregnancy",)),
+        GoalVersionInput(goal="fat_loss", effective_from="2026-07-01"),
+    )
+
+    snapshot = repository.constraint_snapshot("user-a")
+
+    assert snapshot.constraints["safety_conditions"] == ["pregnancy"]
+    assert snapshot.versions["safety_conditions"] == setup.profile.id
+
+
+def test_an_account_without_a_profile_has_no_safety_version(tmp_path):
+    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+
+    snapshot = repository.constraint_snapshot("user-a")
+
+    assert "safety_conditions" not in snapshot.constraints
+    assert snapshot.versions["safety_conditions"] is None

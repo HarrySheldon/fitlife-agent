@@ -275,6 +275,7 @@ def test_verdict_reports_allergen_conflict_without_echoing_the_restriction():
     constraints = PlanConstraints(
         goal="fat_loss", weight_kg=70, daily_calorie_target=2000,
         daily_protein_target=140, allergies_or_restrictions=("花生",),
+        safety_conditions=(),
     )
 
     verdict = validate_bundle(base, bundle, constraints, change_domains=frozenset({"diet"}))
@@ -341,3 +342,99 @@ def test_patch_error_carries_the_code_and_is_a_value_error():
                       frozenset({"training"}))
     assert caught.value.code == "PATCH_STALE"
     assert isinstance(caught.value, ValueError)
+
+
+def _diet_patch():
+    return Patch(domain="diet", path=("diet_plan", "meals", 1),
+                 old_value="鸡胸肉沙拉", new_value="三文鱼沙拉",
+                 reason="换一种蛋白来源", evidence_refs=())
+
+
+def test_a_declared_safety_condition_refuses_a_diet_change():
+    """Pregnancy is not something the model gets to design a menu around.
+
+    The deterministic target calculation already refuses for these accounts instead
+    of producing a number, so a model rewriting the meals would be doing, with no
+    supervision at all, the one thing the calculated path declines to do.
+    """
+    constraints = PlanConstraints(
+        goal="fat_loss", weight_kg=70, daily_calorie_target=2000,
+        daily_protein_target=140, allergies_or_restrictions=(),
+        safety_conditions=("pregnancy",),
+    )
+
+    verdict = validate_bundle(_plan(), CandidateBundle(patches=(_diet_patch(),)),
+                              constraints, change_domains=frozenset({"diet"}))
+
+    assert verdict.passed is False
+    assert [item.code for item in verdict.violations] == ["SAFETY_CONDITION_BLOCKS_DIET"]
+    assert verdict.failed_domains == ("diet",)
+
+
+def test_a_declared_safety_condition_leaves_training_alone():
+    """The four conditions gate nutrition, not exercise. Blocking training too
+    would take away the only adjustment these accounts can still make."""
+    constraints = PlanConstraints(
+        goal="build_muscle", weight_kg=70, daily_calorie_target=2000,
+        daily_protein_target=140, allergies_or_restrictions=(),
+        action_restrictions=(), available_equipment=("barbell",),
+        safety_conditions=("pregnancy",),
+    )
+
+    verdict = validate_bundle(_plan(), CandidateBundle(patches=(_training_patch(),)),
+                              constraints, change_domains=frozenset({"training"}))
+
+    assert verdict.passed is True
+    assert verdict.violations == ()
+
+
+def test_unknown_safety_conditions_are_asked_not_assumed_absent():
+    constraints = PlanConstraints(
+        goal="fat_loss", weight_kg=70, daily_calorie_target=2000,
+        daily_protein_target=140, allergies_or_restrictions=(),
+    )
+
+    verdict = validate_bundle(_plan(), CandidateBundle(patches=(_diet_patch(),)),
+                              constraints, change_domains=frozenset({"diet"}))
+
+    assert [item.code for item in verdict.violations] == ["CONSTRAINT_MISSING"]
+    assert [item.path for item in verdict.violations] == ["constraints.safety_conditions"]
+
+
+def test_the_confirmation_recheck_refuses_a_diet_document_under_a_safety_condition():
+    """Confirmation holds a merged document, not a bundle, so it asks the same
+    question a different way: did the diet change at all?"""
+    from backend.agent.plan_adjustment.validation import PlanValidation
+
+    base = _plan()
+    changed = deepcopy(base)
+    changed["diet_plan"]["meals"] = ["燕麦加鸡蛋", "三文鱼沙拉", "牛肉面"]
+    constraints = PlanConstraints(
+        goal="fat_loss", weight_kg=70, daily_calorie_target=2000,
+        daily_protein_target=140, allergies_or_restrictions=(),
+        action_restrictions=(), available_equipment=("barbell",),
+        safety_conditions=("pregnancy",),
+    )
+
+    violations = PlanValidation().review_document(changed, constraints, base=base)
+
+    assert [item.code for item in violations] == ["SAFETY_CONDITION_BLOCKS_DIET"]
+    assert [item.path for item in violations] == ["diet_plan"]
+
+
+def test_the_confirmation_recheck_passes_a_document_that_left_the_diet_alone():
+    from backend.agent.plan_adjustment.validation import PlanValidation
+
+    base = _plan()
+    changed = deepcopy(base)
+    changed["workout_plan"]["days"][0]["duration_min"] = 50
+    constraints = PlanConstraints(
+        goal="build_muscle", weight_kg=70, daily_calorie_target=2000,
+        daily_protein_target=140, allergies_or_restrictions=(),
+        action_restrictions=(), available_equipment=("barbell",),
+        safety_conditions=("pregnancy",),
+    )
+
+    violations = PlanValidation().review_document(changed, constraints, base=base)
+
+    assert violations == []

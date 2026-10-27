@@ -80,6 +80,20 @@ class ProfileTargetSetup:
 
 
 @dataclass(frozen=True)
+class SafetyVersionInput:
+    """The hard restrictions that used to live only in the profile file."""
+
+    allergies_or_restrictions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SafetyVersion(SafetyVersionInput):
+    id: str
+    user_id: str
+    created_at: str
+
+
+@dataclass(frozen=True)
 class ConstraintSnapshot:
     """Hard constraints, and the versioned record each one was read from.
 
@@ -123,6 +137,14 @@ class ProfileTargetRepository(Protocol):
     ) -> GoalVersion | None: ...
 
     def get_latest_target(self, user_id: str) -> TargetVersion | None: ...
+
+    def get_latest_safety(self, user_id: str) -> SafetyVersion | None: ...
+
+    def append_safety_if_changed(
+        self,
+        user_id: str,
+        safety: SafetyVersionInput,
+    ) -> SafetyVersion: ...
 
     def constraint_snapshot(self, user_id: str) -> ConstraintSnapshot: ...
 
