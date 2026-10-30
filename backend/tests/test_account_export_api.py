@@ -115,6 +115,7 @@ def test_account_export_uses_authenticated_user_and_fixed_safe_download_headers(
             "entry-drafts.json",
             "identity.json",
             "model-connection.json",
+            "plan-tasks.json",
             "preferences.json",
             "profile.json",
             "records/meals.csv",

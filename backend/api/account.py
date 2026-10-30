@@ -94,6 +94,7 @@ def export_account_data(
         # The authoritative store, so an export of a SQLite-backed deployment
         # contains the plans rather than an empty directory.
         plans=build_plan_repository(settings),
+        plan_tasks=SQLitePlanAdjustmentRepository(get_database()),
     ).execute(principal.user.user_id)
     return Response(
         content=archive,

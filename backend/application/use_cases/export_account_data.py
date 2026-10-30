@@ -120,6 +120,7 @@ class ExportAccountData:
         entry_tasks: EntryTaskExportPort | None = None,
         coach_conversations: CoachConversationExportPort | None = None,
         plans: PlanRepository | None = None,
+        plan_tasks=None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
@@ -131,6 +132,7 @@ class ExportAccountData:
         # deployment serving plans from SQLite would then export an empty history
         # and call it complete.
         self.plans = plans
+        self.plan_tasks = plan_tasks
 
     def execute(self, user_id: str) -> bytes:
         try:
@@ -246,6 +248,11 @@ class ExportAccountData:
             budget.source_bytes += len(snapshot)
             budget.add_entry(entries, 'coach-conversations.json', snapshot)
         archive = io.BytesIO()
+        if self.plan_tasks is not None:
+            limit = min(MAX_SOURCE_BYTES, max(0, MAX_EXPORT_BYTES - budget.source_bytes))
+            snapshot = self.plan_tasks.export_user_data(user_id, max_bytes=limit)
+            budget.source_bytes += len(snapshot)
+            budget.add_entry(entries, 'plan-tasks.json', snapshot)
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as exported:
             for path in sorted(entries):
                 info = ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
