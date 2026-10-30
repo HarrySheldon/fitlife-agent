@@ -206,6 +206,13 @@ export const zhCN = {
       instructionsPlaceholder: '描述你希望进行的调整', generateAdjustment: '生成调整草稿',
       confirmAdjustment: '确认调整后的计划', adjustmentDraft: 'Agent 调整草稿', invalidId: '请使用有效的计划 ID。',
       planTask: {
+        recover: '查找未完成的调整',
+        diffTitle: '核对具体改动', before: '修改前', after: '修改后',
+        diffSource: '来源：系统对存储基准与已校验候选的确定性比较；数字不等于已独立核实的营养事实。',
+        currentRequest: '本次调整需求', answerTitle: '补充必要限制',
+        answerHint: '多项用逗号分隔。限制留空表示明确确认没有；器械和时间请如实填写，不要猜测。',
+        answerSubmit: '确认这些限制', newTask: '开始新的调整',
+        fields: { allergies_or_restrictions: '过敏与饮食限制', action_restrictions: '动作限制', available_equipment: '可用器械', forbidden_exercises: '禁止动作', session_minutes: '可用分钟数' },
         title: '调整任务', dialogTitle: '调整这份计划', close: '关闭',
         open: '调整这份计划',
         start: '开始调整', execute: '生成候选方案', confirm: '确认并启用',

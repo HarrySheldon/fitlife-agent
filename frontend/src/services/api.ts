@@ -234,6 +234,7 @@ export const api = {
   startPlanTask: (input: PlanTaskStartInput, key: string) =>
     planTaskRequest<PlanTask>('', key, input),
   getPlanTask: (taskId: string) => requestV1<PlanTask>(`${PLAN_TASKS}/${encodeURIComponent(taskId)}`),
+  listPlanTasks: () => requestV1<{ tasks: PlanTask[] }>(PLAN_TASKS),
   decidePlanTaskScope: (taskId: string, input: PlanTaskScopeInput, key: string) =>
     planTaskRequest<PlanTask>(`/${encodeURIComponent(taskId)}/scope`, key, input),
   answerPlanTask: (taskId: string, input: PlanTaskAnswerInput, key: string) =>

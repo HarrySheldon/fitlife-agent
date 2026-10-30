@@ -16,6 +16,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+export function useOptionalAuth() { return useContext(AuthContext) }
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null)
   const [initializing, setInitializing] = useState(true)

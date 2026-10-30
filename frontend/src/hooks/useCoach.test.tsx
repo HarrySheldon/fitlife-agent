@@ -138,7 +138,7 @@ it('a failed stale completion read cannot erase a newer turn tracker', async () 
   await act(async () => result.current.send({ question: 'New question', action: 'chat', surface: 'today' }))
   await act(async () => { rejectOld(new Error('old chat was deleted')) })
   await waitFor(() => expect(api.turn).toHaveBeenCalledWith('t1'), { timeout: 2500 })
-  expect(result.current.lastTurn?.status).toBe('succeeded')
+  await waitFor(() => expect(result.current.lastTurn?.status).toBe('succeeded'), { timeout: 4000 })
 })
 
 it('does not carry a stop notice into the next turn or another chat', async () => {

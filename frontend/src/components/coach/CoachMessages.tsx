@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import type { CoachMessage } from '../../types/coach'
 
 // Keep this component mounted while hidden so reading position survives minimize.
-export function CoachMessages({ messages, conversation, visible = true }: { messages: CoachMessage[]; conversation: string | null; visible?: boolean }) {
+export function CoachMessages({ messages, conversation, visible = true, onOpenTask }: { messages: CoachMessage[]; conversation: string | null; visible?: boolean; onOpenTask?: (taskId: string) => void }) {
   const { t } = useTranslation()
   const list = useRef<HTMLDivElement>(null)
   const positions = useRef<Record<string, number>>({})
@@ -43,6 +43,7 @@ export function CoachMessages({ messages, conversation, visible = true }: { mess
           <small>{t('coachConversation.advice')}</small>
           {message.metadata?.business_task_ref ? <p className="coach-business-task" data-testid="coach-business-task">
             {t('coachConversation.businessTask')}: {message.metadata.business_task_ref.kind} · {message.metadata.business_task_ref.task_id}
+            {message.metadata.business_task_ref.kind === 'plan_adjustment' && onOpenTask ? <button type="button" onClick={() => onOpenTask(message.metadata!.business_task_ref!.task_id)}>{t('plan.planTask.open')}</button> : null}
           </p> : null}
           {message.metadata?.context ? <p>{t('coachConversation.context')}: {[message.metadata.context.date, message.metadata.context.plan_id, message.metadata.context.report_week].filter(Boolean).join(' · ') || t('coachConversation.recentOnly')}</p> : null}
           {message.metadata?.sources?.length ? <div><small>{t('coachConversation.sources')}</small><ul>{message.metadata.sources.map((source, index) => <li key={index}>{source.heading || source.source}</li>)}</ul></div> : null}

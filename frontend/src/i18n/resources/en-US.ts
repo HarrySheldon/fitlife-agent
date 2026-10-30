@@ -212,6 +212,13 @@ export const enUS = {
       instructionsPlaceholder: 'Describe the change you want', generateAdjustment: 'Generate adjustment draft',
       confirmAdjustment: 'Confirm adjusted plan', adjustmentDraft: 'Agent adjustment draft', invalidId: 'Use a valid plan ID.',
       planTask: {
+        recover: 'Find unfinished adjustments',
+        diffTitle: 'Review exact changes', before: 'Before', after: 'After',
+        diffSource: 'Source: deterministic comparison of the stored base and validated candidate. Numbers are not independently verified nutrition facts.',
+        currentRequest: 'Current adjustment request', answerTitle: 'Complete required constraints',
+        answerHint: 'Separate items with commas. Leaving a restriction empty explicitly confirms none. Enter available equipment and time; do not guess.',
+        answerSubmit: 'Confirm constraints', newTask: 'Start a new adjustment',
+        fields: { allergies_or_restrictions: 'Allergies and dietary restrictions', action_restrictions: 'Movement restrictions', available_equipment: 'Available equipment', forbidden_exercises: 'Forbidden exercises', session_minutes: 'Available minutes' },
         title: 'Adjustment task', dialogTitle: 'Adjust this plan', close: 'Close',
         open: 'Adjust this plan',
         start: 'Start adjustment', execute: 'Generate candidate', confirm: 'Confirm and activate',

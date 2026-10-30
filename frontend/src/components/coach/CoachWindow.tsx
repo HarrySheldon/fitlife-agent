@@ -6,6 +6,7 @@ import { holdsCoachSlot } from '../../types/coach'
 import { CoachComposer } from './CoachComposer'
 import { CoachMessages } from './CoachMessages'
 import { CoachHistory } from './CoachHistory'
+import { PlanAdjustmentDialog } from '../plan/PlanAdjustmentDialog'
 
 export function CoachWindow() {
   const coach = useCoach()
@@ -13,6 +14,7 @@ export function CoachWindow() {
   const launcher = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLElement>(null)
   const [history, setHistory] = useState(false)
+  const [planTask, setPlanTask] = useState<string | null | undefined>(undefined)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
   useEffect(() => {
@@ -62,7 +64,10 @@ export function CoachWindow() {
         </nav>
       </header>
       {history ? <CoachHistory /> : null}
-      <CoachMessages messages={coach.messages} conversation={coach.selected} visible={coach.open} />
+      <CoachMessages messages={coach.messages} conversation={coach.selected} visible={coach.open} onOpenTask={setPlanTask} />
+      <button type="button" disabled={busy} onClick={() => setPlanTask(null)}>{t('plan.planTask.open')}</button>
+      <PlanAdjustmentDialog open={planTask !== undefined} taskId={planTask ?? undefined}
+        onClose={() => setPlanTask(undefined)} />
       <div className="coach-turn-status" role="status">
         {busy ? <><span>{t(coach.active?.stopping ? 'coachConversation.stopping' : 'coachConversation.running')}</span>
           {coach.active?.conversation_id !== coach.selected ? <button type="button" onClick={() => coach.setSelected(coach.active!.conversation_id)}>{t('coachConversation.goActive')}</button> : null}

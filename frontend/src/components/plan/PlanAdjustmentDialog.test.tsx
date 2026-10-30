@@ -19,6 +19,8 @@ vi.mock('../../services/api', async (importOriginal) => {
       confirmPlanTask: vi.fn(),
       cancelPlanTask: vi.fn(),
       getPlanTask: vi.fn(),
+      answerPlanTask: vi.fn(),
+      listPlanTasks: vi.fn(),
     },
   }
 })
@@ -53,13 +55,17 @@ const ready = task({
     digest: 'abcdef0123456789abcdef',
     expires_at: '2026-10-26T12:30:00Z',
     round: 0,
+    diff: [{ domain: 'training', path: 'workout_plan.days.0', old_value: 'heavy', new_value: 'light', source: 'validated_candidate' }],
   },
 })
 
 beforeEach(async () => {
+  sessionStorage.clear()
   vi.clearAllMocks()
   await i18n.changeLanguage('en-US')
   vi.mocked(api.startPlanTask).mockResolvedValue(task({ state: 'collecting', change_domains: ['training'] }))
+  vi.mocked(api.getPlanTask).mockResolvedValue(task())
+  vi.mocked(api.answerPlanTask).mockResolvedValue(task())
   vi.mocked(api.decidePlanTaskScope).mockResolvedValue(task())
   vi.mocked(api.executePlanTask).mockResolvedValue({ task: ready, answer: null, receipt: null })
   vi.mocked(api.confirmPlanTask).mockResolvedValue({
@@ -86,6 +92,53 @@ function renderDialog(props: Partial<Parameters<typeof PlanAdjustmentDialog>[0]>
 }
 
 describe('PlanAdjustmentDialog', () => {
+  it('retains an unknown creation key across closing and remounting', async () => {
+    vi.mocked(api.startPlanTask).mockRejectedValueOnce(new Error('network'))
+    const first = renderDialog()
+    fireEvent.change(screen.getByLabelText(/adjustment instructions/i), { target: { value: 'Lighter please' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start adjustment' }))
+    await screen.findByRole('alert')
+    const key = vi.mocked(api.startPlanTask).mock.calls[0][1]
+    first.unmount()
+    renderDialog()
+    fireEvent.change(screen.getByLabelText(/adjustment instructions/i), { target: { value: 'Lighter please' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start adjustment' }))
+    await waitFor(() => expect(api.startPlanTask).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(api.startPlanTask).mock.calls[1][1]).toBe(key)
+  })
+  it('restores a referenced task with a read only request', async () => {
+    renderDialog({ taskId: 'task-1' })
+    await waitFor(() => expect(api.getPlanTask).toHaveBeenCalledWith('task-1'))
+    expect(await screen.findByLabelText('Current adjustment request')).toBeInTheDocument()
+    expect(api.executePlanTask).not.toHaveBeenCalled()
+    expect(api.confirmPlanTask).not.toHaveBeenCalled()
+  })
+
+  it('lets the user answer missing movement restrictions', async () => {
+    vi.mocked(api.getPlanTask).mockResolvedValue(task({ state: 'awaiting_user_decision', missing_constraints: ['action_restrictions'] }))
+    renderDialog({ taskId: 'task-1' })
+    fireEvent.change(await screen.findByLabelText('Movement restrictions'), { target: { value: 'No jumping' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm constraints' }))
+    await waitFor(() => expect(api.answerPlanTask).toHaveBeenCalledWith('task-1', {
+      expected_version: 2, answers: { action_restrictions: ['No jumping'] },
+    }, expect.any(String)))
+  })
+
+  it('uses a new opaque creation key after remounting', async () => {
+    const first = renderDialog()
+    fireEvent.change(screen.getByLabelText(/adjustment instructions/i), { target: { value: 'Make it lighter' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start adjustment' }))
+    await waitFor(() => expect(api.startPlanTask).toHaveBeenCalledTimes(1))
+    const key = vi.mocked(api.startPlanTask).mock.calls[0][1]
+    first.unmount(); sessionStorage.clear()
+    renderDialog()
+    fireEvent.change(screen.getByLabelText(/adjustment instructions/i), { target: { value: 'Make it lighter' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start adjustment' }))
+    await waitFor(() => expect(api.startPlanTask).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(api.startPlanTask).mock.calls[1][1]).not.toBe(key)
+    expect(key).not.toContain('lighter')
+  })
+
   it('starts a task, asks for the missing permission, then executes and confirms', async () => {
     renderDialog()
     fireEvent.change(screen.getByLabelText(/adjustment instructions/i),
@@ -179,7 +232,7 @@ describe('PlanAdjustmentDialog', () => {
 
     expect(api.executePlanTask).not.toHaveBeenCalled()
     expect(api.confirmPlanTask).not.toHaveBeenCalled()
-    expect(api.getPlanTask).not.toHaveBeenCalled()
+    await waitFor(() => expect(api.getPlanTask).toHaveBeenCalledWith('task-1'))
   })
 
   it('reuses the same key when a failed attempt is retried', async () => {

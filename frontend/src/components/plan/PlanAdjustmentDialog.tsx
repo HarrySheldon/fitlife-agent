@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { api } from '../../services/api'
+import { useOptionalAuth } from '../../hooks/useAuth'
+import { commandFingerprint } from '../../services/smartEntryRecovery'
 import type { PlanDomain, PlanTask } from '../../types'
 import { PlanTaskCard } from './PlanTaskCard'
 
@@ -29,14 +31,16 @@ export interface PlanAdjustmentDialogProps {
   onClose: () => void
   /** The plan the task is based on. Resolved from the server when absent. */
   planId?: string
+  taskId?: string
   onConfirmed?: (planId: string) => void
   now?: Date
 }
 
 export function PlanAdjustmentDialog({
-  open, onClose, planId, onConfirmed, now,
+  open, onClose, planId, taskId, onConfirmed, now,
 }: PlanAdjustmentDialogProps) {
   const { t } = useTranslation()
+  const auth = useOptionalAuth()
   const [instructions, setInstructions] = useState('')
   const [changeDomains, setChangeDomains] = useState<PlanDomain[]>(ALL_DOMAINS)
   const [task, setTask] = useState<PlanTask | null>(null)
@@ -46,51 +50,87 @@ export function PlanAdjustmentDialog({
   const [confirmedPlanId, setConfirmedPlanId] = useState<string | null>(null)
   const keys = useRef<Record<string, string>>({})
   const counter = useRef(0)
+  const instanceId = useRef(crypto.randomUUID())
+  const epoch = useRef(0)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [recoverable, setRecoverable] = useState<PlanTask[]>([])
+  const resumeKey = `fitlife.plan-task.${auth?.user?.user_id ?? 'isolated'}.${planId ?? 'current'}`
+
+  useEffect(() => () => { epoch.current += 1 }, [])
+  useEffect(() => {
+    epoch.current += 1
+    setTask(null); setAnswers({}); setInstructions(''); setBusy(false); keys.current = {}
+  }, [auth?.user?.user_id])
 
   useEffect(() => {
+    epoch.current += 1
     if (open) return
     // Closing forgets the task, not the account's state: the task is persisted,
     // and reopening starts from what the server says rather than from a stale
     // copy this component happened to keep.
-    setTask(null); setError(null); setConfirmedPlanId(null); setBusy(false)
+    setError(null); setConfirmedPlanId(null); setBusy(false)
     setAnswer(null)
-    keys.current = {}
-  }, [open])
+  }, [open, taskId])
 
-  function keyFor(action: string): string {
-    const existing = keys.current[action]
+  useEffect(() => {
+    if (!open) return
+    const reference = taskId ?? sessionStorage.getItem(resumeKey)
+    if (!reference) return
+    let active = true
+    setBusy(true)
+    api.getPlanTask(reference).then(value => { if (active) setTask(value) })
+      .catch(err => { if (active) { setError((err as Error).message); sessionStorage.removeItem(resumeKey) } })
+      .finally(() => { if (active) setBusy(false) })
+    return () => { active = false }
+  }, [open, taskId, resumeKey])
+
+  function keyFor(action: string, fingerprint = ''): string {
+    const slot = `${action}:${fingerprint}`
+    const existing = keys.current[slot]
     if (existing) return existing
     counter.current += 1
-    const created = `${action}-${counter.current}`
-    keys.current[action] = created
+    const created = `${instanceId.current}-${action}-${counter.current}`
+    keys.current[slot] = created
     return created
   }
 
   async function run<T>(action: string, work: () => Promise<T>): Promise<T | null> {
+    const generation = epoch.current
     setBusy(true); setError(null)
     try {
-      return await work()
+      const result = await work()
+      return generation === epoch.current ? result : null
     } catch (err) {
-      setError((err as Error).message)
+      if (generation === epoch.current) setError((err as Error).message)
       // The key is kept: the user retries the same attempt, not a new one.
       return null
     } finally {
-      setBusy(false)
+      if (generation === epoch.current) setBusy(false)
     }
   }
 
   async function start() {
+    const generation = epoch.current
     const text = instructions.trim()
     if (!text) return
     const baseId = planId ?? (await run('resolve', async () => (await api.getCurrentPlan()).plan.plan_id))
     if (!baseId) return
+    const fingerprint = await commandFingerprint([baseId, changeDomains, text])
+    if (generation !== epoch.current) return
+    const pendingKey = `${resumeKey}.pending-start`
+    let operationKey = keyFor('start', fingerprint)
+    try {
+      const previous = JSON.parse(sessionStorage.getItem(pendingKey) ?? 'null')
+      if (previous?.fingerprint === fingerprint && typeof previous.key === 'string') operationKey = previous.key
+    } catch { /* Ignore a malformed local reference; server authorization remains authoritative. */ }
+    sessionStorage.setItem(pendingKey, JSON.stringify({ fingerprint, key: operationKey }))
     const started = await run('start', () => api.startPlanTask({
       base_plan_id: baseId,
-      read_domains: ALL_DOMAINS,
+      read_domains: changeDomains,
       change_domains: changeDomains,
       instructions: text,
-    }, keyFor('start')))
-    if (started) setTask(started)
+    }, operationKey))
+    if (started) { setTask(started); sessionStorage.setItem(resumeKey, started.task_id); sessionStorage.removeItem(pendingKey) }
   }
 
   async function decide(decision: 'allow' | 'deny') {
@@ -111,7 +151,7 @@ export function PlanAdjustmentDialog({
     const result = await run('execute', () => api.executePlanTask(task.task_id, {
       expected_version: task.version,
       instructions: text,
-    }, keyFor('execute')))
+    }, keyFor(`execute-${task.version}`, text)))
     if (result) { setTask(result.task); setAnswer(result.answer) }
   }
 
@@ -136,6 +176,20 @@ export function PlanAdjustmentDialog({
     if (next) setTask(next)
   }
 
+  async function submitAnswers() {
+    if (!task) return
+    const payload: Record<string, unknown> = {}
+    for (const path of task.missing_constraints) {
+      if (!['allergies_or_restrictions', 'action_restrictions', 'available_equipment', 'forbidden_exercises', 'session_minutes'].includes(path)) continue
+      const text = answers[path] ?? ''
+      payload[path] = path === 'session_minutes' ? Number(text) : text.split(/[,，\n]/).map(s => s.trim()).filter(Boolean)
+    }
+    const next = await run('answers', () => api.answerPlanTask(task.task_id, {
+      expected_version: task.version, answers: payload,
+    }, keyFor(`answers-${task.version}`, JSON.stringify(payload))))
+    if (next) setTask(next)
+  }
+
   if (!open) return null
 
   return (
@@ -152,9 +206,22 @@ export function PlanAdjustmentDialog({
       {confirmedPlanId ? (
         <p role="status">{t('plan.planTask.confirmed', { planId: confirmedPlanId })}</p>
       ) : null}
+      {task ? <>
+      <label htmlFor="plan-task-request">{t('plan.planTask.currentRequest')}</label>
+      <textarea id="plan-task-request" aria-label={t('plan.planTask.currentRequest')}
+        value={instructions} onChange={event => setInstructions(event.target.value)} />
+      </> : null}
 
       {!task ? (
         <section className="content-panel">
+          <button type="button" disabled={busy} onClick={() => void run('list', async () => {
+            const result = await api.listPlanTasks()
+            setRecoverable(result.tasks.filter(value => (!planId || value.base_plan_id === planId)
+              && !['activated', 'cancelled', 'expired'].includes(value.state)))
+          })}>{t('plan.planTask.recover')}</button>
+          {recoverable.map(value => <button type="button" key={value.task_id} onClick={() => {
+            setTask(value); sessionStorage.setItem(resumeKey, value.task_id)
+          }}>{value.task_id} · {value.state}</button>)}
           <label htmlFor="plan-task-instructions">{t('plan.instructions')}</label>
           <textarea id="plan-task-instructions" value={instructions}
                     placeholder={t('plan.instructionsPlaceholder')}
@@ -173,7 +240,7 @@ export function PlanAdjustmentDialog({
               </label>
             ))}
           </fieldset>
-          <button type="button" className="primary-button" disabled={busy || !instructions.trim()}
+          <button type="button" className="primary-button" disabled={busy || !instructions.trim() || !changeDomains.length}
                   onClick={() => void start()}>
             {t('plan.planTask.start')}
           </button>
@@ -185,6 +252,16 @@ export function PlanAdjustmentDialog({
                         onDenyScope={() => void decide('deny')}
                         onConfirm={() => void confirm()}
                         onCancel={() => void cancel()} />
+          {task.state === 'awaiting_user_decision' && task.missing_constraints.length > 0 ? <section>
+            <h3>{t('plan.planTask.answerTitle')}</h3>
+            <p>{t('plan.planTask.answerHint')}</p>
+            {task.missing_constraints.filter(path => ['allergies_or_restrictions', 'action_restrictions', 'available_equipment', 'forbidden_exercises', 'session_minutes'].includes(path)).map(path =>
+              <label key={path}>{t(`plan.planTask.fields.${path}`, { defaultValue: path })}
+                <input type={path === 'session_minutes' ? 'number' : 'text'} min={1}
+                  value={answers[path] ?? ''} onChange={event => setAnswers(old => ({ ...old, [path]: event.target.value }))} />
+              </label>)}
+            <button type="button" disabled={busy} onClick={() => void submitAnswers()}>{t('plan.planTask.answerSubmit')}</button>
+          </section> : null}
           {answer ? (
             // The model's prose is shown beside the deterministic failures, never
             // merged into them: a sentence about what changed is not evidence that
@@ -194,12 +271,15 @@ export function PlanAdjustmentDialog({
               <p>{answer}</p>
             </section>
           ) : null}
-          {task.state !== 'awaiting_confirmation' && task.state !== 'activated' ? (
+          {['generating', 'repairing'].includes(task.state) ? (
             <button type="button" className="primary-button" disabled={busy || !instructions.trim()}
                     onClick={() => void execute()}>
               {t('plan.planTask.execute')}
             </button>
           ) : null}
+          {['activated', 'cancelled', 'expired'].includes(task.state) ? <button type="button" onClick={() => {
+            sessionStorage.removeItem(resumeKey); keys.current = {}; setTask(null); setAnswers({})
+          }}>{t('plan.planTask.newTask')}</button> : null}
         </>
       )}
     </div>

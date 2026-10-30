@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
 import type { PlanDomain, PlanTask } from '../../types'
+import { PlanDiff } from './PlanDiff'
 
 /**
  * One plan task, as the user is allowed to see it.
@@ -55,7 +56,7 @@ export function PlanTaskCard({
   const taskExpired = expiredAt(task.expires_at, now) || task.state === 'expired'
   const passed = task.failed_domains.length === 0
   const confirmable = Boolean(
-    candidate && passed && !candidateExpired && !taskExpired && task.state === 'awaiting_confirmation',
+    candidate && candidate.diff?.length && passed && !candidateExpired && !taskExpired && task.state === 'awaiting_confirmation',
   )
   const awaitingScope = task.state === 'collecting' || task.state === 'awaiting_scope_permission'
   const closed = ['activated', 'cancelled', 'expired'].includes(task.state)
@@ -130,6 +131,7 @@ export function PlanTaskCard({
         {candidate ? (
           <>
             <p>{t('plan.planTask.candidateDigest', { digest: candidate.digest.slice(0, 12) })}</p>
+            <PlanDiff candidate={candidate} />
             {candidate.expires_at ? (
               <p className="plan-task-card__candidate-expiry">
                 {t(candidateExpired ? 'plan.planTask.candidateExpired' : 'plan.planTask.candidateExpires', {

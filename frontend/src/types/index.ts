@@ -480,6 +480,7 @@ export interface PlanTaskCandidate {
   digest: string
   expires_at: string | null
   round: number | null
+  diff?: Array<{ domain: PlanDomain; path: string; old_value: unknown; new_value: unknown; source: string }>
 }
 
 /**
