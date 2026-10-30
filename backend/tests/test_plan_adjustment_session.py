@@ -300,3 +300,69 @@ def _patch_model(index):
     return Patch(domain="training", path=("workout_plan", "days", 0), old_value=day,
                  new_value=dict(day, intensity="high"), reason=f"第{index}次修订",
                  evidence_refs=())
+
+
+class SequentialValidation:
+    """Builds one prepared verdict per submission, so a round pair is scriptable."""
+
+    def __init__(self, factories):
+        self.factories = iter(factories)
+        self.calls = []
+
+    def evaluate(self, base, bundle, constraints, **scope):
+        self.calls.append((bundle, scope))
+        return next(self.factories)(bundle)
+
+
+def _verdict(bundle, *, passed, failed=(), digests=()):
+    return CandidateVerdict(candidate_id=bundle.digest()[:32], digest=bundle.digest(),
+                            passed=passed, failed_domains=tuple(failed),
+                            violations=() if passed else (Violation(
+                                code="MEAL_ALLERGEN", domain="diet", path="diet_plan.meals.2"),),
+                            dependency_digest="d" * 64,
+                            domain_digests=tuple(sorted(digests.items())))
+
+
+def _diet_patch():
+    from backend.domain.plan_adjustment import Patch
+    return Patch(domain="diet", path=("diet_plan", "meals", 2), old_value="牛肉面",
+                 new_value="鸡胸肉沙拉", reason="换掉晚餐", evidence_refs=())
+
+
+def _two_domain_task(repo):
+    return _task(repo, read=frozenset({"training", "diet"}),
+                 change=frozenset({"training", "diet"}))
+
+
+def _round_pair(repo, task, *, second_digests):
+    """Round 0 fails on diet; round 1 repairs it. Returns the second submission."""
+    validation = SequentialValidation([
+        lambda bundle: _verdict(bundle, passed=False, failed=("diet",),
+                                digests={"training": "t1", "diet": "d0"}),
+        lambda bundle: _verdict(bundle, passed=True, digests=second_digests),
+    ])
+    session = _session(repo, task, validation)
+    session.before_decision()
+    assert session.submit_candidate([_patch_model(0)])["passed"] is False
+    session.before_decision()
+    return session.submit_candidate([_diet_patch()])
+
+
+def test_a_repair_round_reuses_the_domain_it_did_not_touch(tmp_path):
+    repo = _repository(tmp_path)
+    result = _round_pair(repo, _two_domain_task(repo),
+                         second_digests={"training": "t1", "diet": "d2"})
+
+    assert result["passed"] is True
+    assert result["dependency"] == {"reused": 1, "invalidated": 0, "computed": 1,
+                                    "reasons": {"explicitly_changed": 1}}
+
+
+def test_a_frozen_domain_whose_bytes_moved_is_invalidated_not_reused(tmp_path):
+    repo = _repository(tmp_path)
+    result = _round_pair(repo, _two_domain_task(repo),
+                         second_digests={"training": "t9", "diet": "d2"})
+
+    assert result["dependency"]["reused"] == 0
+    assert result["dependency"]["invalidated"] == 1
+    assert result["dependency"]["reasons"] == {"explicitly_changed": 1, "version_changed": 1}

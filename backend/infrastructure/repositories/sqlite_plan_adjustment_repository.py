@@ -24,6 +24,7 @@ from uuid import uuid4
 
 from backend.application.ports.plan_adjustment_repository import (
     REPAIR_ROUND_LIMIT,
+    REVIEW_CERTIFICATE_PREFIX,
     TASK_STATES,
     TERMINAL_STATES,
     CandidateRecord,
@@ -274,7 +275,7 @@ class SQLitePlanAdjustmentRepository:
             return updated
 
     def submit_bundle(self, owner, task_id, expected_version, operation_id, bundle, verdict,
-                      candidate=None) -> TaskSnapshot:
+                      candidate=None, *, review_pending=False) -> TaskSnapshot:
         _identity(owner, task_id, operation_id)
         _positive_int(expected_version, "expected_version")
         digest = bundle.digest()
@@ -319,7 +320,8 @@ class SQLitePlanAdjustmentRepository:
                 )
             if verdict.passed:
                 updated = self._write(
-                    connection, owner, snapshot, state="awaiting_confirmation", active_round_id=None,
+                    connection, owner, snapshot,
+                    state='awaiting_user_decision' if review_pending else 'awaiting_confirmation', active_round_id=None,
                     candidate_id=verdict.candidate_id, candidate_digest=verdict.digest,
                     candidate_expires_at=_iso(now + self.candidate_ttl),
                 )
@@ -462,8 +464,101 @@ class SQLitePlanAdjustmentRepository:
             connection.execute(
                 "UPDATE plan_adjustment_sessions SET reviewed_digest=? "
                 "WHERE task_id=? AND user_id=? AND candidate_digest=?",
-                (digest, task_id, owner, digest),
+                (REVIEW_CERTIFICATE_PREFIX + digest, task_id, owner, digest),
             )
+
+    def finish_review(self, owner, task_id, digest, *, allowed, expected_version=None):
+        with self.database.transaction() as connection:
+            snapshot = self._snapshot(connection, owner, task_id)
+            self._require_live_candidate(snapshot)
+            if snapshot.state in TERMINAL_STATES or snapshot.candidate_digest != digest:
+                raise _task_error('TASK_VERSION_CONFLICT')
+            self._writable(connection, owner, task_id, snapshot.version)
+            if expected_version is not None and snapshot.version != expected_version:
+                raise _task_error('TASK_VERSION_CONFLICT')
+            if snapshot.state != 'awaiting_user_decision':
+                raise _task_error('STATE_TRANSITION')
+            return self._write(connection, owner, snapshot,
+                state='awaiting_confirmation' if allowed else 'awaiting_user_decision',
+                reviewed_digest=REVIEW_CERTIFICATE_PREFIX + digest if allowed else None)
+
+    def prepare_review(self, owner, task_id):
+        with self.database.transaction() as connection:
+            snapshot = self._snapshot(connection, owner, task_id)
+            self._require_live_candidate(snapshot)
+            row = connection.execute('SELECT reviewed_digest FROM plan_adjustment_sessions WHERE task_id=? AND user_id=?',
+                                     (task_id, owner)).fetchone()
+            if not snapshot.candidate_digest or row['reviewed_digest'] == REVIEW_CERTIFICATE_PREFIX + snapshot.candidate_digest:
+                return False
+            if snapshot.state in TERMINAL_STATES:
+                raise _task_error('STATE_TRANSITION')
+            self._writable(connection, owner, task_id, snapshot.version)
+            if snapshot.state != 'awaiting_user_decision':
+                self._write(connection, owner, snapshot, state='awaiting_user_decision')
+            return True
+
+    def _require_live_candidate(self, snapshot):
+        if snapshot.candidate_expires_at is None or snapshot.candidate_expires_at <= self.clock():
+            from backend.domain.errors import ApplicationError
+            raise ApplicationError(code='CANDIDATE_EXPIRED', message='The candidate has expired.', status_code=409)
+
+    def candidate_is_live(self, owner, task_id):
+        snapshot = self.get(owner, task_id)
+        return (snapshot.expires_at > self.clock() and snapshot.candidate_expires_at is not None
+                and snapshot.candidate_expires_at > self.clock())
+
+    def claim_execution(self, owner, task_id, version, key, instructions, *, reserve=True):
+        """Claim before any provider work; a pending/failed attempt is never rerun."""
+        scope = f'execute:{task_id}'
+        fingerprint = _fingerprint({'version': version, 'instructions': instructions})
+        with self.database.transaction() as connection:
+            self._snapshot(connection, owner, task_id)
+            row = self._receipt(connection, owner, scope, key)
+            if row is not None:
+                if row['request_fingerprint'] != fingerprint:
+                    raise _task_error('IDEMPOTENCY_CONFLICT')
+                response = json.loads(row['response_json'])
+                if response['status'] != 'done':
+                    from backend.domain.errors import ApplicationError
+                    raise ApplicationError(code='PLAN_EXECUTION_PENDING',
+                        message='Read the task before explicitly starting another attempt.', status_code=409)
+                return response['result']
+            if not reserve:
+                return None
+            self._writable(connection, owner, task_id, version)
+            connection.execute('INSERT INTO plan_task_receipts '
+                '(user_id,scope,operation_key,task_id,request_fingerprint,response_json,created_at) '
+                'VALUES (?,?,?,?,?,?,?)',
+                (owner, scope, key, task_id, fingerprint, '{"status":"pending"}', _iso(self.clock())))
+        return None
+
+    def list_tasks(self, owner):
+        with self.database.connection() as connection:
+            rows = connection.execute('SELECT task_id FROM plan_adjustment_sessions '
+                'WHERE user_id=? AND expires_at>? ORDER BY updated_at DESC LIMIT 50',
+                (owner, _iso(self.clock()))).fetchall()
+        return [self.get(owner, row['task_id']) for row in rows]
+
+    def export_user_data(self, owner, *, max_bytes):
+        with self.database.connection() as connection:
+            sessions = connection.execute('SELECT * FROM plan_adjustment_sessions WHERE user_id=? AND expires_at>?',
+                (owner, _iso(self.clock()))).fetchall()
+            payload = {'plan_adjustment_sessions': [dict(row) for row in sessions]}
+            for table in ('plan_candidate_submissions', 'plan_repair_rounds', 'plan_task_permissions', 'plan_task_receipts'):
+                payload[table] = [dict(row) for task in sessions for row in connection.execute(
+                    f'SELECT * FROM {table} WHERE task_id=?', (task['task_id'],)).fetchall()]
+        encoded = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        if len(encoded) > max_bytes:
+            raise ValueError('Plan task export exceeds limit')
+        return encoded
+
+    def finish_execution(self, owner, task_id, key, result):
+        with self.database.transaction() as connection:
+            self._snapshot(connection, owner, task_id)
+            connection.execute('UPDATE plan_task_receipts SET response_json=? '
+                'WHERE user_id=? AND scope=? AND operation_key=?',
+                (json.dumps({'status': 'done', 'result': result}, ensure_ascii=False),
+                 owner, f'execute:{task_id}', key))
 
     def delete_user_data(self, owner) -> dict[str, int]:
         _identity(owner)

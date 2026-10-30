@@ -41,6 +41,21 @@ class Settings(BaseSettings):
     # it would delete the baseline the optimisation is measured against. The
     # visibility switch and the experiment variable are separate decisions.
     task_execution_strategy: Literal['reference', 'optimized'] = 'reference'
+    # Which context policy is running. The value is recorded in the treatment
+    # fingerprint, so it must name the code that actually ran; a mismatch is
+    # refused at composition time rather than reported as a different policy.
+    context_policy_version: str = 'context-policy-v1'
+    # Whether a trusted shortcut may prefetch the published skill it needs. It
+    # only takes effect on the optimized side: the reference side is the
+    # baseline and must stay free of the thing being measured.
+    prefetch_enabled: bool = True
+    # A versioned result cache exists (``infrastructure/agent_runtime/task_cache``)
+    # but is not wired into any request path: measured cold/hot on the seams it
+    # could serve, it saved 0.01-0.12 ms per call and made a 5-56 KiB candidate
+    # document 3-4x slower to read, because copying the value costs more than
+    # decoding it. The flag is recorded so the treatment fingerprint states the
+    # absence explicitly instead of reporting it as unknown.
+    task_cache_enabled: bool = False
     agent_runtime_policy: dict[str, object] = Field(default_factory=dict)
     # How the semantic review treats an answer. "off" makes no extra call, which is the
     # default because it costs one provider request per answer. "shadow" records what it

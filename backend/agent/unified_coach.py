@@ -3,6 +3,7 @@ from dataclasses import replace
 import json
 from pydantic import ValidationError
 from backend.agent.context_builder import build_context, serialized
+from backend.agent.context_policy import ContextPolicyConfig, organize_rear
 from backend.agent.coach_delivery import review_delivery, answer_contract
 from backend.agent.contracts import AgentResult
 from backend.agent.decision import ToolCall, DecisionEnvelope
@@ -18,24 +19,70 @@ from backend.domain.coach_answer import limits_for_or_default, output_token_limi
 
 
 class UnifiedCoachWorkflow:
-    def __init__(self, gateway, executor, *, review_gateway=None, review_mode='off', session=None):
+    def __init__(self, gateway, executor, *, review_gateway=None, review_mode='off', session=None,
+                 context_policy=None):
         self.gateway, self.executor = gateway, executor
         self.review_gateway, self.review_mode = review_gateway, review_mode
         # Plain advice is the default: no task, no rounds, no receipt.
         self.session = session or AdviceSession()
+        # Reference is the default: it is the baseline the optimisation is
+        # measured against, so a caller has to choose the other side explicitly.
+        self.context_policy = context_policy or ContextPolicyConfig()
+
+    async def _prefetch(self, principal, plan, request, context):
+        """Attach published resources the trusted action is known to need.
+
+        A resource that cannot be read is not substituted: the run simply falls
+        back to discovering it, which is what it did before this existed.
+        """
+        added = []
+        for resource_id in plan.resource_ids:
+            observation = await self.executor.prefetch(principal, resource_id, context)
+            if observation.get('status') != 'ok':
+                continue
+            added.append({'role': 'user', 'source': 'prefetched_resource',
+                          'content': serialized(observation), 'call_id': observation['call_id'],
+                          'tool': observation['tool'], 'status': 'ok',
+                          'source_version': observation.get('source_version'),
+                          'required_domains': list(observation.get('required_domains') or [])})
+        if not added:
+            return request
+        # Placed after the history and before the current request, so the stable
+        # prefix, the question and the runtime frame keep their positions.
+        cut = next((index for index in range(len(request.messages) - 1, -1, -1)
+                    if request.messages[index].get('source') == 'current_request'),
+                   len(request.messages))
+        return replace(request, messages=(*request.messages[:cut], *added, *request.messages[cut:]))
 
     async def execute(self, command, context):
         await context.step('input_guard', lambda: check_input(command.question))
         principal = self.executor.principal
         if command.user_id != principal.owner_id:
             raise PermissionError('OWNER_MISMATCH')
+        policy = self.context_policy
+        plan = policy.plan_for(command)
         request = build_context(principal, command, tool_descriptions(self.executor.specs))
+        if plan.resource_ids:
+            request = await self._prefetch(principal, plan, request, context)
+        before_run = getattr(self.session, 'before_run', None)
+        if before_run is not None:
+            await before_run(context)
         context.set_model_metadata(provider=getattr(self.gateway, 'provider', None), model=self.gateway.model)
         failures = protocol_failures = 0
         for decision_index in range(1, 13):
             context.raise_if_cancelled()
             self.executor.check_access()
-            self.session.before_decision()
+            frame = self.session.before_decision()
+            if frame.phase != 'advice':
+                request = replace(request, messages=(*request.messages, {
+                    'role': 'user', 'source': 'task_state',
+                    'content': serialized({'revision': frame.revision, 'phase': frame.phase,
+                                           'state': dict(frame.state)})}))
+            if policy.organizes:
+                # Bounded organisation of the rear only: the bodies of older
+                # observations give way, their identity does not.
+                request = replace(request, messages=organize_rear(
+                    request.messages, max_chars=policy.max_chars))
             context.consume_context(request.instructions + serialized(request.tool_descriptions) + serialized(request.messages))
             action = command.coach_action
             if not action and 'training' in self.executor.principal.authorized_domains:
@@ -60,7 +107,9 @@ class UnifiedCoachWorkflow:
                     self.executor.check_access()
                     # A permission revoked while waiting must be caught before
                     # the trusted state this round was built on is used.
-                    self.session.before_decision()
+                    latest = self.session.before_decision()
+                    if latest.revision != frame.revision or latest.phase != frame.phase:
+                        raise PermissionError('TASK_STATE_CHANGED')
                     return self.gateway.decide(request)
                 response = await context.tool('agent_decision_model', 'safe', decide)
                 decision = DecisionEnvelope.model_validate({'decision': response.decision}).decision
@@ -80,6 +129,9 @@ class UnifiedCoachWorkflow:
                 continue
             if isinstance(decision, ToolCall):
                 observation = await self.executor.execute(principal, decision, context)
+                after_tool = getattr(self.session, 'after_tool', None)
+                if after_tool is not None:
+                    await after_tool(context, observation)
                 failures = failures + 1 if observation['status'] != 'ok' else 0
                 if failures >= 2:
                     raise ValueError('AGENT_ACTION_FAILED')
@@ -96,7 +148,10 @@ class UnifiedCoachWorkflow:
                 request = replace(request, messages=(*request.messages,
                     {'role': 'assistant', 'content': decision.model_dump_json(), 'source': 'agent_action'},
                     {'role': 'user', 'content': serialized(payload), 'source': 'tool_data',
-                     'revision': decision_index}))
+                     'revision': decision_index, 'call_id': decision.call_id,
+                     'tool': decision.tool, 'status': observation.get('status', 'ok'),
+                     'source_version': observation.get('source_version'),
+                     'required_domains': list(observation.get('required_domains') or [])}))
                 continue
             await context.step('context_guard', lambda: None)
             answer, verdict = await context.step('safety_reviewer', lambda: review_delivery(
@@ -119,6 +174,8 @@ class UnifiedCoachWorkflow:
                 'cache_hits': self.executor.cache_hits, 'protocol_failures': protocol_failures,
                 'tool_calls': list(context.completed_tools), 'safety_outcome': verdict.outcome,
                 'review_mode': self.review_mode,
+                'context_policy_version': policy.version,
+                'context_prefetched_resources': list(plan.resource_ids),
                 'loaded_skill_ids': sorted({item['data']['resource_id'] for item in self.executor.observations.values()
                     if item['tool'] == 'resources.read' and item['status'] == 'ok'}),
             }

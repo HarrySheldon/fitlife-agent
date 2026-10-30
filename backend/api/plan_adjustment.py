@@ -76,6 +76,8 @@ from backend.infrastructure.repositories.sqlite_task_budget_repository import (
 )
 from backend.infrastructure.sqlite.runtime import get_database
 from backend.schemas import AuthenticatedUser
+from backend.domain.user_preferences import UserPreferences
+from backend.infrastructure.settings.file_user_preferences_repository import FileUserPreferencesRepository
 
 
 router = APIRouter(prefix="/api/v1/plan-adjustment-tasks")
@@ -201,11 +203,8 @@ def _build(settings) -> PlanAdjustmentService:
         budgets=budgets,
         activations=activations,
         admission=_admission(),
-        # No plan-candidate reviewer is wired in this checkpoint, so demanding a
-        # review would refuse every confirmation rather than make one safer. The
-        # flag stays a policy statement: when a reviewer exists, set it from the
-        # policy that requires it, not from this default.
-        review_required=False,
+        # Candidate review is charged to the same Runtime/task budget.
+        review_required=settings.safety_review_mode == 'enforce',
     )
 
 
@@ -231,6 +230,7 @@ def _runner(settings):
         owner = session.owner
         snapshot = session.current()
         gateway = resolve_user_model_gateway(owner)
+        session.review_mode = settings.safety_review_mode
         if not callable(getattr(gateway, "parse_structured", None)):
             # The task loop needs one bounded decision maker. Falling back to a
             # different chain here would mean the same request is judged by a
@@ -264,11 +264,19 @@ def _runner(settings):
             specs=PLAN_TOOL_SPECS,
             session=session,
         )
+        class AuthorizedReviewGateway:
+            model = gateway.model
+            def parse_structured(self, **kwargs):
+                executor.check_access()
+                return gateway.parse_structured(**kwargs)
+        session.review_gateway = AuthorizedReviewGateway()
         workflow = UnifiedCoachWorkflow(
-            StructuredDecisionAdapter(gateway), executor, session=session)
+            StructuredDecisionAdapter(gateway), executor, session=session,
+            review_gateway=gateway, review_mode=settings.safety_review_mode)
         command = AgentCommand(
             "plan_adjustment", request.instructions, owner, surface="plan",
             task_ref=TaskRef(snapshot.task_id, snapshot.version),
+            language=(FileUserPreferencesRepository(settings.data_dir).get(owner) or UserPreferences()).language,
         )
         runtime = AgentRuntime(
             task_budget_binding_factory=lambda user, ref: binding)
@@ -279,7 +287,7 @@ def _runner(settings):
 
 def get_plan_adjustment_service() -> PlanAdjustmentService:
     settings = get_settings()
-    key = str(settings.database_path)
+    key = f'{settings.database_path}|{settings.safety_review_mode}|{settings.plan_storage_mode}'
     service = _SERVICES.get(key)
     if service is None:
         service = _build(settings)
@@ -293,6 +301,13 @@ def reset_plan_adjustment_services() -> None:
 
 
 # -- routes --------------------------------------------------------------
+@router.get('')
+def list_tasks(user: AuthenticatedUser = Depends(require_current_user),
+               service: PlanAdjustmentService = Depends(get_plan_adjustment_service)):
+    return ok({'tasks': [service.get(user.user_id, row.task_id)
+                         for row in service.repository.list_tasks(user.user_id)]}, processing_mode='agent')
+
+
 @router.post("")
 def start_task(
     body: TaskStartRequest,

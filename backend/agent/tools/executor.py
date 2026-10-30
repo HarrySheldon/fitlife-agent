@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 from pydantic import ValidationError
+from backend.agent.decision import ToolCall
 from backend.agent.tools.registry import RECORDED_TOOL_NAMES, SPECS
 from backend.agent.tools.handlers import version_of
 from backend.agent.tools.spec import ToolAccess, ToolContext, ToolSpec
@@ -35,6 +36,18 @@ class ToolExecutor:
 
     def check_access(self):
         self._domains()
+
+    async def prefetch(self, principal, resource_id, context):
+        """Read one published resource ahead of the first decision.
+
+        It goes through the same executor as a call the model proposed, so the
+        release digest, the owner check and the cancellation check are the ones
+        the run already relies on. Only ``resources.read`` is reachable from
+        here: a prefetch cannot become a private read, whatever the table says.
+        """
+        call = ToolCall(call_id=f"prefetch:{resource_id}", tool="resources.read",
+                        arguments={"resource_id": resource_id})
+        return await self.execute(principal, call, context)
 
     def evidence(self, reference):
         domains = self._domains()

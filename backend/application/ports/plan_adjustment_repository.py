@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Mapping, Protocol
 
 REPAIR_ROUND_LIMIT = 2
+REVIEW_CERTIFICATE_PREFIX = 'candidate-review-v2:'
 
 # collecting          -- the user is still stating what they want
 # awaiting_scope_permission -- a domain grant is missing and must be asked for

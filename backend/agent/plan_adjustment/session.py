@@ -33,6 +33,7 @@ from backend.application.ports.plan_adjustment_repository import (
     TERMINAL_STATES,
 )
 from backend.domain.plan_adjustment import CandidateBundle, CandidateVerdict, PlanConstraints
+from backend.domain.task_dependencies import domain_reuse
 
 READ_FIELDS = frozenset({"meta", "constraints", "training", "diet"})
 DOMAIN_FIELDS = {"training": "workout_plan", "diet": "diet_plan"}
@@ -44,7 +45,7 @@ def _iso(value) -> str:
 
 class PlanTaskSession:
     def __init__(self, repository, owner: str, task_id: str, validation, *,
-                 load_base, reviewer=None):
+                 load_base, reviewer=None, review_mode='off', review_gateway=None):
         self.repository = repository
         self.owner, self.task_id = owner, task_id
         # ``validation`` is the deterministic evaluator (Task 5). It is injected
@@ -55,6 +56,7 @@ class PlanTaskSession:
         # the user to decide; an exception means the review did not happen, which
         # also publishes nothing.
         self.reviewer = reviewer
+        self.review_mode, self.review_gateway = review_mode, review_gateway
         self._verdict: CandidateVerdict | None = None
         self._round = 0
         self._review: str | None = None
@@ -77,6 +79,11 @@ class PlanTaskSession:
                                  "round": snapshot.repair_rounds})
         if snapshot.state == "repairing" and snapshot.active_round_id is None:
             return self._reserve_repair(snapshot)
+        if snapshot.state == 'repairing':
+            failed, violations = self._failed_domains(snapshot)
+            return SessionFrame(snapshot.version, 'repairing', {
+                'round': snapshot.repair_rounds, 'failed_domains': sorted(failed),
+                'violations': violations, 'change_domains': sorted(snapshot.change_domains)})
         return SessionFrame(snapshot.version, snapshot.state,
                             {"change_domains": sorted(snapshot.change_domains),
                              "round": snapshot.repair_rounds})
@@ -102,6 +109,8 @@ class PlanTaskSession:
             # answer may advertise.
             return {}
         if not snapshot.candidate_id or not snapshot.candidate_digest:
+            return {}
+        if not self.repository.candidate_is_live(self.owner, self.task_id):
             return {}
         return {
             "task_id": snapshot.task_id,
@@ -160,6 +169,10 @@ class PlanTaskSession:
             round_domains=round_domains, frozen_digests=frozen)
         self._verdict = verdict
         self._review = None
+        # Which domains were carried over and which had to be redone, in the same
+        # terms the dependency graph uses. Counts and reason codes only: the
+        # record travels to the model, and a domain's content is not its label.
+        reuse = domain_reuse(frozen, dict(verdict.domain_digests), bundle.domains())
 
         if verdict.violations and all(item.code in UNFIXABLE_CODES for item in verdict.violations):
             # A patch cannot supply a missing constraint or repair a legacy shape.
@@ -177,22 +190,23 @@ class PlanTaskSession:
             reason = "SAFETY_CONDITION_BLOCKS_DIET" if blocked else "CONSTRAINT_REQUIRED"
             self._review = reason
             updated = self._stop(snapshot, reason)
-            return self._submission(verdict, updated, candidate_id=None)
+            return self._submission(verdict, updated, candidate_id=None, reuse=reuse)
 
         candidate = candidate_plan(base, bundle, snapshot.change_domains)
         updated = self.repository.submit_bundle(
             self.owner, self.task_id, snapshot.version, self._operation_id(snapshot, verdict),
-            bundle, verdict, candidate)
+            bundle, verdict, candidate, review_pending=self.review_mode == 'enforce')
         self._round = updated.repair_rounds
         updated = self._dispose(updated, verdict, candidate)
-        return self._submission(verdict, updated, candidate_id=verdict.candidate_id)
+        return self._submission(verdict, updated, candidate_id=verdict.candidate_id, reuse=reuse)
 
     # ----------------------------------------------------------- internals
 
     def _snapshot(self):
         return self.repository.get(self.owner, self.task_id)
 
-    def _submission(self, verdict: CandidateVerdict, snapshot, *, candidate_id: str | None) -> dict:
+    def _submission(self, verdict: CandidateVerdict, snapshot, *, candidate_id: str | None,
+                    reuse) -> dict:
         return {
             "candidate_id": candidate_id,
             "digest": verdict.digest,
@@ -200,6 +214,7 @@ class PlanTaskSession:
             "failed_domains": list(verdict.failed_domains),
             "violations": [item.model_dump() for item in verdict.violations],
             "domain_digests": dict(verdict.domain_digests),
+            "dependency": reuse.as_record(),
             "task_version": snapshot.version,
             "state": snapshot.state,
             "round": snapshot.repair_rounds,
@@ -230,7 +245,8 @@ class PlanTaskSession:
             return snapshot
         code = self._review_candidate(candidate)
         if code is None:
-            self._record_review(verdict.digest)
+            if self.reviewer is not None:
+                self._record_review(verdict.digest)
             return snapshot
         self._review = code
         return self._stop(snapshot, code)
@@ -292,5 +308,38 @@ class PlanTaskSession:
                     [item.model_dump() for item in self._verdict.violations])
         record = self.repository.latest_candidate(self.owner, self.task_id)
         if record is not None and record.failed_domains:
-            return frozenset(record.failed_domains), []
+            return frozenset(record.failed_domains), [dict(item) for item in record.violations]
         return frozenset(), []
+
+    async def after_tool(self, context, observation):
+        if (observation.get('tool') != 'plan.submit_candidate'
+                or observation.get('status') != 'ok' or self.review_mode == 'off'):
+            return
+        record = self.repository.latest_candidate(self.owner, self.task_id)
+        if record is None or not record.passed or record.plan is None:
+            return
+        import json
+        from backend.agent.semantic_review import collect_review
+        snapshot = self._snapshot()
+        # Only the already authorized domains enter a provider review.
+        draft = {DOMAIN_FIELDS[d]: record.plan.get(DOMAIN_FIELDS[d]) for d in snapshot.read_domains}
+        if self.review_gateway is None:
+            status = 'unavailable'
+        else:
+            review = await collect_review(context, self.review_gateway, self.review_mode,
+                                         'Review this fitness plan candidate for safety.',
+                                         json.dumps(draft, ensure_ascii=False))
+            status = review.status
+        context.raise_if_cancelled()
+        if self.review_mode == 'enforce':
+            self.repository.finish_review(self.owner, self.task_id, record.digest,
+                                          allowed=status == 'allow', expected_version=snapshot.version)
+            if status != 'allow':
+                self._review = 'CANDIDATE_REVIEW_UNAVAILABLE' if status == 'unavailable' else 'CANDIDATE_REVIEW_REFUSED'
+        observation['data'].update(state=self._snapshot().state, review=status)
+
+    async def before_run(self, context):
+        snapshot = self._snapshot()
+        if self.review_mode == 'enforce' and snapshot.candidate_id:
+            if self.repository.prepare_review(self.owner, self.task_id):
+                await self.after_tool(context, {'tool': 'plan.submit_candidate', 'status': 'ok', 'data': {}})

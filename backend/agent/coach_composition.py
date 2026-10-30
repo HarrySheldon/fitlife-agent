@@ -1,6 +1,7 @@
 """Trusted assembly; user text can request a domain, never select an identity."""
 import re
 from backend.agent.context_builder import ExecutionPrincipal
+from backend.agent.context_policy import ContextPolicyConfig
 from backend.agent.skills.catalog import SkillCatalog
 from backend.agent.tools.executor import ToolExecutor
 from backend.agent.tools.handlers import BoundFitnessReads
@@ -72,5 +73,7 @@ def build_unified_workflow(command, repository, gateway):
     executor = ToolExecutor(principal=principal, reads=BoundFitnessReads(repository, principal.owner_id),
         catalog=SkillCatalog(), authorize=authorize, retriever=local_knowledge,
         language=command.language or 'en-US')
+    policy = ContextPolicyConfig(strategy=settings.task_execution_strategy,
+        prefetch_enabled=settings.prefetch_enabled, version=settings.context_policy_version)
     return UnifiedCoachWorkflow(StructuredDecisionAdapter(gateway), executor,
-        review_gateway=gateway, review_mode=settings.safety_review_mode)
+        review_gateway=gateway, review_mode=settings.safety_review_mode, context_policy=policy)

@@ -26,6 +26,7 @@ from backend.agent.safety import check_input
 from backend.agent.tasks.contracts import task_error
 from backend.application.ports.plan_adjustment_repository import (
     REPAIR_ROUND_LIMIT,
+    REVIEW_CERTIFICATE_PREFIX,
     TERMINAL_STATES,
 )
 from backend.application.ports.task_budget_repository import TaskBudgetBinding
@@ -216,9 +217,12 @@ class PlanAdjustmentService:
             raise _error("INSTRUCTIONS_INVALID", 422)
         check_input(instructions)
         snapshot = self._read(owner, task_id)
+        replay = self.repository.claim_execution(owner, task_id, expected_version, key, instructions, reserve=False)
+        if replay is not None:
+            return {**replay, 'task': self._project(owner, snapshot), 'replayed': True}
         if snapshot.state in TERMINAL_STATES:
             raise task_error("STATE_TRANSITION")
-        if snapshot.state not in EXECUTABLE_STATES:
+        if snapshot.state not in EXECUTABLE_STATES and not (snapshot.state == 'awaiting_confirmation' and self.review_required):
             raise _error("SCOPE_GRANT_REQUIRED", 409)
         if snapshot.version != expected_version:
             raise task_error("TASK_VERSION_CONFLICT")
@@ -235,21 +239,32 @@ class PlanAdjustmentService:
                     "answer_markdown": f"plan task {task_id}: {stopped.state}", "model": ""}
         request = RoundRequest(instructions=instructions)
         if self.admission is None:
-            return await self._round(owner, task_id, request)
+            return await self._recorded_round(owner, task_id, request, key, expected_version)
         if lease is not None:
             held = self.admission.active(owner)
             if held is None or held.turn_id != lease:
                 # The lease named a turn this account is not running. Running
                 # anyway would be a second model call beside somebody's turn.
                 raise _error("PLAN_EXECUTION_LEASE_INVALID", 409)
-            return await self._round(owner, task_id, request)
+            return await self._recorded_round(owner, task_id, request, key, expected_version)
         return await self.admission.run_task(
             owner,
             question=f"Execute plan adjustment task {task_id}",
             action="plan_adjustment",
             surface="plan",
-            produce=lambda: self._round(owner, task_id, request),
+            produce=lambda: self._recorded_round(owner, task_id, request, key, expected_version),
         )
+
+    async def _recorded_round(self, owner, task_id, request, key, expected_version):
+        snapshot = self._read(owner, task_id)
+        replay = self.repository.claim_execution(owner, task_id, expected_version, key, request.instructions)
+        if replay is not None:
+            return {**replay, 'task': self._project(owner, snapshot), 'replayed': True}
+        result = await self._round(owner, task_id, request)
+        # Store the bounded execution receipt, not another copy of the plan/diff.
+        self.repository.finish_execution(owner, task_id, key,
+            {name: result.get(name) for name in ('answer', 'receipt', 'answer_markdown', 'model')})
+        return result
 
     async def _round(self, owner: str, task_id: str, request: RoundRequest) -> dict:
         # One budget per task, initialized once: a second round of the same task
@@ -259,7 +274,7 @@ class PlanAdjustmentService:
         result = await self.runner(self.session(owner, task_id), binding, request)
         current = self._read(owner, task_id)
         return {"task": self._project(owner, current),
-                "answer": getattr(result, "answer", None),
+                "answer": getattr(result, "answer_markdown", getattr(result, "answer", None)),
                 "receipt": getattr(result, "task_receipt", None),
                 # What the slot publishes. A task round has no prose answer of its
                 # own, so the record says what the task now is, not what a model
@@ -369,7 +384,7 @@ class PlanAdjustmentService:
             # old values. Activating it would apply a decision to facts the user
             # never saw, so the task must be restarted instead.
             raise _error("CONSTRAINT_CHANGED", 409)
-        if self.review_required and context.reviewed_digest != context.candidate_digest:
+        if self.review_required and context.reviewed_digest != REVIEW_CERTIFICATE_PREFIX + context.candidate_digest:
             # Tightened while the candidate waited. Asking for the review here
             # would call a model inside the transaction, so the answer is "review
             # this again", not a silent approval.
@@ -388,6 +403,19 @@ class PlanAdjustmentService:
     def _project(self, owner: str, snapshot) -> dict:
         record = self.repository.latest_candidate(owner, snapshot.task_id)
         constraints = PlanConstraints.model_validate(self.repository.constraints(owner, snapshot.task_id))
+        differences = []
+        if record is not None and record.plan is not None:
+            base = self._load_base(owner, snapshot.base_plan_id, snapshot.base_head_revision)
+            for domain, root, field in (('training', 'workout_plan', 'days'), ('diet', 'diet_plan', 'meals')):
+                if domain not in snapshot.read_domains:
+                    continue
+                old = base.get(root, {}).get(field, [])
+                new = record.plan.get(root, {}).get(field, [])
+                if isinstance(old, list) and isinstance(new, list):
+                    for index, (before, after) in enumerate(zip(old, new)):
+                        if before != after:
+                            differences.append({'domain': domain, 'path': f'{root}.{field}.{index}',
+                                'old_value': before, 'new_value': after, 'source': 'validated_candidate'})
         return {
             "task_id": snapshot.task_id,
             "version": snapshot.version,
@@ -406,6 +434,7 @@ class PlanAdjustmentService:
                 "expires_at": (snapshot.candidate_expires_at.isoformat()
                                if snapshot.candidate_expires_at else None),
                 "round": record.round_index if record else None,
+                "diff": differences,
             },
             "failed_domains": sorted(record.failed_domains) if record else [],
             "violations": [dict(item) for item in record.violations] if record else [],
