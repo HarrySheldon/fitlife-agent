@@ -126,10 +126,24 @@ def _load_records(directory: str):
     return [RunRecord(**record) for record in records]
 
 
+def _suite_of(directory: str) -> str | None:
+    """The suite a finished run directory was produced from, when recorded."""
+    path = Path(directory) / "manifest.json"
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    suite = payload.get("suite")
+    return suite if isinstance(suite, str) else None
+
+
 def _compare(args: CliArgs) -> int:
     from backend.task_evaluation.comparison import (
         pair_records,
         paired_summary,
+        quality_gate,
         render_comparison,
     )
 
@@ -140,34 +154,50 @@ def _compare(args: CliArgs) -> int:
         print("invalid comparison input", file=sys.stderr)
         return 2
 
+    reference_suite = _suite_of(args.compare[0])
+    optimized_suite = _suite_of(args.compare[1])
+    if (reference_suite is not None and optimized_suite is not None
+            and Path(reference_suite).name != Path(optimized_suite).name):
+        # One comparison covers one suite. Averaging the coach suite with the plan
+        # suite would produce a "speed" that belongs to neither.
+        print("refusing to compare different suites", file=sys.stderr)
+        return 2
+
     result = pair_records(reference, optimized)
     summary = paired_summary(result)
+    gate = quality_gate(result, summary)
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
-    (output / "comparison.md").write_text(render_comparison(result, summary), encoding="utf-8")
+    (output / "comparison.md").write_text(
+        render_comparison(result, summary, gate, suite=reference_suite), encoding="utf-8")
     (output / "comparison.json").write_text(json.dumps({
+        "suite": reference_suite,
         "matched": [[left.case_id, right.case_id] for left, right in result.matched],
         "rejected": [{"case_id": item.case_id, "reason": item.reason} for item in result.rejected],
         "unmatched": [record.case_id for record in result.unmatched],
         "summary": {
+            "paired_count": summary.paired_count,
             "matched_count": summary.matched_count,
             "success_pairs": summary.success_pairs,
             "failure_pairs": summary.failure_pairs,
             "unmatched_count": summary.unmatched_count,
+            "rejected_pairs": summary.rejected_pairs,
             "latency_reduction_percent": summary.latency_reduction_percent,
             "token_reduction_percent": summary.token_reduction_percent,
             "reference_tokens": summary.reference_tokens,
             "optimized_tokens": summary.optimized_tokens,
+            "reference_cost_per_success": summary.reference_cost_per_success,
+            "optimized_cost_per_success": summary.optimized_cost_per_success,
+            "reference_latency": summary.reference_latency.as_record(),
+            "optimized_latency": summary.optimized_latency.as_record(),
+            "reference_candidate": summary.reference_candidate.as_record(),
+            "optimized_candidate": summary.optimized_candidate.as_record(),
+            "coverage": summary.coverage.as_record(),
         },
-        "quality_gate": {
-            "every_case_paired": not result.unmatched,
-            "no_rejected_pairs": not result.rejected,
-            "has_successful_pair": summary.success_pairs > 0,
-        },
+        "quality_gate": gate.as_record(),
     }, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
 
-    complete = (summary.matched_count > 0 and not result.rejected and not result.unmatched)
-    return 0 if complete else 1
+    return 0 if gate.passed else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -218,6 +248,16 @@ def main(argv: list[str] | None = None) -> int:
     output.mkdir(parents=True, exist_ok=True)
     (output / "report.json").write_text(render_json(report), encoding="utf-8")
     (output / "report.md").write_text(render_markdown(report), encoding="utf-8")
+    # Provenance for the later comparison: which suite, which arm. A comparison
+    # refuses two directories produced from different suites.
+    (output / "manifest.json").write_text(json.dumps({
+        "suite": str(args.suite),
+        "mode": args.mode,
+        "strategy": args.strategy,
+        "cache_state": args.cache_state,
+        "repeat": args.repeat,
+        "config_fingerprint": config_fingerprint,
+    }, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
 
     complete = all(record.success for record in records)
     return 0 if complete else 1

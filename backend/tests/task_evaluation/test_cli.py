@@ -185,9 +185,64 @@ def test_compare_writes_matched_pairs_and_a_quality_gate(tmp_path, monkeypatch):
 
     assert code == 0
     payload = json.loads((output / "comparison.json").read_text(encoding="utf-8"))
-    assert payload["summary"]["matched_count"] == 1
+    assert payload["summary"]["paired_count"] == 1
     assert payload["summary"]["latency_reduction_percent"] == 20.0
-    assert payload["quality_gate"] == {"every_case_paired": True,
-                                       "no_rejected_pairs": True,
-                                       "has_successful_pair": True}
+    assert payload["summary"]["reference_cost_per_success"] == 100.0
+    assert payload["summary"]["coverage"]["runs"] == 2
+    assert payload["quality_gate"] == {
+        "passed": True, "reasons": [], "violations": {
+            "unauthorized_access": 0, "duplicate_writes": 0, "invalid_activations": 0},
+        "regressions": [], "matched_count": 1, "success_pairs": 1,
+        "unmatched_count": 0, "rejected_count": 0}
     assert (output / "comparison.md").exists()
+
+
+def _manifest(directory, suite):
+    import json
+
+    (directory / "manifest.json").write_text(json.dumps({"suite": suite}), encoding="utf-8")
+
+
+def test_two_different_suites_are_never_averaged(tmp_path):
+    """One comparison covers one suite; a coach/plan mix is not a speed."""
+    import json
+
+    import backend.task_evaluation.cli as cli
+
+    record = {
+        "mode": "mock", "case_id": "perf-zh", "version": 1, "success": True,
+        "total_tokens": 100, "model": "synthetic", "rule_version": "fitlife-safety-v1",
+        "processing_ms": 100.0, "strategy": "reference", "cache_state": "cold",
+        "repeat_index": 0, "invariant_fingerprint": "a" * 64,
+    }
+    for name, suite in (("ref", "scenarios/performance_coach.json"),
+                        ("opt", "scenarios/performance_plans.json")):
+        directory = tmp_path / name
+        directory.mkdir()
+        (directory / "report.json").write_text(json.dumps({"records": [record]}), encoding="utf-8")
+        _manifest(directory, suite)
+
+    code = cli.main(["--compare", str(tmp_path / "ref"), str(tmp_path / "opt"),
+                     "--output", str(tmp_path / "out")])
+
+    assert code == 2
+    assert not (tmp_path / "out" / "comparison.json").exists()
+
+
+def test_a_run_records_which_suite_it_came_from(tmp_path):
+    """Without the manifest a later comparison cannot refuse a mixed pair."""
+    import json
+
+    import backend.task_evaluation.cli as cli
+
+    suite = tmp_path / "suite.json"
+    suite.write_text(json.dumps({"schema_version": 1, "scenarios": []}), encoding="utf-8")
+    output = tmp_path / "run"
+
+    code = cli.main(["--suite", str(suite), "--output", str(output)])
+
+    assert code == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["suite"] == str(suite)
+    assert manifest["strategy"] == "reference"
+    assert manifest["cache_state"] == "cold"

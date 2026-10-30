@@ -266,7 +266,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
         return CaseResult(scenario.id, scenario.version, status, observed=observed,
                           failures=failures, steps=tuple(steps), metrics={"processing_ms": processing_ms,
                           "candidate_ms": candidate_ms, "first_candidate": first_candidate, "confirmed_candidate": confirmed_candidate,
-                          "candidate_reason": "no_verified_candidate" if candidate_ms is None else "validated_candidate"})
+                          "candidate_reason": "no_timed_candidate" if candidate_ms is None else "validated_candidate"})
     if not set(scenario.requires).issubset(supported_capabilities):
         return CaseResult(scenario.id, scenario.version, "unsupported", failures=("requires",))
 
@@ -401,7 +401,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
         metrics={"processing_ms": processing_ms, "candidate_ms": candidate_ms,
                  "first_candidate": first_candidate, "confirmed_candidate": confirmed_candidate,
                  "response_ready_ms": response_ready_ms,
-                 "candidate_reason": "validated_candidate" if candidate_ms is not None else "no_verified_candidate"},
+                 "candidate_reason": "validated_candidate" if candidate_ms is not None else "no_timed_candidate"},
     )
 
 
@@ -510,6 +510,10 @@ def to_run_record(result: CaseResult, *, mode: str, git_sha: str | None = None,
         calls=result.metrics.get("gateway_attempts"),
         retries=result.metrics.get("retries"),
         details={**{key: value for key, value in result.metrics.items() if key in {"run_ids", "ledger", "elapsed_ms", "provider_usage", "mock_usage_estimated", "policy_version", "rule_pack_version", "candidate_reason", "token_measurement", "cleanup_status", "dataset_hash", "catalog_digest", "known_estimated_tokens", "failed_attempts", "started_at", "finished_at", "first_candidate", "confirmed_candidate", "tool_attempts", "tool_denials", "cache_hits", "decision_count", "protocol_failures", "tool_executions", "context_chars", "loaded_skill_ids", "resource_releases", "attempts_started", "attempts_finished", "attempts_incomplete", "unknown_usage_count", "known_total_tokens", "usage_sources", "invariant_config_fingerprint", "treatment_config_fingerprint"}},
+            # Which declared facts did not hold. A performance gate cannot tell a
+            # slow run from an unsafe one unless the failing fact is named; these
+            # are scenario field names, never model or user text.
+            "failed_fields": list(result.failures),
             "coach_invariants": {key: value for key, value in result.observed.items()
                 if key in {"coach_messages", "coach_turns", "coach_successes", "coach_cancelled",
                            "coach_failed", "coach_slot_holders", "coach_unapproved_answers",
