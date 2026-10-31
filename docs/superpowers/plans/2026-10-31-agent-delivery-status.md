@@ -36,13 +36,17 @@
 
 技术步骤沿用 `2026-10-10-agent-task-s5-acceptance.md`。
 
-- [ ] Task 1：离线准入清单、合成正常/对抗案例、人工标签及分歧复核协议。必须包含正常“今天练胸”请求。
-- [ ] Task 2：Gateway/Broker、父进程批次预算、物理attempt计量、取消与partial报告；FakeProvider覆盖完整CLI路径，拒绝时Provider零触达。
-- [ ] Task 4离线部分：开关行为、账户导出/删除/TTL、确认响应丢失、版本冲突、超时与取消演练、发布及回退手册。已有覆盖先复用，不重写第二套存储或审核系统。
+- [x] Task 1：离线准入清单、合成正常/对抗案例、人工标签及分歧复核协议。必须包含正常“今天练胸”请求。
+  - 证据：`backend/task_evaluation/acceptance.py`（准入类型 + `admit_live`，33 项测试）；`specs`→`scenarios/safety_boundary.json` 6/6 通过，含 `normal-chest-plan`；`docs/evaluation/agent-annotation-guide.md` 定义双人盲标、分歧裁决、缺失记 `unknown`。
+- [x] Task 2：Gateway/Broker、父进程批次预算、物理attempt计量、取消与partial报告；FakeProvider覆盖完整CLI路径，拒绝时Provider零触达。
+  - 证据：`backend/task_evaluation/live_gateway.py`（admission→factory 顺序、reserve/settle、消息白名单、`FakeGateway` 四边界，18 项测试）。超时记 failed、取消记 cancelled、未知用量保留全额预留、准入被拒时未开任何 attempt。父进程预算账本沿用既有 `BatchBudget` IPC。
+- [x] Task 4离线部分：开关行为、账户导出/删除/TTL、确认响应丢失、版本冲突、超时与取消演练、发布及回退手册。已有覆盖先复用，不重写第二套存储或审核系统。
+  - 证据：新增 `docs/release/controlled-rollout.md`；复用既有覆盖 10 个文件共 **111 passed**，含确认重放、head 冲突、导出/删除/TTL、超时与取消。手册记录实测默认值（`coach_agent_mode` 仍为 `legacy`，不得称已开启 unified）。
 
 ## C：S5 效果验收与受控发布
 
 - [ ] 用户确认模型、脱敏场景、调用/token/时间预算、质量判定规则后执行Task 3。暂不预设提升比例；完整保留失败、unknown usage和缺标签。
+  - **未执行**：需要模型选择、脱敏场景、预算与质量判定规则的独立授权。当前 `live` 分支明确返回“live execution is not enabled in this stage”。
 - [ ] 同一授权批次交替执行reference/optimized。按入口/场景分别报告完成质量、安全不变量、往返数、usage和延迟，不能把不同suite拼成一个收益。
 - [ ] 迁移/生产发布依照Task 4独立授权与备份流程执行。代码合并不合并SQLite数据。
 

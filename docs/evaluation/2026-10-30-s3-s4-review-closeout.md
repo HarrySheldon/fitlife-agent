@@ -84,3 +84,60 @@ S3/S4 的上述修补已写入代码，**最终验证与进度收口尚待完成
 
 - **浏览器人工演练**：Coach／计划页创建并恢复同一任务、补充约束、查看具体差异、确认与冲突、断线后未知结果重试、关闭重开与换账户隔离，以及焦点、滚动、缩放、输入法项。单元测试不替代人工验收，本轮未执行、未冒充完成。
 - S5 真实模型质量与性能证据、U7 默认启用与 legacy 退役、RAG R0–R4：见交付清单 B/C/D 与 RAG 计划。
+
+## 2026-10-31 S5 工程交付补充
+
+补充交付清单 B 节。范围**仅离线工程**：未调用真实 Provider、未迁移、未发布。
+
+**环境**：同一 `main` / `f9e70fc`；Python 3.13.12；pytest 9.1.1。所有数据为独立合成目录。
+
+### Task 1：离线准入、风险场景与标注协议
+
+| 交付 | 位置 |
+| --- | --- |
+| 准入类型与校验 | `backend/task_evaluation/acceptance.py`：`EvaluationBudget`（三项严格为正）、`AcceptanceManifest`（`synthetic_only` 只能为真）、`ActualState`（本地重算）、`Authorization`（操作者构造，不由 manifest 自签）、`admit_live` |
+| CLI 离线 dry-run | `--admit-manifest/--admit-actual/--admit-authorization`：只校验，构造 Provider 次数为 0，拒绝时只输出受控原因码 |
+| 风险场景 | `backend/task_evaluation/scenarios/safety_boundary.json`，**6/6 通过**，退出码 0 |
+| 标注协议 | `docs/evaluation/agent-annotation-guide.md`：双人盲标、第三人裁决、缺失记 `unknown` 且不进准确率分子 |
+
+TDD 记录：先建接口（未加 `gt=0`）→ RED 为 `DID NOT RAISE`（4 项，非模块缺失）→ 加约束 → GREEN。
+
+风险场景覆盖并区分：可分离混合任务（拒股票、照常答训练）、不可分离混合（澄清且 `gateway_attempts=0`）、正常否定描述（"我不想吃鸡胸肉"不是注入）、正常业务含"代码"（"写代码久坐"）、正常"今天练胸"、不可能计量单位（未确认则零写入）。既有套件覆盖的类别（直接/间接注入、他人数据、跨域、超长输出、健康边界、离题）**复用未重写**。
+
+一处自我修正：`boundary-mixed-ambiguous` 最初断言 `coach_boundary_replies=1`，实测为 0——它使用独立的 `clarification` 消息而非 `out_of_scope`。改为断言真实不变量（零模型调用），不是削弱断言。
+
+### Task 2：Gateway 边界与物理 attempt 计量
+
+`backend/task_evaluation/live_gateway.py`，18 项测试：
+
+- 唯一允许顺序 `admission() → factory() → attempt 在预留内`；准入失败时 factory **零调用**；
+- factory 失败**不伪装**为准入失败；
+- 预留被拒则 attempt **不启动**；attempt 抛异常**仍结算**；`usage=None` **保留全额预留**；
+- 消息白名单仅 `generation/structured/decision/review`（无 `file_path`、无任意 Python）；
+- `FakeGateway` 覆盖四边界，超时记 `failed`、取消记 `cancelled`；准入被拒时 **attempt 数为 0**（"从未调用"可由账本证明）；
+- 批次超时仍写 partial 报告且不丢弃未跑案例。
+
+父进程预算账本沿用既有 `BatchBudget` IPC，未新增第二套。
+
+### Task 4 离线：演练与手册
+
+- 新增 `docs/release/controlled-rollout.md`：备份与 integrity 校验、六步发布门禁、开关演练、故障/隐私演练清单、回退步骤、未授权事项。
+- 手册记录**实测默认值**：`coach_agent_mode` 仍为 `legacy`、`plan_storage_mode=file`、`task_execution_strategy=reference`、`safety_review_mode=off`。**不得声称统一教练已默认开启。**
+- 复用既有覆盖（确认重放、head 冲突、导出/删除/TTL、超时/取消、约束更新）共 **111 passed**，退出码 0。
+- 新增 `docs/evaluation/2026-10-31-delivery-statement.md`：规定"问题→技术→结果→证据"表述与三类状态（离线完成 / live 待授权 / 迁移发布待授权），并列出必须声明的能力边界。
+
+### 最终门禁
+
+| 项 | 结果 |
+| --- | --- |
+| 后端全量 | **2758 passed, 1 skipped, 1113.22s, exit 0** |
+| 前端测试 | **48 文件 / 318 项通过, 68.61s, exit 0** |
+| 前端构建 | **通过, exit 0**（保留既有 chunk>500 kB 警告，不计为行为通过） |
+
+### 本轮新增的已知缺口（未掩盖）
+
+`早餐：白饭 100kg` 被换算为 `100000 g` / `182000 kcal`，`issues` 为空，**无任何单位告警**。未自行加营养或医学阈值（需经评审的领域判断）。已写入标注协议第 5 节，标注时记 `wrong_unit` 次要标签与 `unknown` 主标签。
+
+### 仍未完成
+
+C 节真实效果验收（需模型、脱敏场景、预算与质量判定规则授权）、D 节默认入口切换与 legacy 退役、正式迁移与扩大上线、浏览器人工演练、RAG R0–R4。
