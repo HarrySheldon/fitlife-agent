@@ -12,6 +12,8 @@
 
 ## 0. 当前状态、依据与执行前置
 
+**2026-10-31 状态覆盖：** Task 1–8 对应代码及后续安全、幂等、同源 UI 修补已集成至 `main/f9e70fc`。下文“没有开始”及原始步骤为历史，不再代表进度；不得按未勾选步骤重做实现。最终全量回归、修补后场景回放与人工验收仍需补齐，逐项见[当前验收清单](2026-10-31-agent-delivery-status.md)。实现完成不等于真实模型效果已验证。
+
 2026-10-23重写。依据：[路线重组设计](../specs/2026-10-23-agent-roadmap-reorganization-design.md)及[U设计](../specs/2026-10-22-unified-coach-agent-design.md)。本文件为待执行计划；没有开始S3代码、迁移或真实调用。旧版可用 `git show 3519f69:docs/superpowers/plans/2026-10-10-agent-task-s3-plans.md` 查阅，不将旧待办当作已完成。
 
 先完成[S4-A基线](2026-10-10-agent-task-s4-performance.md)，再执行本文。Task 1–8是8个检查点，不是8次模型调用；替代旧5项映射见文末。只改文档无需创建工作树；代码实施先遵循AGENTS.md备份主业务/Runtime数据库、核验完整性和checksum、建立隔离开发数据，检查挂载/路径不指向主库。保留主工作区已有transport修改。

@@ -22,6 +22,8 @@ Task 1可提前离线完成；Task 2用假Provider测试，不消耗密钥。Tas
 
 ## Task 1：离线准入、风险场景和人工标注协议
 
+**2026-10-31 执行分组：** Task 1、Task 2及Task 4的离线配置/生命周期/故障演练属于工程交付；Task 3真实调用及Task 4正式迁移/发布属于另行授权的验收。分组不削弱下面的准入、预算、隐私和质量要求。当前不设简历提升百分比目标；有测量能力不等于已获得真实效果。统一进度见[当前验收清单](2026-10-31-agent-delivery-status.md)。
+
 **Create:** `backend/task_evaluation/acceptance.py`、`backend/tests/task_evaluation/test_acceptance.py`、`backend/task_evaluation/scenarios/safety_boundary.json`、`docs/evaluation/agent-annotation-guide.md`。
 **Modify:** `backend/task_evaluation/contracts.py`、`cli.py`。
 

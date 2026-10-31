@@ -1,5 +1,7 @@
 # S3/S4 审查修补记录（2026-10-30）
 
+> 2026-10-31 状态校正：本文是当时验证快照，以下“未提交、未合并、未推送”已被集成取代。当前本地 main 为 f9e70fc，与缓存 origin/main 相同；本次未 fetch。本文最终验证尚待完成的结论仍保留，不以代码集成代替测试。后续待办统一见[当前验收清单](../superpowers/plans/2026-10-31-agent-delivery-status.md)。
+
 范围：当前 `codex/s4a-measurement-baseline` 的 S3/S4 实现及未提交改动；不包含 S5、U7、RAG 升级、正式迁移、真实 Provider 调用或发布。既有未提交代码保留。代码未提交、未合并、未推送。
 
 ## 已实施修补
@@ -35,3 +37,50 @@
 限制前端测试并发（`npm --prefix frontend test -- --maxWorkers=2`）后，48 文件、318 项全部通过；不隐去此前默认并发失败的记录。两路独立只读复审已确认其发现关闭。
 
 S3/S4 的上述修补已写入代码，**最终验证与进度收口尚待完成**。不以测试数量替代计划覆盖；S5 真实质量/性能证据、U7 默认启用与 legacy 退役仍未完成。缓存保持默认不启用，不宣称真实提速或安全无漏洞。浏览器人工完整验收不冒充已完成。
+
+## 2026-10-31 最终验证补充
+
+补充[当前验收清单](../superpowers/plans/2026-10-31-agent-delivery-status.md) A 节的未完成项。以下为本轮实际执行的命令与结果，不改写此前记录。
+
+**环境**：`main` / `f9e70fc138ad7ea067df33976c4743fb5520bd23`（与 `origin/main` 相同）；Python 3.13.12；pytest 9.1.1。开始时工作区仅含 8 项文档改动（2 份新计划 + 6 份计划修订），**无代码改动**。所有业务数据为独立合成目录，未访问真实 Provider、真实密钥或正式库。
+
+| 项 | 命令 | 结果 |
+| --- | --- | --- |
+| 后端全量业务 | `.venv\Scripts\python.exe -m pytest backend/tests -q -p no:cacheprovider --basetemp=.tmp\final-full` | **2701 passed, 1 skipped, 1 warning, 1638.95s, exit 0** |
+| 独立配置组 | 单独进程，先 `Remove-Item Env:DATA_DIR/SQLITE_DATABASE_PATH/LLM_ENABLED/OPENAI_API_KEY`，再 `pytest backend/tests/test_config.py -q` | **6 passed, 3.51s, exit 0** |
+| 前端测试 | `npm --prefix frontend test -- --maxWorkers=2` | **48 文件 / 318 项通过, 44.28s, exit 0** |
+| 前端构建 | `npm --prefix frontend run build` | **通过, exit 0**；保留既有「chunk > 500 kB」警告，不计为行为通过 |
+
+首次集成前的 `2691 passed / 1 skipped / 1 failed` 保留原样：该失败（账户导出缺 `plan-tasks.json`）已由 `1b9527e` 修正，本轮全量是修正后的结果，两者不可拼接为同一次运行。
+
+### 任务评估场景回放（mock，合成数据）
+
+先核 `--help` 取得真实参数（`--mode/--suite/--output/--strategy/--repeat/--cache-state/--compare`），未沿用不存在的参数。输出目录 `.tmp/task-evaluation/20261031-142311`。
+
+| 场景文件 | 运行 / 成功 | 退出码 |
+| --- | --- | --- |
+| `baseline.json` | 6 / 6 | 0 |
+| `interactive_entry.json` | 8 / 8 | 0 |
+| `plan_adjustment.json` | 12 / 12 | 0 |
+| `coach_conversations.json` | 16 / 16 | 0 |
+| `unified_coach.json` | 28 / 28 | 0 |
+
+报告把模型版本如实记为 `unknown`，并标注 tokens 为字符估算、非 Provider 用量或付费成本。
+
+### 配对性能对照（同一代码、相同不变量）
+
+两臂均以同一 `f9e70fc` 执行，仅 `--strategy` 不同；各自保留报告后用 `--compare` 配对。
+
+| 套件 | 配对 / 双方成功 | 质量门禁 | 延迟下降 | 95% 区间 | 判定 |
+| --- | --- | --- | --- | --- | --- |
+| `performance_plans.json` | 8 / 8 | 通过 | **-10.02%** | [-17.35, -3.48] | **退化**（负数为退化） |
+| `performance_coach.json` | 12 / 12 | 通过 | 1.76% | **[-1.87, 5.00]** | **区间跨零，不构成收益** |
+
+质量门禁在两套件均报 `unauthorized_access=0`、`duplicate_writes=0`、`invalid_activations=0`、`regressions=[]`：**安全不变量未被牺牲**，但也**没有换到可辩护的提速**。`performance_plans` 的 token 下降为 0.00%（两侧 75718）；`performance_coach` 的 token 与成本为 `null`（未知用量不作零处理）。
+
+**结论必须照此表述**：本轮未测出优化策略的可靠收益——计划套件是退化，教练套件的区间跨零。因此**缓存与重排继续保持默认不启用**，不写入任何提升百分比，也不据此调整默认路径。若后续要在真实 Provider 上验证，须按交付清单 C 节单独取得授权。
+
+### 仍然未完成（不由本轮勾选）
+
+- **浏览器人工演练**：Coach／计划页创建并恢复同一任务、补充约束、查看具体差异、确认与冲突、断线后未知结果重试、关闭重开与换账户隔离，以及焦点、滚动、缩放、输入法项。单元测试不替代人工验收，本轮未执行、未冒充完成。
+- S5 真实模型质量与性能证据、U7 默认启用与 legacy 退役、RAG R0–R4：见交付清单 B/C/D 与 RAG 计划。

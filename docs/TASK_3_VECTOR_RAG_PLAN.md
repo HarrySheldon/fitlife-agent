@@ -1,5 +1,7 @@
 # Vector RAG Implementation Plan
 
+> 2026-10-31：本文保留为基础向量索引的历史计划，不能作为当前 RAG 升级待办。代码已有 hashing/可选远端 embedding、JSON 索引、基础词项与向量分数融合及来源去重；后续按[知识治理、检索与证据升级计划](superpowers/plans/2026-10-31-rag-quality-upgrade.md)推进。hashing 不代表语义理解，原测试中“semantically matching”的措辞不构成语义检索效果证据。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Upgrade FitLife Agent's knowledge retrieval from token-overlap scoring to an embedding-backed vector index while preserving offline demo behavior.
