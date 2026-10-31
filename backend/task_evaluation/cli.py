@@ -6,6 +6,9 @@ is never built and then asked whether it was allowed.
 
 ``--compare`` is read-only: it reads two finished report directories, pairs the runs
 and never constructs a provider or a suite.
+
+``--admit-manifest`` is an offline admission dry-run: it validates a claimed batch
+against locally supplied facts and never constructs a provider or reads a credential.
 """
 from __future__ import annotations
 
@@ -36,6 +39,9 @@ class CliArgs:
     repeat: int = 1
     cache_state: str = "cold"
     compare: tuple[str, str] | None = None
+    admit_manifest: str | None = None
+    admit_actual: str | None = None
+    admit_authorization: str | None = None
 
 
 def _positive_int(value: str) -> int:
@@ -58,9 +64,19 @@ def parse_args(argv: list[str]) -> CliArgs:
     parser.add_argument("--repeat", type=_positive_int, default=1)
     parser.add_argument("--cache-state", choices=("cold", "warm"), default="cold")
     parser.add_argument("--compare", nargs=2, metavar=("REFERENCE", "OPTIMIZED"))
+    parser.add_argument("--admit-manifest")
+    parser.add_argument("--admit-actual")
+    parser.add_argument("--admit-authorization")
     raw = parser.parse_args(argv)
 
-    if raw.compare:
+    if raw.admit_manifest:
+        if raw.suite:
+            parser.error("--admit-manifest does not accept --suite")
+        if not raw.admit_actual:
+            parser.error("--admit-manifest requires --admit-actual")
+        if raw.mode != "mock":
+            parser.error("--admit-manifest is a dry-run and does not accept --mode live")
+    elif raw.compare:
         if raw.suite:
             parser.error("--compare reads finished reports and does not accept --suite")
         if raw.mode != "mock":
@@ -68,7 +84,7 @@ def parse_args(argv: list[str]) -> CliArgs:
     elif not raw.suite:
         parser.error("--suite is required unless --compare is used")
 
-    if raw.mode == "live":
+    if raw.mode == "live" and not raw.admit_manifest:
         if not raw.allow_live:
             parser.error("live mode requires --allow-live")
         missing = [
@@ -93,6 +109,9 @@ def parse_args(argv: list[str]) -> CliArgs:
         repeat=raw.repeat,
         cache_state=raw.cache_state,
         compare=tuple(raw.compare) if raw.compare else None,
+        admit_manifest=raw.admit_manifest,
+        admit_actual=raw.admit_actual,
+        admit_authorization=raw.admit_authorization,
     )
 
 
@@ -200,8 +219,50 @@ def _compare(args: CliArgs) -> int:
     return 0 if gate.passed else 1
 
 
+def _admit(args: CliArgs) -> int:
+    """Offline admission dry-run: validate a claimed batch, construct nothing.
+
+    No provider, no credential, no network. It prints only a verdict and, on refusal,
+    a controlled reason code - never the values that failed, which may include a
+    connection fingerprint.
+    """
+    from backend.task_evaluation.acceptance import (
+        AcceptanceManifest,
+        ActualState,
+        AdmissionRejected,
+        Authorization,
+        admit_live,
+    )
+
+    try:
+        manifest = AcceptanceManifest.model_validate(
+            json.loads(Path(args.admit_manifest).read_text(encoding="utf-8")))
+        actual_payload = json.loads(Path(args.admit_actual).read_text(encoding="utf-8"))
+        for key in ("provider_registry", "protocol_registry", "engine_registry",
+                    "safety_mode_registry"):
+            actual_payload[key] = frozenset(actual_payload.get(key) or ())
+        actual = ActualState(**actual_payload)
+        authorization = None
+        if args.admit_authorization:
+            authorization = Authorization(**json.loads(
+                Path(args.admit_authorization).read_text(encoding="utf-8")))
+    except Exception:
+        print("invalid admission input", file=sys.stderr)
+        return 2
+
+    try:
+        admit_live(manifest, actual=actual, authorization=authorization)
+    except AdmissionRejected as error:
+        print(f"REJECTED {error}")
+        return 2
+    print("ADMITTED")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
+    if args.admit_manifest:
+        return _admit(args)
     if args.compare:
         return _compare(args)
     if args.mode == "live":

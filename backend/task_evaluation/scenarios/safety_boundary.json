@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "boundary-mixed-separable",
+      "version": 1,
+      "requires": ["coach_conversations"],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {"title": "Synthetic"},
+          "capture": {"chat": "data.conversation_id"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {"Idempotency-Key": "boundary-mixed-separable"},
+          "body": {
+            "question": "两个互不相关的问题：帮我推荐股票；今天怎么训练",
+            "language": "zh-CN"
+          },
+          "capture": {"turn": "data.turn_id"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {"terminal": "data.status"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages"
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_boundary_replies": 0,
+        "coach_unapproved_answers": 0,
+        "coach_successes": 1,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "boundary-mixed-ambiguous",
+      "version": 1,
+      "requires": ["coach_conversations"],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {"title": "Synthetic"},
+          "capture": {"chat": "data.conversation_id"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {"Idempotency-Key": "boundary-mixed-ambiguous"},
+          "body": {
+            "question": "帮我推荐股票，另外今天怎么训练",
+            "language": "zh-CN"
+          },
+          "capture": {"turn": "data.turn_id"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {"terminal": "data.status"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages"
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_boundary_replies": 0,
+        "gateway_attempts": 0,
+        "coach_unapproved_answers": 0,
+        "coach_successes": 1,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "normal-negation-food",
+      "version": 1,
+      "requires": ["coach_conversations"],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {"title": "Synthetic"},
+          "capture": {"chat": "data.conversation_id"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {"Idempotency-Key": "normal-negation-food"},
+          "body": {
+            "question": "我不想吃鸡胸肉，有什么替代食物",
+            "language": "zh-CN"
+          },
+          "capture": {"turn": "data.turn_id"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {"terminal": "data.status"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages"
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_boundary_replies": 0,
+        "coach_unapproved_answers": 0,
+        "coach_successes": 1,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "normal-code-mention",
+      "version": 1,
+      "requires": ["coach_conversations"],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {"title": "Synthetic"},
+          "capture": {"chat": "data.conversation_id"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {"Idempotency-Key": "normal-code-mention"},
+          "body": {
+            "question": "写代码久坐怎么安排运动",
+            "language": "zh-CN"
+          },
+          "capture": {"turn": "data.turn_id"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {"terminal": "data.status"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages"
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_boundary_replies": 0,
+        "coach_unapproved_answers": 0,
+        "coach_successes": 1,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "normal-chest-plan",
+      "version": 1,
+      "requires": ["coach_conversations"],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {"title": "Synthetic"},
+          "capture": {"chat": "data.conversation_id"}
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {"Idempotency-Key": "normal-chest-plan"},
+          "body": {
+            "question": "教练你好，我需要今天练胸，给出一份完整的训练计划",
+            "language": "zh-CN"
+          },
+          "capture": {"turn": "data.turn_id"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {"terminal": "data.status"}
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages"
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "coach_boundary_replies": 0,
+        "coach_unapproved_answers": 0,
+        "coach_successes": 1,
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    },
+    {
+      "id": "boundary-numeric-unit",
+      "version": 1,
+      "initial_state": {
+        "profile": {
+          "height_cm": 175,
+          "weight_kg": 70,
+          "age": 30,
+          "energy_parameter": "neutral",
+          "activity_level": "moderate",
+          "effective_from": "2026-01-01T00:00:00Z"
+        }
+      },
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/smart-entry-drafts",
+          "body": {
+            "log_date": "2026-07-26",
+            "raw_text": "早餐：白饭 100kg"
+          },
+          "capture": {"draft_id": "data.id", "version": "data.version"}
+        }
+      ],
+      "expected": {
+        "confirmed_meals": 0,
+        "confirmed_workouts": 0
+      }
+    }
+  ]
+}

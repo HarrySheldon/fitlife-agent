@@ -246,3 +246,96 @@ def test_a_run_records_which_suite_it_came_from(tmp_path):
     assert manifest["suite"] == str(suite)
     assert manifest["strategy"] == "reference"
     assert manifest["cache_state"] == "cold"
+
+
+# --------------------------------------------------------------------------
+# offline admission dry-run
+# --------------------------------------------------------------------------
+
+def _write_admission_inputs(tmp_path, *, authorized=True, actual_overrides=None):
+    """A minimal admissible batch, written as JSON so the CLI reads real files."""
+    import json
+
+    from backend.task_evaluation.acceptance import EvaluationBudget
+
+    digest = "a" * 64
+    sha = "b" * 40
+    budget = EvaluationBudget(max_calls=10, max_tokens=1000, max_seconds=30).model_dump()
+    manifest = {
+        "code_sha": sha, "diff_digest": digest, "suite_digest": digest,
+        "connection_ref": "approved-1", "connection_fingerprint": digest,
+        "provider": "openai", "model": "test-model", "protocol": "responses",
+        "engine": "unified_coach", "strategy": "reference", "phase": "compare",
+        "invariant_fingerprint": digest, "treatment_fingerprint": digest,
+        "review_mode": "off", "grounding_mode": "legacy", "synthetic_only": True,
+        "repeat": 1, "annotation_protocol_version": "annotation-v1", "budget": budget,
+    }
+    actual = {
+        "code_sha": sha, "diff_digest": digest, "suite_digest": digest,
+        "connection_fingerprint": digest, "provider": "openai", "model": "test-model",
+        "protocol": "responses", "engine": "unified_coach", "review_mode": "off",
+        "grounding_mode": "legacy", "invariant_fingerprint": digest,
+        "treatment_fingerprint": digest, "scenario_count": 5,
+        "has_real_user_data": False,
+        "provider_registry": ["openai", "custom"],
+        "protocol_registry": ["responses", "chat_completions"],
+        "engine_registry": ["unified_coach"],
+        "safety_mode_registry": ["off", "shadow", "enforce", "legacy", "evidence"],
+        "max_cases": 100,
+    }
+    actual.update(actual_overrides or {})
+    manifest_path = tmp_path / "manifest.json"
+    actual_path = tmp_path / "actual.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    actual_path.write_text(json.dumps(actual), encoding="utf-8")
+    args = ["--admit-manifest", str(manifest_path), "--admit-actual", str(actual_path)]
+    if authorized:
+        authorization_path = tmp_path / "authorization.json"
+        authorization_path.write_text(json.dumps({
+            "approved_by": "operator", "expires_at": 2_000_000_000.0, "reference": "batch-1",
+        }), encoding="utf-8")
+        args += ["--admit-authorization", str(authorization_path)]
+    return args
+
+
+def test_admit_dry_run_admits_a_matching_batch(tmp_path, capsys):
+    import backend.task_evaluation.cli as cli
+
+    assert cli.main(_write_admission_inputs(tmp_path)) == 0
+    assert "ADMITTED" in capsys.readouterr().out
+
+
+def test_admit_dry_run_rejects_without_authorization(tmp_path, capsys):
+    import backend.task_evaluation.cli as cli
+
+    assert cli.main(_write_admission_inputs(tmp_path, authorized=False)) == 2
+    assert "LIVE_NOT_AUTHORIZED" in capsys.readouterr().out
+
+
+def test_admit_dry_run_reports_a_mismatch(tmp_path, capsys):
+    import backend.task_evaluation.cli as cli
+
+    assert cli.main(_write_admission_inputs(tmp_path, actual_overrides={"model": "other"})) == 2
+    assert "MISMATCH_MODEL" in capsys.readouterr().out
+
+
+def test_admit_dry_run_never_constructs_a_provider(tmp_path, monkeypatch):
+    """A dry-run validates; it must not reach the provider factory."""
+    constructed = []
+
+    import backend.task_evaluation.cli as cli
+
+    monkeypatch.setattr(cli, "_build_provider", lambda mode: constructed.append(mode))
+    cli.main(_write_admission_inputs(tmp_path))
+
+    assert constructed == []
+
+
+def test_admit_and_suite_cannot_be_combined():
+    with pytest.raises(SystemExit):
+        parse_args(["--admit-manifest", "m.json", "--admit-actual", "a.json", "--suite", "s.json"])
+
+
+def test_admit_manifest_requires_actual():
+    with pytest.raises(SystemExit):
+        parse_args(["--admit-manifest", "m.json"])
