@@ -339,3 +339,17 @@ def test_admit_and_suite_cannot_be_combined():
 def test_admit_manifest_requires_actual():
     with pytest.raises(SystemExit):
         parse_args(["--admit-manifest", "m.json"])
+
+
+def test_admit_dry_run_tolerates_a_utf8_bom(tmp_path, capsys):
+    """PowerShell on Windows writes a BOM by default; that must not read as invalid."""
+    import backend.task_evaluation.cli as cli
+
+    args = _write_admission_inputs(tmp_path)
+    for path in (args[1], args[3], args[5]):
+        raw = (tmp_path / path.split("\\")[-1]).read_bytes()
+        if not raw.startswith(b"\xef\xbb\xbf"):
+            (tmp_path / path.split("\\")[-1]).write_bytes(b"\xef\xbb\xbf" + raw)
+
+    assert cli.main(args) == 0
+    assert "ADMITTED" in capsys.readouterr().out

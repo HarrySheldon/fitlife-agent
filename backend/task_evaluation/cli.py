@@ -236,8 +236,9 @@ def _admit(args: CliArgs) -> int:
 
     try:
         manifest = AcceptanceManifest.model_validate(
-            json.loads(Path(args.admit_manifest).read_text(encoding="utf-8")))
-        actual_payload = json.loads(Path(args.admit_actual).read_text(encoding="utf-8"))
+            json.loads(Path(args.admit_manifest).read_text(encoding="utf-8-sig")))
+        actual_payload = json.loads(
+            Path(args.admit_actual).read_text(encoding="utf-8-sig"))
         for key in ("provider_registry", "protocol_registry", "engine_registry",
                     "safety_mode_registry"):
             actual_payload[key] = frozenset(actual_payload.get(key) or ())
@@ -245,7 +246,7 @@ def _admit(args: CliArgs) -> int:
         authorization = None
         if args.admit_authorization:
             authorization = Authorization(**json.loads(
-                Path(args.admit_authorization).read_text(encoding="utf-8")))
+                Path(args.admit_authorization).read_text(encoding="utf-8-sig")))
     except Exception:
         print("invalid admission input", file=sys.stderr)
         return 2
