@@ -148,3 +148,35 @@ def load_knowledge_chunks(base_dir: str | Path | None = None) -> list[dict]:
     for document in load_markdown_documents(base_dir):
         chunks.extend(chunk_markdown(document))
     return chunks
+
+
+def ensure_chunk_identity(chunks: list[dict]) -> list[dict]:
+    """Fill in the identity fields a chunk needs to be cited and invalidated.
+
+    Chunks produced by ``chunk_markdown`` already carry all of these. A hand-built list
+    (a test double, or a caller parsing its own source) may not, and rather than
+    maintaining a second code path that skips validity checks, the identity is derived
+    here deterministically. Nothing about the text changes.
+    """
+    seen: dict[tuple[str, str], int] = {}
+    output: list[dict] = []
+    for chunk in chunks:
+        source = str(chunk.get("source", ""))
+        heading = str(chunk.get("heading") or "Overview")
+        text = str(chunk.get("text", ""))
+        key = (source, heading)
+        ordinal = chunk.get("ordinal")
+        if ordinal is None:
+            ordinal = seen.get(key, 0)
+        seen[key] = max(seen.get(key, 0), int(ordinal) + 1)
+        output.append({
+            **chunk,
+            "source": source,
+            "heading": heading,
+            "ordinal": int(ordinal),
+            "chunk_id": chunk.get("chunk_id") or chunk_id(source, heading, int(ordinal)),
+            "content_hash": chunk.get("content_hash") or content_hash(text),
+            "document_version": chunk.get("document_version") or document_version(text),
+            "chunking_version": chunk.get("chunking_version") or CHUNKING_VERSION,
+        })
+    return output

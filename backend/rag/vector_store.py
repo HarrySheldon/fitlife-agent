@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 import json
@@ -27,6 +27,9 @@ def score_text(query: str, text: str) -> float:
 
 
 class EmbeddingProvider(Protocol):
+    # Provider and model identity are separate facts: two providers can expose the same
+    # model name, and a different provider invalidates an index even then.
+    provider_name: str
     model_name: str
     dimensions: int
 
@@ -38,6 +41,7 @@ class EmbeddingProvider(Protocol):
 
 
 class HashingEmbeddingProvider:
+    provider_name = "hashing"
     model_name = "local-hashing-embedding"
 
     def __init__(self, dimensions: int = 128):
@@ -57,6 +61,8 @@ class HashingEmbeddingProvider:
 
 
 class OpenAIEmbeddingProvider:
+    provider_name = "openai"
+
     def __init__(self, *, client, model: str):
         self.client = client
         self.model_name = model

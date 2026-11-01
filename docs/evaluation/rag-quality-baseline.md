@@ -126,3 +126,28 @@ R1 只修 **完整性**，不改检索。得分**未变，仍为 5/9**——这�
 R1 新增 `backend/tests/rag/test_ingest_integrity.py`（21 项）：长行完整性、逐字符可重组、chunk 不超上限、标题跨续块保持、ordinal 连续、id 稳定、同标题跨 source 不冲突、hash 与文本一致、未声明溯源保持 None。
 
 **仍未解决的**（R2/R3 目标）：跨语言查询 MISS、同一 source 只取一块、零匹配与离题仍返回 3 条。
+
+## 8. R2 后的状态（索引失效与原子发布）
+
+R2 修 **索引正确性与发布安全**，不改检索。得分**仍为 5/9**。
+
+| 项 | R1 | R2 |
+| --- | --- | --- |
+| 同数量改文 | ✗ 复用旧索引，返回 v1 内容 | **✓ 按 manifest 判定，语料摘要不符即重建** |
+| 提供商不同、模型名相同 | ✗ 可能误判有效 | **✓ `provider_name` 独立参与判定** |
+| 切分版本变更 | ✗ 不参与判定 | **✓ 参与判定** |
+| 维度不一致 | ✗ 不参与判定 | **✓ 参与判定** |
+| 缺向量 / NaN / Inf / 维度不齐 | ✗ 无校验 | **✓ 发布前拒绝** |
+| 重复 chunk_id | ✗ 无校验 | **✓ 发布前拒绝** |
+| 构建中断 | ✗ 可能留下半成品 | **✓ 旧 release 仍可读**（新 release 写入独立目录，校验通过后才原子切换 active manifest） |
+| 增量复用 | 无 | **✓ 仅当 embedding 配置相同且 content_hash 未变** |
+| 检索得分 | 5/9 | **5/9（未变）** |
+| 缺口证据 | 2 个 xfail | **1 个 xfail**（缺口 2 已修并转为常规测试） |
+
+实现要点：
+- `backend/rag/index_release.py`：`index_is_valid`（按 manifest 比对语料摘要、切分版本、provider、model、维度、chunk 数）、`publish_release`（写入独立目录 → 校验 → `os.replace` 原子切换）、`load_release`、`read_manifest`。
+- `backend/rag/vector_store.py`：`EmbeddingProvider` 协议与两个实现增加 `provider_name`，使"模型名相同但提供商不同"能够失效。
+- `backend/rag/retriever.py`：`_load_or_build_index` 改为读 release + manifest 判定，不再比较"模型名 + chunk 数"；旧单文件 JSON 索引**不再被复用**，由 R2 机制重建。
+- `backend/rag/ingest.py`：`ensure_chunk_identity` 为手工构造的 chunk 确定性补全身份，避免"为了兼容旧调用而绕过校验"的第二条路径。
+
+**仍未解决的**（R3 目标）：跨语言查询 MISS、同一 source 只取一块、零匹配与离题仍返回 3 条。

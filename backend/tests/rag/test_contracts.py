@@ -335,9 +335,8 @@ def test_a_long_line_is_not_truncated():
     assert recovered.count("A") == 2000
 
 
-@pytest.mark.xfail(strict=True, reason="R2: same-count content change reuses the stale index")
 def test_a_same_length_content_change_invalidates_the_index():
-    """GAP 2 (reproduced): v2 says 'zzz' but the index still serves v1's 'xxx'."""
+    """GAP 2, fixed in R2: v2 says 'zzz' and the index must serve 'zzz', not v1's 'xxx'."""
     from backend.rag.ingest import chunk_markdown
     from backend.rag.retriever import _load_or_build_index
     from backend.rag.vector_store import build_embedding_provider

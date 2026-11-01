@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.config import get_settings
-from backend.rag.ingest import load_knowledge_chunks
+from backend.rag.index_release import index_is_valid, load_release, publish_release
+from backend.rag.ingest import ensure_chunk_identity, load_knowledge_chunks
 from backend.rag.vector_store import EmbeddingProvider, VectorIndex, build_embedding_provider, score_text
 
 
@@ -14,7 +15,7 @@ def retrieve_knowledge(
     provider: EmbeddingProvider | None = None,
     index_path: str | Path | None = None,
 ) -> list[dict]:
-    chunks = load_knowledge_chunks()
+    chunks = ensure_chunk_identity(load_knowledge_chunks())
     provider = provider or build_embedding_provider()
     index_path = Path(index_path) if index_path is not None else get_settings().vector_index_path
 
@@ -30,26 +31,86 @@ def retrieve_knowledge(
     return _lexical_retrieve(query, chunks, top_k=top_k)
 
 
+def _release_root(index_path: Path) -> Path:
+    """Releases live beside the legacy index file, one directory per release."""
+    return index_path.parent / f"{index_path.stem}-releases"
+
+
 def _load_or_build_index(
     chunks: list[dict],
     *,
     provider: EmbeddingProvider,
     index_path: Path,
 ) -> VectorIndex:
-    if index_path.exists():
-        try:
-            index = VectorIndex.load(index_path)
-            if index.embedding_model == provider.model_name and len(index.entries) == len(chunks):
-                return index
-        except Exception:
-            pass
+    """Return an index that provably matches these chunks.
 
-    index = VectorIndex.build(chunks, provider=provider)
-    try:
-        index.save(index_path)
-    except Exception:
-        pass
-    return index
+    Validity is decided by the release manifest, not by comparing a model name and a
+    chunk count. That comparison was the R0 defect: editing a document without changing
+    how many chunks it produced kept serving the old text back.
+    """
+    root = _release_root(index_path)
+    documents = _documents_from_chunks(chunks)
+    loaded = load_release(root)
+    if loaded is not None:
+        manifest, payload = loaded
+        if index_is_valid(manifest, provider=provider, documents=documents,
+                          chunk_count=len(chunks)):
+            entries = payload.get("entries", [])
+            if len(entries) == len(chunks):
+                return VectorIndex(
+                    entries=[{"chunk": {k: v for k, v in entry.items() if k != "embedding"},
+                              "embedding": entry["embedding"]} for entry in entries],
+                    embedding_model=manifest.embedding_model,
+                    embedding_dimensions=manifest.embedding_dimensions,
+                )
+        previous_root = root / manifest.release_id if (root / manifest.release_id).exists() else None
+    else:
+        previous_root = None
+
+    publish_release(
+        chunks=chunks,
+        provider=provider,
+        embedding_lookup=provider.embed_query,
+        root=root,
+        release_id=_next_release_id(root),
+        documents=documents,
+        previous_root=previous_root,
+    )
+    loaded = load_release(root)
+    if loaded is None:  # pragma: no cover - publish_release either raises or activates
+        raise RuntimeError("a published release could not be read back")
+    manifest, payload = loaded
+    return VectorIndex(
+        entries=[{"chunk": {k: v for k, v in entry.items() if k != "embedding"},
+                  "embedding": entry["embedding"]} for entry in payload.get("entries", [])],
+        embedding_model=manifest.embedding_model,
+        embedding_dimensions=manifest.embedding_dimensions,
+    )
+
+
+def _next_release_id(root: Path) -> str:
+    """Monotonic, collision-free release ids without reading a clock."""
+    existing = 0
+    if root.exists():
+        for child in root.iterdir():
+            if child.is_dir() and child.name.startswith("release-"):
+                try:
+                    existing = max(existing, int(child.name.split("-", 1)[1]) + 1)
+                except (IndexError, ValueError):
+                    continue
+    return f"release-{existing:04d}"
+
+
+def _documents_from_chunks(chunks: list[dict]) -> list[dict]:
+    """Rebuild the corpus view a manifest digest needs from the chunks themselves."""
+    documents: list[dict] = []
+    current_source: str | None = None
+    for chunk in chunks:
+        if chunk["source"] != current_source:
+            current_source = chunk["source"]
+            documents.append({"source": current_source, "text": ""})
+        documents[-1]["text"] += chunk["text"] + "\n"
+    return documents
 
 
 def _with_hybrid_scores(query: str, vector_results: list[dict]) -> list[dict]:
