@@ -30,3 +30,4 @@ backend/data/catalog/.catalog-localization.publish.lock
 pytest-*/
 backend/pytest-*/
 pytest-cache-files-*/
+backend/data/vector_index-releases/
