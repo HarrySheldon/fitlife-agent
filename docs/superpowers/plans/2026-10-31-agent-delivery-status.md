@@ -60,6 +60,17 @@
 
 按 `2026-10-31-rag-quality-upgrade.md` 的R0–R4执行。RAG已有基础能力，不应列为全新系统；Agent权限与审核复用现有边界。RAG工程不依赖先取得Agent性能百分比，但接入验收必须覆盖统一教练。
 
+- [x] **R0：固定离线基线与合同。**
+  - 契约：`backend/rag/contracts.py`（`Chunk` 位置/版本分离、`IndexManifest`、`RetrievalResult` 的 `ok/insufficient/unavailable` 三态互斥、`QueryCase` 的 dev/holdout 与 locator 校验）。
+  - 语料：`backend/tests/fixtures/rag/corpus.json`，版本 `rag-corpus-v1`，7 文档 / 9 查询（dev 7、holdout 2），全部合成。
+  - 基线：`docs/evaluation/rag-quality-baseline.md`。当前实现 **5/9**（dev 4/7、holdout 1/2），明确标注为 hashing+词项能力，不是语义模型能力。
+  - 已复现三个缺口并固化为 `strict=True` 的 xfail（R1/R2/R3 的目标）：长行 2000 字符被截断为 900（丢 1100）；同数量改文仍返回旧索引内容；零匹配与离题查询仍返回 3 条。
+  - 另记录两项能力边界：同一 source 每块只取一条；跨语言查询不可用。
+- [ ] R1：完整切分与知识元数据
+- [ ] R2：索引失效、增量构建与发布
+- [ ] R3：检索融合、可选重排与无证据状态
+- [ ] R4：证据约束生成与 Agent 接入
+
 ## 执行纪律
 
 后续代码工作默认顺序执行。新分支/工作树前按AGENTS备份、校验并隔离数据库；本轮文档修改不创建分支、不读取真实配置。提交、推送、真实调用及正式迁移不从计划复选框推断授权。
