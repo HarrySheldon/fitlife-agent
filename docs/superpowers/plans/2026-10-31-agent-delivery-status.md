@@ -66,10 +66,17 @@
   - 基线：`docs/evaluation/rag-quality-baseline.md`。当前实现 **5/9**（dev 4/7、holdout 1/2），明确标注为 hashing+词项能力，不是语义模型能力。
   - 已复现三个缺口并固化为 `strict=True` 的 xfail（R1/R2/R3 的目标）：长行 2000 字符被截断为 900（丢 1100）；同数量改文仍返回旧索引内容；零匹配与离题查询仍返回 3 条。
   - 另记录两项能力边界：同一 source 每块只取一条；跨语言查询不可用。
-- [ ] R1：完整切分与知识元数据
-- [ ] R2：索引失效、增量构建与发布
-- [ ] R3：检索融合、可选重排与无证据状态
-- [ ] R4：证据约束生成与 Agent 接入
+- [x] R1：完整切分与知识元数据
+  - `backend/rag/ingest.py` 重写：长块切分而非截断（2000 字符行完整可重组）、续块保留标题、ordinal 连续、位置型 `chunk_id` 与 `content_hash` 分离、`document_version`、未声明溯源保持 `None`。`backend/tests/rag/test_ingest_integrity.py` 21 项。
+- [x] R2：索引失效、增量构建与发布
+  - `backend/rag/index_release.py`：按 manifest 判定有效性（语料摘要/切分版本/provider/model/维度/chunk 数），新 release 写独立目录后 `os.replace` 原子切换；缺向量、NaN/Inf、维度不齐、重复 id 一律拒绝发布；增量复用仅限同配置同 content_hash。`EmbeddingProvider` 增加 `provider_name`。`backend/tests/rag/test_index_release.py` 17 项。
+- [x] R3：检索融合、可选重排与无证据状态
+  - `backend/rag/ranking.py`：RRF `sum(1/(60+rank))`、按 source 上限（默认 2）、可注入重排且失败退回并记因、重排分数不作置信度。`retriever.retrieve_detailed` 返回 `ok/insufficient/unavailable`；`retrieve_knowledge` 保留 list 契约但无证据返回空。`backend/tests/rag/test_ranking.py` 22 项。
+  - **实测提升**：语料 dev 4/7→**5/7**，总分 5/9→**6/9**（多证据 1/2→2/2；离题由误返 3 条→`insufficient`）。
+  - 排序策略按查询形态区分：字母词查询词项参与融合，CJK 单字查询仅作门限。此区分由全量回归发现（纯向量排序曾使两条 `test_agent_graph` 契约失败）后修正。
+- [x] R4：证据约束生成与 Agent 接入
+  - `backend/rag/evidence.py`：编号证据块（上限默认 5）、`check_citation` 拒绝未知 id／跨 release／hash 不符、`check_answer` 检出无证据的权威性措辞、来源正文指令型文字中性化（hash 仍描述原始文本，引用可校验）。`coach_composition.local_knowledge` 返回带 `evidence_id`/`chunk_id`/`release_id` 的块，非 ok 返回空；`unified_coach` 的 `sources` 携带同字段。`backend/tests/rag/test_evidence.py` 25 项、`test_coach_evidence.py` 8 项。
+  - **边界**：`check_answer` 是确定性文本检查，不是忠实性判定；中性化不声称消除注入；引用合法 ≠ 事实正确。
 
 ## 执行纪律
 
