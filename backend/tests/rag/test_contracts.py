@@ -324,16 +324,15 @@ def _tmp_index_path() -> Path:
     return Path(tempfile.mkdtemp()) / "index.json"
 
 
-@pytest.mark.xfail(strict=True, reason="R1: chunking truncates a long line and loses its tail")
 def test_a_long_line_is_not_truncated():
-    """GAP 1 (reproduced): a 2000-char line yields 900 chars, so 1100 are lost."""
+    """GAP 1, fixed in R1: the 2000-character line survives reassembly intact."""
     from backend.rag.ingest import chunk_markdown
 
     long_line = "A" * 2000
     chunks = chunk_markdown({"source": "long.md", "text": "# Heading\n" + long_line})
     recovered = "".join(chunk["text"] for chunk in chunks)
 
-    assert len(recovered) >= len(long_line)
+    assert recovered.count("A") == 2000
 
 
 @pytest.mark.xfail(strict=True, reason="R2: same-count content change reuses the stale index")
