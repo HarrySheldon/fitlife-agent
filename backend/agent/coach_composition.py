@@ -10,8 +10,10 @@ from backend.config import get_settings
 from backend.domain.errors import configuration_error
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
 from backend.infrastructure.model_gateway.agent_decision_adapter import StructuredDecisionAdapter
-from backend.rag.retriever import retrieve_knowledge
+from backend.rag.evidence import build_evidence
+from backend.rag.retriever import retrieve_detailed
 from backend.rag.vector_store import HashingEmbeddingProvider
+from backend.rag.contracts import RetrievalResult
 
 
 def requested_domains(command):
@@ -44,12 +46,33 @@ def requested_domains(command):
 
 
 def local_knowledge(query, top_k, *, scope):
+    """Knowledge search that returns citable evidence, not just source names.
+
+    The skills already told the model to cite ``evidence_id``, but nothing produced one,
+    so a citation could only ever be an appearance. Each block now carries a number valid
+    for this retrieval snapshot, its chunk id and its release, which makes a claim
+    checkable instead of decorative.
+
+    A result that is not ``ok`` returns nothing at all. There is no list of near misses
+    to quote from, and inventing one is how an unsupported answer gets a citation.
+    """
     allowed = {
         'training': {'fitness_rules.md', 'exercise_library.md', 'plan_rules.md'},
         'nutrition': {'nutrition_guidelines.md', 'meal_templates.md', 'plan_rules.md'},
     }.get(scope)
-    results = retrieve_knowledge(query, top_k=5, provider=HashingEmbeddingProvider())
-    return [item for item in results if allowed is None or item.get('source') in allowed][:top_k]
+    result = retrieve_detailed(query, top_k=max(top_k, 5),
+                               provider=HashingEmbeddingProvider())
+    if result.status != 'ok':
+        return []
+    hits = [hit for hit in result.hits
+            if allowed is None or hit.source in allowed][:top_k]
+    if not hits:
+        return []
+    evidence = build_evidence(RetrievalResult.found(
+        hits=hits, release_id=result.release_id or 'release-unknown',
+        retrieval_mode=result.retrieval_mode))
+    return [{**block, 'release_id': evidence.release_id}
+            for block in evidence.as_blocks()]
 
 
 def build_unified_workflow(command, repository, gateway):

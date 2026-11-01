@@ -163,8 +163,19 @@ class UnifiedCoachWorkflow:
             for reference in refs:
                 observation = self.executor.evidence(reference)
                 if observation['tool'] == 'knowledge.search':
-                    sources.extend({'source': item.get('source', ''), 'heading': item.get('heading', '')}
-                                   for item in observation['data'])
+                    # A source name alone cannot be checked against an answer. Carry the
+                    # evidence id, chunk id and release so a citation is locatable and a
+                    # claim about it is falsifiable.
+                    sources.extend(
+                        {
+                            'source': item.get('source', ''),
+                            'heading': item.get('heading', ''),
+                            'evidence_id': item.get('evidence_id'),
+                            'chunk_id': item.get('chunk_id'),
+                            'release_id': item.get('release_id'),
+                        }
+                        for item in observation['data']
+                    )
             metadata = {
                 'scope': 'in_scope', 'llm_used': True, 'llm_answer_used': True,
                 'agent_mode': 'unified', 'answer_contract': answer_contract(decision, self.executor, command),

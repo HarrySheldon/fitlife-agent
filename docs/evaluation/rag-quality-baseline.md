@@ -203,3 +203,28 @@ dev 5/7（原 4/7）| holdout 1/2 | TOTAL 6/9（原 5/9）
 ### 改动了既有断言的说明
 
 `backend/tests/test_vector_retriever.py` 原断言"每个 source 只取一块"。该规则正是让多证据问题丢失一半支持的原因，R3 将其改为"每源上限 2 块、可收紧"。原行为仍可通过 `per_source_cap=1` 复现，并保留为独立测试，**不是删除断言**。
+
+## 10. R4 后的状态（证据约束与 Agent 接入）
+
+R4 **不改变检索得分**（仍 6/9）。它改变的是"引用能不能被检查"。
+
+| 项 | R3 | R4 |
+| --- | --- | --- |
+| 交给模型的检索结果 | `source` + `heading` + `text` | **`evidence_id` + `chunk_id` + `release_id`** + 上述字段 |
+| 引用校验 | 无 | **id 不存在 / 跨 release / hash 不符 三种均拒绝** |
+| 无证据仍声称"资料显示" | 无法检出 | **`unsourced_claim` 判定** |
+| 来源正文中的越权指令 | 原样交给模型 | **替换为中性标记后再交给模型** |
+| 引用 hash 是否仍可校验 | — | **是**（hash 描述原始检索文本，不受中性化影响） |
+| 教练回答的 sources | 只有 source/heading | **附带 evidence_id / chunk_id / release_id** |
+| 未命中时的证据块 | 可能有近邻块 | **空集**（`insufficient`/`unavailable` 一律无块） |
+
+实现位置：
+- `backend/rag/evidence.py`：`EvidenceBlock`、`EvidenceSet.check_citation`、`build_evidence`、`check_answer`、`sanitize_evidence_text`。块数有上限（默认 5）。
+- `backend/agent/coach_composition.py::local_knowledge`：改为返回带 `evidence_id` 的证据块；非 `ok` 返回空。
+- `backend/agent/unified_coach.py`：`sources` 携带 `evidence_id`/`chunk_id`/`release_id`。
+
+**能力边界（必须一起声明）**：
+- `check_answer` 是**确定性文本检查**，不是忠实性判定。它能发现伪造 id、跨版本引用、hash 不符和无证据的权威性措辞；**不能**判断"这条主张是否真的被该段文字支持"。后者需要人工标注或独立审核模型，属另行授权。
+- 中性化只覆盖已知的指令式措辞，**不声称消除提示注入**。
+- 引用合法 ≠ 事实正确 ≠ 医学正确。
+- 检索得分仍为 **6/9**，跨语言与缺证据两个局限未变。
