@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ from backend.rag.contracts import Hit, RetrievalResult
 from backend.rag.index_release import index_is_valid, load_release, publish_release, read_manifest
 from backend.rag.ingest import ensure_chunk_identity, load_knowledge_chunks
 from backend.rag.ranking import fuse, rerank, select_with_diversity
-from backend.rag.vector_store import EmbeddingProvider, VectorIndex, build_embedding_provider, score_text
+from backend.rag.vector_store import (EmbeddingProvider, VectorIndex, build_embedding_provider, score_text, tokenize)
 
 
 def retrieve_knowledge(
@@ -69,14 +69,12 @@ def retrieve_detailed(
         # local rule, not a validated semantic threshold.
         return RetrievalResult.insufficient(release_id=release_id)
 
-    # The lexical list is intentionally withheld from fusion, only used as the evidence
-    # gate above. Measured reason: the tokenizer splits Chinese into single characters,
-    # so a long Chinese paragraph "matches" almost any Chinese query (coverage 0.55-0.75)
-    # while the genuinely relevant English chunks score 0.00. Feeding that list into
-    # fusion ranked the long paragraph above the real evidence and cost the
-    # multi-evidence case. Fusion stays in place for the day a second comparable
-    # retriever exists; a single list fuses to its own rank order.
-    fused = fuse([vector_candidates])
+    # Whether the lexical list may *rank*, not just gate, depends on what the tokenizer
+    # produced. Alphabetic tokens are words and match meaningfully. CJK is split into
+    # single characters, so a long Chinese paragraph "matches" almost any Chinese query
+    # (measured coverage 0.37-0.75) and ranking on that buries the real evidence.
+    fused = fuse([vector_candidates, lexical_candidates]) if _query_is_wordlike(query) \
+        else fuse([vector_candidates])
     picked = select_with_diversity(fused, top_k=top_k, per_source_cap=per_source_cap)
     outcome = rerank(query, picked, reranker=reranker)
 
@@ -213,4 +211,18 @@ def active_release_id(index_path: str | Path) -> str | None:
     """The release currently active for this index location, when one exists."""
     manifest = read_manifest(_release_root(Path(index_path)))
     return manifest.release_id if manifest is not None else None
+
+
+def _query_is_wordlike(query: str) -> bool:
+    """True when the tokenizer produced real words rather than CJK single characters.
+
+    ``tokenize`` splits Chinese into one character per token. Those tokens are useful as
+    an existence signal but useless as a ranking signal: a long Chinese paragraph matches
+    almost any Chinese query. An alphabetic token of two or more characters is a word and
+    does carry the query's terms, so it may contribute to ranking.
+    """
+    for token in tokenize(query):
+        if len(token) >= 2 and token.isascii():
+            return True
+    return False
 

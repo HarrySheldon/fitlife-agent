@@ -91,3 +91,19 @@ def test_hits_are_ranked_contiguously_from_one(monkeypatch):
     result = retrieve_detailed("protein", top_k=3, provider=FakeKeywordEmbeddingProvider())
 
     assert [hit.rank for hit in result.hits] == list(range(1, len(result.hits) + 1))
+
+
+def test_an_alphabetic_query_may_rank_by_terms():
+    """Words are words: a multi-character Latin token may contribute to ranking."""
+    assert retriever._query_is_wordlike("What can replace chicken breast for protein?")
+    assert retriever._query_is_wordlike("training volume")
+
+
+def test_a_cjk_query_does_not_rank_by_terms():
+    """CJK is split into single characters, which match too broadly to rank with.
+
+    Measured: a 1070-character Chinese paragraph reaches 0.37-0.75 coverage against
+    almost any Chinese query, so ranking on those tokens buries the real evidence.
+    """
+    assert not retriever._query_is_wordlike("蛋白质怎么分配比较可行？")
+    assert not retriever._query_is_wordlike("每周练几次比较合适？")
