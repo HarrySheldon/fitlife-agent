@@ -351,9 +351,8 @@ def test_a_same_length_content_change_invalidates_the_index():
     assert index.entries[0]["chunk"]["text"].startswith("z")
 
 
-@pytest.mark.xfail(strict=True, reason="R3: a zero-match search still returns chunks")
 def test_an_unmatched_query_returns_no_content():
-    """GAP 3 (reproduced): an unrelated query returns three chunks as if supported."""
+    """GAP 3, fixed in R3: an unrelated query returns nothing, not three chunks."""
     from backend.rag.retriever import retrieve_knowledge
 
     result = retrieve_knowledge("quantum chromodynamics gluon confinement", top_k=3,

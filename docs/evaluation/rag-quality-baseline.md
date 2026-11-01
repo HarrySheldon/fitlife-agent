@@ -151,3 +151,55 @@ R2 修 **索引正确性与发布安全**，不改检索。得分**仍为 5/9**�
 - `backend/rag/ingest.py`：`ensure_chunk_identity` 为手工构造的 chunk 确定性补全身份，避免"为了兼容旧调用而绕过校验"的第二条路径。
 
 **仍未解决的**（R3 目标）：跨语言查询 MISS、同一 source 只取一块、零匹配与离题仍返回 3 条。
+
+## 9. R3 后的状态（融合、重排与无证据状态）
+
+R3 **改变了得分**：6/9（R0–R2 为 5/9）。
+
+```
+case                     split    ok   result
+dev-overload-zh          dev      Y    hit 1/1
+dev-overload-en          dev      Y    hit 1/1
+dev-deload               holdout  Y    hit 1/1
+dev-long-line-tail       dev      Y    hit 1/1
+dev-multi-evidence       dev      Y    hit 2/2     ← 由 1/2 改善
+dev-conflict             dev      N    MISS(ok)
+dev-injection-body       dev      N    MISS(ok)
+dev-missing-evidence     holdout  N    WRONGLY 3   ← 仍未解决
+dev-off-topic            dev      Y    no-content(insufficient)  ← 由误返 3 条改善
+
+dev 5/7（原 4/7）| holdout 1/2 | TOTAL 6/9（原 5/9）
+```
+
+### 改了什么
+
+| 项 | R2 | R3 |
+| --- | --- | --- |
+| 融合方式 | 向量 cos + 词项分**直接相加**（量纲不同） | 按 **RRF** `sum(1/(60+rank))`，名次决定顺序 |
+| 同一 source 的块 | 每源最多 1 块 | 每源上限 2 块（`per_source_cap`，可调） |
+| 零匹配 | 返回前 `top_k` 块 | **`insufficient` 且无 hits** |
+| 索引损坏 | 静默回退词项 | **`unavailable`**，与"无证据"分开 |
+| 重排 | 无 | 可注入；异常/未知 id/结果缺失均**退回融合序并记原因** |
+| 重排分数 | — | **不当作置信度**，携带的仍是 RRF 分数 |
+| 缺口证据 | 1 个 xfail | **0 个 xfail**（缺口 3 已修并转为常规测试） |
+
+### 校准过程与一个被否决的做法
+
+第一版把词项候选也送进融合，结果**更差**：`dev-multi-evidence` 由 1/2 退化为 MISS。实测原因：
+
+| 现象 | 实测 |
+| --- | --- |
+| 中文相关块的词项覆盖率 | **0.00**（中文查询 × 英文正文） |
+| 1070 字中文段落的词项覆盖率 | **0.37–0.75**（对几乎任何中文查询） |
+
+因为 tokenizer 把中文切成**单字**，长中文段落会与任意中文查询"匹配"。把它们送入融合会把长段落排到真实证据之前。**故词项只用于"是否存在证据"的门限，不参与排序**；这一点有实测支撑，不是偏好。
+
+### 必须一起记住的局限
+
+- **`dev-missing-evidence` 仍误返 3 条**：该查询词项覆盖率为 0.37，落在真实命中（0.38–0.40）区间内，**没有任何覆盖率阈值能区分**。真正的修复需要语义模型阈值并在真实 embedding 上独立验证，属另行授权范围。**不得**把 6/9 写成"解决了无证据问题"。
+- **跨语言查询仍 MISS**（`dev-conflict`、`dev-injection-body`）：hashing 向量与单字词项都不跨语言。R4 的引用校验不改变这一点。
+- **6/9 是 hashing + 单字词项的能力**，不是语义检索能力，不可外推。
+
+### 改动了既有断言的说明
+
+`backend/tests/test_vector_retriever.py` 原断言"每个 source 只取一块"。该规则正是让多证据问题丢失一半支持的原因，R3 将其改为"每源上限 2 块、可收紧"。原行为仍可通过 `per_source_cap=1` 复现，并保留为独立测试，**不是删除断言**。
