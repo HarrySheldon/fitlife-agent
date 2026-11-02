@@ -24,11 +24,16 @@
 - [x] S3 Task 1–8实现与审查修补集成main。
 - [x] S4 A1/A2/B1/C1/C2/D1实现与审查修补集成main。
 - [x] 复审发现关闭；保留独立验证边界。
-- [ ] 使用现有 `.venv\Scripts\python.exe -m pytest --version` 确认解释器，再以合成数据执行完整后端业务测试及独立配置组。记录SHA、dirty diff、环境、命令、exit及失败；不得把首次2691 passed/1 skipped/1 failed写成全绿。
-- [ ] 重跑 `backend/task_evaluation/scenarios` 中计划、教练及性能适用场景；reference/optimized使用同一代码和相同不变量，分别保留报告后配对。先查CLI帮助及场景文件，不能沿用不存在的参数。
-- [ ] 最新前端完整测试与构建。已有318项通过使用 `npm --prefix frontend test -- --maxWorkers=2`，需保留先前默认并发失败记录；本次文档修改不重新制造测试通过结论。
-- [ ] 浏览器演练：Coach/计划页创建及恢复同一任务、补充约束、查看具体差异、确认/冲突、断线后的未知结果重试、关闭重开和换账户隔离。补C3/C4未覆盖的焦点、滚动、缩放与输入法项，记录执行人与结果；单元测试不替代人工验收。
-- [ ] 将新证据写入 `docs/evaluation/2026-10-30-s3-s4-review-closeout.md`，确认覆盖后才将本节未完成项勾选。
+- [x] 使用现有 `.venv\Scripts\python.exe -m pytest --version` 确认解释器，再以合成数据执行完整后端业务测试及独立配置组。记录SHA、dirty diff、环境、命令、exit及失败；不得把首次2691 passed/1 skipped/1 failed写成全绿。
+  - 证据：`main`/`c3c7f14`，pytest 9.1.1 / Python 3.13.12，工作区干净。后端全量 **2890 passed, 1 skipped, exit 0**；独立配置组（单独进程清空四类环境变量）**6 passed, exit 0**。首次 2691/1 skipped/1 failed 保留在原文，未改写为全绿。
+- [x] 重跑 `backend/task_evaluation/scenarios` 中计划、教练及性能适用场景；reference/optimized使用同一代码和相同不变量，分别保留报告后配对。先查CLI帮助及场景文件，不能沿用不存在的参数。
+  - 证据：先核 `--help` 取得真实参数。baseline 6/6、interactive_entry 8/8、plan_adjustment 12/12、coach_conversations 16/16、unified_coach 28/28；性能两套件（plans 8 配对、coach 12 配对）质量门禁通过。**配对结果未测出可辩护提速**（plans -10.02% 退化，coach 区间跨零），故缓存与重排保持默认关闭。
+- [x] 最新前端完整测试与构建。已有318项通过使用 `npm --prefix frontend test -- --maxWorkers=2`，需保留先前默认并发失败记录；本次文档修改不重新制造测试通过结论。
+  - 证据：**318 项通过 / 48 文件**，`npm run build` 通过（25.87s，退出码 0）；既有 chunk>500 kB 警告保留，不计为行为通过。先前默认并发失败记录保留在 closeout 原文。
+- [x] 浏览器演练：Coach/计划页创建及恢复同一任务、补充约束、查看具体差异、确认/冲突、断线后的未知结果重试、关闭重开和换账户隔离。补C3/C4未覆盖的焦点、滚动、缩放与输入法项，记录执行人与结果；单元测试不替代人工验收。
+  - 证据：**用户本人执行并于 2026-10-31 会话内确认：8 项全部通过，未发现问题。** 边界如实记录于 closeout：这是用户确认而非本 agent 观察，**无逐项截图/日志留档**，可靠阅度低于自动化项。
+- [x] 将新证据写入 `docs/evaluation/2026-10-30-s3-s4-review-closeout.md`，确认覆盖后才将本节未完成项勾选。
+  - 证据：closeout 新增「2026-10-31 A 节收口补充（含人工演练）」一节，含自动化实测表、人工演练记录与证据边界、勾选依据。
 
 历史：`docs/evaluation/agent-performance-baseline.md` 记录修补前完整通过；修补后证据位于上述closeout。二者适用代码不同，不拼接为一次成功运行。
 
