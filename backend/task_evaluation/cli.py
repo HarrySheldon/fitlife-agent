@@ -42,6 +42,13 @@ class CliArgs:
     admit_manifest: str | None = None
     admit_actual: str | None = None
     admit_authorization: str | None = None
+    manifest: str | None = None
+    connection: str | None = None
+    authorization: str | None = None
+    dry_run: bool = False
+    prepare_live: bool = False
+    phase: str = 'probe'
+    capture_review: bool = False
 
 
 def _positive_int(value: str) -> int:
@@ -67,7 +74,18 @@ def parse_args(argv: list[str]) -> CliArgs:
     parser.add_argument("--admit-manifest")
     parser.add_argument("--admit-actual")
     parser.add_argument("--admit-authorization")
+    parser.add_argument('--manifest')
+    parser.add_argument('--connection')
+    parser.add_argument('--authorization')
+    parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--prepare-live', action='store_true')
+    parser.add_argument('--phase', choices=('probe', 'compare', 'acceptance'), default='probe')
+    parser.add_argument('--capture-review', action='store_true')
     raw = parser.parse_args(argv)
+    if raw.mode != 'live' and any((raw.manifest, raw.connection, raw.authorization, raw.dry_run, raw.prepare_live, raw.capture_review)):
+        parser.error('live execution options require --mode live')
+    if raw.prepare_live and raw.dry_run:
+        parser.error('--prepare-live and --dry-run are separate operations')
 
     if raw.admit_manifest:
         if raw.suite:
@@ -112,6 +130,9 @@ def parse_args(argv: list[str]) -> CliArgs:
         admit_manifest=raw.admit_manifest,
         admit_actual=raw.admit_actual,
         admit_authorization=raw.admit_authorization,
+        manifest=raw.manifest, connection=raw.connection, authorization=raw.authorization,
+        dry_run=raw.dry_run, prepare_live=raw.prepare_live, phase=raw.phase,
+        capture_review=raw.capture_review,
     )
 
 
@@ -128,7 +149,8 @@ def _git_sha() -> str | None:
 
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5
+            ['git', '-c', f'safe.directory={Path(__file__).resolve().parents[2].as_posix()}',
+             'rev-parse', 'HEAD'], capture_output=True, text=True, timeout=5
         )
     except Exception:
         return None
@@ -267,10 +289,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.compare:
         return _compare(args)
     if args.mode == "live":
-        # Admission is complete, but a live provider is deliberately not constructed:
-        # S0 has no approved provider, so live execution is not wired yet.
-        print("live execution is not enabled in this stage", file=sys.stderr)
-        return 2
+        if not args.connection or (not args.prepare_live and (not args.manifest or not args.authorization)):
+            print('live requires --connection, --manifest and --authorization (or --prepare-live)', file=sys.stderr)
+            return 2
+        from backend.task_evaluation.live_batch import execute
+        try:
+            return execute(args)
+        except KeyboardInterrupt:
+            return 130
+        except Exception:
+            print('live evaluation refused or failed; inspect the approved inputs and partial report', file=sys.stderr)
+            return 2
     # Only now, after admission, may a provider exist; in mock mode it is a scripted
     # gateway that refuses the network.
 

@@ -37,5 +37,6 @@ export interface CoachSend {
   plan_id?: string
   report_week?: string
   answer_mode?: 'brief' | 'detailed'
+  read_domains?: Array<'profile' | 'training' | 'diet'>
 }
 export const holdsCoachSlot = (turn: CoachTurn | null) => turn?.status === 'queued' || turn?.status === 'running'

@@ -6,6 +6,7 @@ import { useOptionalAuth } from '../../hooks/useAuth'
 import { commandFingerprint } from '../../services/smartEntryRecovery'
 import type { PlanDomain, PlanTask } from '../../types'
 import { PlanTaskCard } from './PlanTaskCard'
+import { Modal } from '../Modal'
 
 /**
  * The one place a plan adjustment is started, run and confirmed.
@@ -193,8 +194,7 @@ export function PlanAdjustmentDialog({
   if (!open) return null
 
   return (
-    <div className="plan-adjustment-dialog" role="dialog" aria-modal="true"
-         aria-label={t('plan.planTask.dialogTitle')}>
+    <Modal label={t('plan.planTask.dialogTitle')} onClose={onClose}>
       <header className="plan-adjustment-dialog__header">
         <h2>{t('plan.planTask.dialogTitle')}</h2>
         <button type="button" className="secondary-button" onClick={onClose}>
@@ -282,6 +282,6 @@ export function PlanAdjustmentDialog({
           }}>{t('plan.planTask.newTask')}</button> : null}
         </>
       )}
-    </div>
+    </Modal>
   )
 }

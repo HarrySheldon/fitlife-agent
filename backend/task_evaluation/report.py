@@ -95,7 +95,9 @@ def _group(records: list[RunRecord], mode: str) -> GroupSummary:
         failure_processing_ms=tuple(
             r.processing_ms for r in group_records if not r.success and r.processing_ms is not None
         ),
-        known_total_tokens=sum(r.total_tokens if r.total_tokens is not None else r.details.get("known_estimated_tokens") or 0 for r in group_records),
+        known_total_tokens=sum(r.total_tokens if r.total_tokens is not None else
+            (r.details.get('known_total_tokens') if r.mode == 'live' else r.details.get('known_estimated_tokens')) or 0
+            for r in group_records),
         unknown_token_count=sum(r.total_tokens is None for r in group_records),
         coverage={status: sum(("passed" if r.success else r.error_class or "failed") == status for r in group_records)
                   for status in sorted({"passed" if r.success else r.error_class or "failed" for r in group_records})},

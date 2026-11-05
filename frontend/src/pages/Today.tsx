@@ -31,7 +31,7 @@ export function Today() {
   )
   const [coachOpen, setCoachOpen] = useState(false)
   const coachTriggerRef = useRef<HTMLButtonElement>(null)
-  const { data, loading, error } = useToday(selectedDate)
+  const { data, loading, error, refreshing, stale } = useToday(selectedDate)
 
   const coachActions = useMemo(() => {
     const labels = {
@@ -68,6 +68,8 @@ export function Today() {
 
       {error ? <ErrorState message={error} /> : null}
       {loading && !data ? <LoadingState label={t('today.loading')} /> : null}
+      {refreshing ? <p role="status">{t('today.refreshing')}</p> : null}
+      {stale ? <p role="status">{t('today.staleData')}</p> : null}
 
       {data ? (
         <div className="today-workspace">

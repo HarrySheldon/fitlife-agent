@@ -61,6 +61,8 @@ export const enUS = {
     },
     today: {
       eyebrow: 'Daily workspace', title: 'Today', date: 'Date', loading: 'Loading today',
+      refreshing: 'Updating the selected date. Showing the last successfully loaded data.',
+      staleData: 'Update failed. Showing the last successfully loaded data for the selected date.',
       targetsLabel: 'Daily nutrition progress', meals: 'Meals', training: 'Training',
       recordEyebrow: 'Quick actions', addRecord: 'Add a record',
       addMeal: 'Add meal', addTraining: 'Add training', smartEntry: 'Smart entry',
@@ -211,6 +213,7 @@ export const enUS = {
       detailEyebrow: 'Active plan', loadingPlan: 'Loading plan', instructions: 'Adjustment instructions',
       instructionsPlaceholder: 'Describe the change you want', generateAdjustment: 'Generate adjustment draft',
       confirmAdjustment: 'Confirm adjusted plan', adjustmentDraft: 'Agent adjustment draft', invalidId: 'Use a valid plan ID.',
+      diff: {"summary":"{{count}} changes","changed":"Changed","unchanged":"No changes","otherField":"Other field: {{name}}","item":"Item {{number}}","unset":"Not set","empty":"Empty list","yes":"Yes","no":"No","absent":"Not present","technical":"Technical details","kind":{"added":"Added","removed":"Removed","changed":"Changed"},"units":{"sets":"sets","reps":"reps","seconds":"seconds","minutes":"minutes","days":"days","kcal":"kcal","grams":"g","kg":"kg"},"fields":{"summary":"Summary","days":"Training days","day":"Day","type":"Type","focus":"Focus","intensity":"Intensity","exercises":"Exercises","name":"Name","sets":"Sets","reps":"Repetitions","rest_seconds":"Rest between sets","duration_min":"Duration","weekly_training_days":"Training days per week","rest_days":"Rest days","daily_calorie_target":"Daily calorie target","daily_protein_target":"Daily protein target","meals":"Meals","weight":"Weight","weight_kg":"Weight","calories":"Calories","protein":"Protein","carbs":"Carbohydrate","fat":"Fat","amount":"Amount","unit":"Unit","food":"Food","meal_type":"Meal type"}},
       planTask: {
         recover: 'Find unfinished adjustments',
         diffTitle: 'Review exact changes', before: 'Before', after: 'After',
@@ -393,6 +396,7 @@ export const enUS = {
       },
     },
     coachConversation: {
+      profileRead: 'Basic goal profile', readConsent: 'Personal data allowed for this free question', readConsentHint: 'Leave unchecked to avoid reading private profiles or records; this conversation and public resources remain available. This does not allow changes; the selection clears after sending.',
       brand: 'FITLIFE / COACH',
       retry: 'Retry as a new request', retryNotice: 'Retrying starts a new attempt and may incur a charge. Review the question and context first.', editQuestion: 'Edit original question',
       explainPlan: 'Explain saved plan', sources: 'Sources', technical: 'Technical details', advice: 'Advice · review before applying', businessTask: 'Linked business task', context: 'Context', recentOnly: 'Only recent complete rounds in this chat are considered. Ask explicitly if more context is needed.',

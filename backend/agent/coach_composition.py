@@ -28,14 +28,19 @@ def requested_domains(command):
         domains.add('training')
     if re.search(r'饮食|飲食|营养|營養|蛋白|热量|卡路里|diet|meal|nutrition|protein|calorie', text, re.I):
         domains.add('diet')
+    if command.read_domains is not None:
+        if not set(command.read_domains) <= {'profile','training','diet'}:
+            raise PermissionError('UNKNOWN_READ_DOMAIN')
+        domains = set(command.read_domains)
     # Mentioning a domain in an explicit exclusion does not request its records.
-    for domain, words in [('diet', r'饮食|飲食|营养|diet|meals?|nutrition'),
+    for domain, words in [('profile', r'档案|檔案|个人资料|個人資料|profile'),
+                          ('diet', r'饮食|飲食|营养|diet|meals?|nutrition'),
                           ('training', r'训练|訓練|training|workouts?')]:
         exclusions = r'不要|不能|不允许|不允許|别|不需要|不授权|未授权|拒绝|禁止|无需|無需|do not|don.t|not consent|not authoriz|not permit|without permission|no access'
         if any(re.search(exclusions, clause, re.I) and re.search(words, clause, re.I)
                for clause in re.split(r'[，。；;.!?\n]', text)):
             domains.discard(domain)
-    if command.trusted_page_intent and not command.raw_coach_question:
+    if command.read_domains is None and command.trusted_page_intent and not command.raw_coach_question:
         if command.coach_action in {'explain_today', 'explain_weekly_report'}:
             domains.update({'training', 'diet'})
         elif command.coach_action == 'adjust_today_training':
@@ -71,8 +76,9 @@ def local_knowledge(query, top_k, *, scope):
     evidence = build_evidence(RetrievalResult.found(
         hits=hits, release_id=result.release_id or 'release-unknown',
         retrieval_mode=result.retrieval_mode))
-    return [{**block, 'release_id': evidence.release_id}
-            for block in evidence.as_blocks()]
+    return [{**block, 'release_id': evidence.release_id,
+             'content_hash': evidence.blocks[index].content_hash}
+            for index, block in enumerate(evidence.as_blocks())]
 
 
 def build_unified_workflow(command, repository, gateway):

@@ -14,7 +14,7 @@
 
 2026-10-23重写，依据[路线重组设计](../specs/2026-10-23-agent-roadmap-reorganization-design.md)。本文4个检查点替代旧2项：旧Task 1分为本文Task 1–3，旧Task 2对应Task 4。当前没有执行live、迁移或部署。
 
-**当前CLI虽然接受live参数，但明确返回“live execution is not enabled in this stage”。** 必须完成Task 2适配，不能复制旧示例就宣称可以真实验收。连接表单测试成功也不等于业务验收。
+**2026-11-04更新：** `codex/live-evidence-integration` 已补Task 2的CLI/父进程Broker/隔离worker接线，见[命令说明](../../task-evaluation-live.md)与[实施记录](../../evaluation/2026-11-04-live-citation-integration.md)。旧main的live模式直接退出；该开发分支的离线接线验证不等于真实模型验收。连接表单测试成功也不等于业务验收。
 
 Task 1可提前离线完成；Task 2用假Provider测试，不消耗密钥。Task 3的小样本probe可在S4-A以后、相应业务已实现且获授权时进行；完整acceptance依赖S3、S4-D和C/S2离线门禁。真实调用、正式迁移、生产启用分别授权，不能互相代替。
 
@@ -142,13 +142,15 @@ def test_zero_baseline_has_no_fabricated_improvement():
 - [ ] **实施后的命令模板（本轮不执行）：**
 ```powershell
 $approvedManifest = Read-Host '已批准且位于隔离环境的manifest绝对路径'
+$approvedConnection = Read-Host '已批准的无密钥连接描述JSON绝对路径'
+$approvedAuthorization = Read-Host '绑定manifest摘要的独立授权JSON绝对路径'
 $approvedCalls = [int](Read-Host '与manifest一致的批准调用上限')
 $approvedTokens = [int](Read-Host '与manifest一致的批准token上限')
 $approvedSeconds = [int](Read-Host '与manifest一致的批准运行秒数')
-& $taskPython -m backend.task_evaluation.cli --mode live --allow-live --manifest "$approvedManifest" --max-calls $approvedCalls --max-tokens $approvedTokens --max-seconds $approvedSeconds --suite backend/task_evaluation/scenarios/safety_boundary.json --output .tmp/task-evaluation/s5-approved --dry-run
+& $taskPython -m backend.task_evaluation.cli --mode live --allow-live --manifest "$approvedManifest" --connection "$approvedConnection" --authorization "$approvedAuthorization" --max-calls $approvedCalls --max-tokens $approvedTokens --max-seconds $approvedSeconds --phase probe --suite backend/task_evaluation/scenarios/safety_boundary.json --output .tmp/task-evaluation/s5-approved --dry-run
 if ($LASTEXITCODE -ne 0) { throw 'Live admission failed' }
 ```
-Read-Host不是授权；dry-run也不是live结果。操作者核对脱敏清单及聊天授权后，才可显式去掉`--dry-run`运行同一批准批次。phase及策略由manifest约束，命令省略的可选参数从manifest派生，显式冲突则拒绝；不在命令行传key。不自动开始下一批或扩大repeat。
+Read-Host不是授权；dry-run也不是live结果。操作者核对脱敏清单及聊天授权后，才可显式去掉`--dry-run`运行同一批准批次。2026-11-04接线采用显式CLI值与manifest逐项相等的契约，不从manifest静默派生；phase、strategy、repeat、cache_state及预算改变均需重新批准。完整prepare/授权/dry-run步骤见[命令说明](../../task-evaluation-live.md)，不在命令行传key。不自动开始下一批或扩大repeat。
 - [ ] **GREEN与证据：** 离线测试用basetemp green；获授权live后填写日期/SHA/diff/模型/模式/配置/样本分母/标注协议/不确定性/失败明细/预算结算。记录三条亮点各自实际证据；Mock只证明控制流、隔离和断言，不填真实效果或提速百分比。未获授权则写“离线交付完成，真实效果待验收”，不能打勾live。建议检查点 `docs(eval): record quality-constrained acceptance evidence`。
 
 ## Task 4：启用、生命周期与最终交付

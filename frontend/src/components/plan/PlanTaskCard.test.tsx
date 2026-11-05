@@ -41,8 +41,8 @@ describe('PlanTaskCard', () => {
   it('shows exact before and after values and refuses an opaque candidate', () => {
     const value = task()
     const view = render(<PlanTaskCard task={value} now={NOW} />)
-    expect(screen.getByText('"heavy"')).toBeInTheDocument()
-    expect(screen.getByText('"light"')).toBeInTheDocument()
+    expect(screen.getByText('heavy')).toBeInTheDocument()
+    expect(screen.getByText('light')).toBeInTheDocument()
     view.rerender(<PlanTaskCard task={{ ...value, candidate: { ...value.candidate!, diff: undefined } }} now={NOW} />)
     expect(screen.getByRole('button', { name: 'Confirm and activate' })).toBeDisabled()
   })

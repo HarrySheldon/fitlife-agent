@@ -406,16 +406,8 @@ class PlanAdjustmentService:
         differences = []
         if record is not None and record.plan is not None:
             base = self._load_base(owner, snapshot.base_plan_id, snapshot.base_head_revision)
-            for domain, root, field in (('training', 'workout_plan', 'days'), ('diet', 'diet_plan', 'meals')):
-                if domain not in snapshot.read_domains:
-                    continue
-                old = base.get(root, {}).get(field, [])
-                new = record.plan.get(root, {}).get(field, [])
-                if isinstance(old, list) and isinstance(new, list):
-                    for index, (before, after) in enumerate(zip(old, new)):
-                        if before != after:
-                            differences.append({'domain': domain, 'path': f'{root}.{field}.{index}',
-                                'old_value': before, 'new_value': after, 'source': 'validated_candidate'})
+            from backend.domain.plan_diff import plan_differences
+            differences = plan_differences(base, record.plan, snapshot.read_domains)
         return {
             "task_id": snapshot.task_id,
             "version": snapshot.version,

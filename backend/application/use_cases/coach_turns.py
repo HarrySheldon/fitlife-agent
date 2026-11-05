@@ -106,6 +106,7 @@ class CoachTurnService:
         preferences: UserPreferences | None = None,
         plan_id: str | None = None,
         report_week: str | None = None,
+        read_domains: tuple[str, ...] | None = None,
     ) -> TurnSubmission:
         """Admit one turn and start it in the background.
 
@@ -120,6 +121,7 @@ class CoachTurnService:
             language=language,
             answer_mode=answer_mode,
             plan_id=plan_id, report_week=report_week,
+            **({'read_domains': sorted(set(read_domains))} if read_domains is not None else {}),
         )
         generated = uuid4().hex
         now = self.clock()
@@ -132,7 +134,8 @@ class CoachTurnService:
             created_at=now,
             request_context={"action": action, "surface": surface, "date": date,
                 "plan_id": plan_id, "report_week": report_week,
-                "language": language, "answer_mode": answer_mode},
+                "language": language, "answer_mode": answer_mode,
+                **({'read_domains':list(read_domains)} if read_domains is not None else {})},
         )
         if turn.turn_id != generated:
             # A retry of the same request. It may still be running, and it must not
@@ -152,6 +155,7 @@ class CoachTurnService:
             request_id=turn.turn_id,
             preferences=preferences or UserPreferences(),
             plan_id=plan_id, report_week=report_week,
+            read_domains=read_domains,
         )
         try:
             self.repository.append_message(
@@ -495,7 +499,8 @@ class CoachTurnService:
                      "context": {"action": request.action, "date": request.date,
                                  "plan_id": request.plan_id, "report_week": request.report_week,
                                  "surface": request.surface, "language": request.language,
-                                 "answer_mode": request.answer_mode, "admitted_scope": admitted_scope}},
+                                 "answer_mode": request.answer_mode, "admitted_scope": admitted_scope,
+                                 **({'read_domains':list(request.read_domains)} if request.read_domains is not None else {})}},
                     ensure_ascii=False, default=str
                 ),
             )

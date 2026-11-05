@@ -58,6 +58,8 @@ class RuntimeCoachAnswerAdapter:
                 language=request.language, answer_mode=request.answer_mode,
                 request_id=request.request_id, **history_options)
         elif request.action == CHAT_ACTION:
+            if request.read_domains is not None:
+                history_options['read_domains'] = request.read_domains
             result = self.chat(
                 request.question,
                 request.user_id,

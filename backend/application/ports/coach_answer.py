@@ -29,6 +29,7 @@ class CoachTurnRequest:
     preferences: UserPreferences = field(default_factory=UserPreferences)
     plan_id: str | None = None
     report_week: str | None = None
+    read_domains: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

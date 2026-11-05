@@ -17,7 +17,7 @@ def _query_domains(args: QueryArgs) -> frozenset[str]:
     if args.domain == "profile":
         # A profile field belongs to the domain that owns it, so asking for a
         # diet target requires the diet grant even though the row is "profile".
-        required.update(PROFILE_FIELDS.get(field, "invalid") for field in args.fields)
+        required = {PROFILE_FIELDS.get(field, "invalid") for field in args.fields}
     return frozenset(required)
 
 

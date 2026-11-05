@@ -94,9 +94,12 @@ class ConversationTurnRequest(BaseModel):
     answer_mode: Literal["brief", "detailed"] | None = None
     plan_id: str | None = Field(default=None, pattern=r"^plan-[a-f0-9]{8,64}$")
     report_week: str | None = Field(default=None, pattern=r"^\d{4}-W\d{2}$")
+    read_domains: list[Literal['profile','training','diet']] | None = Field(default=None, max_length=3)
 
     @model_validator(mode="after")
     def references_match_action(self):
+        if self.read_domains is not None and self.action != CHAT_ACTION:
+            raise ValueError('explicit read consent belongs to free chat only')
         if self.plan_id is not None and (self.surface != "plan" or self.action != "adjust_next_plan"):
             raise ValueError("plan reference requires the plan explanation action")
         if self.report_week is not None and (self.surface != "review" or self.action != "explain_weekly_report"):
@@ -375,6 +378,8 @@ def start_turn(
             message="An Idempotency-Key header is required.",
             status_code=422,
         )
+    if payload.read_domains is not None and get_settings().coach_agent_mode != 'unified':
+        raise ApplicationError(code='UNIFIED_COACH_REQUIRED',message='Explicit read consent requires the unified coach.',status_code=409)
     try:
         submission = service.submit(
             user.user_id,
@@ -388,6 +393,7 @@ def start_turn(
             answer_mode=payload.answer_mode or "brief",
             preferences=preferences_for(user),
             plan_id=payload.plan_id, report_week=payload.report_week,
+            read_domains=tuple(payload.read_domains) if payload.read_domains is not None else None,
         )
     except KeyError:
         raise _missing_conversation() from None
@@ -404,7 +410,8 @@ def read_active_turn(
     service: CoachTurnService = Depends(get_coach_turn_service),
 ):
     active = service.active(user.user_id)
-    return ok({"turn": _turn_payload(active) if active is not None else None})
+    return ok({"turn": _turn_payload(active) if active is not None else None,
+               'capabilities': {'explicit_read_scope': get_settings().coach_agent_mode == 'unified'}})
 
 
 @router.get("/turns/{turn_id}")

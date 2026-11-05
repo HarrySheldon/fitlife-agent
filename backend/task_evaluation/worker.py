@@ -49,7 +49,7 @@ def collect_metrics(root, fixed, gateway, progress):
     return metrics
 
 
-def worker_main(channel, declaration, temporary, strategy="reference", cache_state="cold"):
+def worker_main(channel, declaration, temporary, strategy="reference", cache_state="cold", live_settings=None):
     gateway = None
     fixed = None
     root = Path(temporary)
@@ -76,6 +76,11 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                              coach_agent_mode='unified' if 'unified_coach' in scenario.requires else 'legacy',
                              task_execution_strategy=strategy,
                              safety_review_mode='enforce' if scenario.initial_state.faults.unified_review_unavailable else 'off')
+            if live_settings is not None:
+                fixed = fixed.model_copy(update={
+                    'llm_enabled': True, 'coach_agent_mode': 'unified',
+                    'safety_review_mode': live_settings['review_mode'],
+                    'safety_grounding_mode': live_settings['grounding_mode']})
             get_settings.cache_clear()
             import backend.config as configuration
             configuration.get_settings = lambda: fixed
@@ -91,6 +96,9 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
             scripted = ('unified_coach' in scenario.requires or 'plan_adjustment' in scenario.requires)
             gateway = MeteredMockGateway(RemoteBudget(channel),
                 unified_decisions=scenario.initial_state.faults.unified_decisions if scripted else None)
+            if live_settings is not None:
+                from backend.task_evaluation.live_rpc import RemoteLiveGateway
+                gateway = RemoteLiveGateway(channel, model=live_settings['model'], provider=live_settings['provider'])
             faults = scenario.initial_state.faults
             if 'plan_adjustment' in scenario.requires:
                 _install_authorization_spy(authorization)
@@ -205,6 +213,32 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                     "provider_usage": None, "mock_usage_estimated": True,
                     "model": gateway.model if gateway.attempts else None,
                     "token_measurement": "mock_character_estimate"})
+                if live_settings is not None and live_settings.get('capture_review'):
+                    import sqlite3
+                    with sqlite3.connect(fixed.database_path) as connection:
+                        messages = connection.execute(
+                            "SELECT role, body FROM coach_messages WHERE user_id=? "
+                            "AND (role='user' OR review_status='approved') ORDER BY created_at, message_id LIMIT 32",
+                            (headers.user_ids['primary'],)).fetchall()
+                        turns = connection.execute(
+                            'SELECT status, error_code, receipt_json FROM coach_turns WHERE user_id=? ORDER BY created_at LIMIT 32',
+                            (headers.user_ids['primary'],)).fetchall()
+                    import json
+                    turn_reviews = []
+                    for status, code, receipt in turns:
+                        try:
+                            saved = json.loads(receipt or '{}')
+                            sources = saved.get('sources', []) if isinstance(saved, dict) else []
+                        except ValueError:
+                            sources = []
+                        turn_reviews.append({'status': status, 'error_code': code if code is None or (
+                            len(code)<=80 and code.isascii() and code.replace('_','').isalnum()) else 'UNKNOWN',
+                            'sources': [{key: value[:200] for key, value in source.items()
+                                if key in {'source','heading','evidence_id','chunk_id','release_id'} and isinstance(value,str)}
+                                for source in sources[:32] if isinstance(source,dict)]})
+                    result = replace(result, metrics={**result.metrics, 'review_samples': [
+                        {'role': role, 'body': body[:12000], 'truncated': len(body)>12000}
+                        for role, body in messages], 'review_turns': turn_reviews})
             channel.send(result)
     except Exception as error:
         status = "case_error" if isinstance(error, (CaseError, KeyError)) else "worker_error"

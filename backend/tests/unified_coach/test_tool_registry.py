@@ -90,10 +90,16 @@ def test_result_limit_is_bounded():
         _spec(max_result_chars=10_000_000)
 
 
-def test_query_domains_follow_the_profile_field_owner():
+@pytest.mark.parametrize('fields, expected', [
+    (['daily_protein_target'], {'diet'}),
+    (['experience_level'], {'training'}),
+    (['goal'], {'profile'}),
+    (['goal', 'daily_protein_target'], {'profile', 'diet'}),
+])
+def test_query_domains_follow_the_profile_field_owner(fields, expected):
     from backend.agent.tools.contracts import QueryArgs
     from backend.agent.tools.registry import _query_domains
 
-    args = QueryArgs(domain="profile", fields=["daily_protein_target"],
+    args = QueryArgs(domain="profile", fields=fields,
                      start_date="2026-10-01", end_date="2026-10-02")
-    assert _query_domains(args) == frozenset({"profile", "diet"})
+    assert _query_domains(args) == frozenset(expected)

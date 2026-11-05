@@ -6,7 +6,7 @@ from backend.agent.context_builder import build_context, serialized
 from backend.agent.context_policy import ContextPolicyConfig, organize_rear
 from backend.agent.coach_delivery import review_delivery, answer_contract
 from backend.agent.contracts import AgentResult
-from backend.agent.decision import ToolCall, DecisionEnvelope
+from backend.agent.decision import AskDecision, ToolCall, DecisionEnvelope
 from backend.agent.runtime import BudgetExceeded
 from backend.agent.safety import check_input
 from backend.agent.tools.registry import tool_descriptions
@@ -69,6 +69,8 @@ class UnifiedCoachWorkflow:
             await before_run(context)
         context.set_model_metadata(provider=getattr(self.gateway, 'provider', None), model=self.gateway.model)
         failures = protocol_failures = 0
+        citation_repairs = 0
+        read_access_request = []
         for decision_index in range(1, 13):
             context.raise_if_cancelled()
             self.executor.check_access()
@@ -132,7 +134,8 @@ class UnifiedCoachWorkflow:
                 after_tool = getattr(self.session, 'after_tool', None)
                 if after_tool is not None:
                     await after_tool(context, observation)
-                failures = failures + 1 if observation['status'] != 'ok' else 0
+                permission_required = observation.get('code') == 'READ_PERMISSION_REQUIRED'
+                failures = 0 if permission_required else failures + 1 if observation['status'] != 'ok' else 0
                 if failures >= 2:
                     raise ValueError('AGENT_ACTION_FAILED')
                 # Published Skills are workflow instructions of lower authority.
@@ -152,10 +155,38 @@ class UnifiedCoachWorkflow:
                      'tool': decision.tool, 'status': observation.get('status', 'ok'),
                      'source_version': observation.get('source_version'),
                      'required_domains': list(observation.get('required_domains') or [])}))
-                continue
+                if permission_required:
+                    read_access_request = observation['required_domains']
+                    if command.language == 'zh-CN':
+                        names = '、'.join({'profile':'基本目标档案','training':'训练','diet':'饮食'}[domain] for domain in read_access_request)
+                        question = f'分析需要参考你的{names}记录。是否允许本次读取？请在输入框上方选择对应记录后发送；也可以只请求不读取记录的一般建议。'
+                    else:
+                        names = ' and '.join(read_access_request)
+                        question = f'This analysis needs your {names} records. To allow this turn to read them, select the records above the input and send again, or ask for general advice without records.'
+                    decision = AskDecision(question=question)
+                else:
+                    continue
             await context.step('context_guard', lambda: None)
-            answer, verdict = await context.step('safety_reviewer', lambda: review_delivery(
-                decision, self.executor, command, context, gateway=self.review_gateway, mode=self.review_mode))
+            try:
+                answer, verdict = await context.step('safety_reviewer', lambda: review_delivery(
+                    decision, self.executor, command, context, gateway=self.review_gateway, mode=self.review_mode))
+            except ValueError as error:
+                if str(error) != 'INVALID_KNOWLEDGE_CITATION':
+                    raise
+                citation_repairs += 1
+                if citation_repairs > 1:
+                    from backend.domain.errors import ApplicationError
+                    raise ApplicationError(code='KNOWLEDGE_CITATION_INVALID', status_code=502,
+                        processing_mode='agent', message=(
+                            '无法验证回答引用，本次回答未发布。请补充问题后重试。' if command.language == 'zh-CN'
+                            else 'The answer citations could not be verified. The answer was withheld; please clarify and try again.')) from None
+                request = replace(request, messages=(*request.messages,
+                    {'role': 'assistant', 'source': 'agent_action', 'content': decision.model_dump_json()},
+                    {'role': 'user', 'source': 'citation_error', 'content':
+                     'INVALID_KNOWLEDGE_CITATION. Cite only evidence_id values returned by knowledge.search '
+                     'and include their call_id in evidence_refs. Without evidence do not claim source support. '
+                     'Correct the answer or ask a clarifying question. One correction is permitted.'}))
+                continue
             verify_guard_steps(self, tuple(context.completed_steps))
             context.raise_if_cancelled()
             refs = getattr(decision, 'evidence_refs', [])
@@ -185,6 +216,7 @@ class UnifiedCoachWorkflow:
                 'cache_hits': self.executor.cache_hits, 'protocol_failures': protocol_failures,
                 'tool_calls': list(context.completed_tools), 'safety_outcome': verdict.outcome,
                 'review_mode': self.review_mode,
+                'read_access_request': read_access_request,
                 'context_policy_version': policy.version,
                 'context_prefetched_resources': list(plan.resource_ids),
                 'loaded_skill_ids': sorted({item['data']['resource_id'] for item in self.executor.observations.values()

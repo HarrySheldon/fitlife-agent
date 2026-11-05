@@ -14,6 +14,8 @@ export function CoachWindow() {
   const launcher = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLElement>(null)
   const [history, setHistory] = useState(false)
+  const [readDomains, setReadDomains] = useState<Array<'profile' | 'training' | 'diet'>>([])
+  useEffect(() => { setReadDomains([]) }, [coach?.selected])
   const [planTask, setPlanTask] = useState<string | null | undefined>(undefined)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
@@ -76,18 +78,31 @@ export function CoachWindow() {
         {coach.notice ? <small>{coach.notice}</small> : null}
       </div>
       {coach.error ? <p className="form-error" role="alert">{t('coachConversation.error')}</p> : null}
-      {failed && retryQuestion ? <div className="coach-retry"><small>{t('coachConversation.retryNotice')}</small><button type="button" disabled={busy || coach.sending} onClick={() => {
+      {failed && retryQuestion ? <div className="coach-retry"><small>{t('coachConversation.retryNotice')}</small><button type="button" disabled={busy || coach.sending || !coach.capabilitiesReady} onClick={() => {
         if (failed.receipt?.context) {
           const context = failed.receipt.context
           void coach.send({ question: retryQuestion, action: context.action, surface: context.surface,
             date: context.date ?? undefined, plan_id: context.plan_id ?? undefined,
             report_week: context.report_week ?? undefined, language: context.language,
-            answer_mode: context.answer_mode })
+            answer_mode: context.answer_mode,
+            ...(context.action === 'chat' && coach.supportsReadConsent ? {read_domains: readDomains} : {}) })
+            .then(()=>setReadDomains([]))
         }
         else coach.setDraft(retryQuestion)
       }}>{t(failed.receipt?.context ? 'coachConversation.retry' : 'coachConversation.editQuestion')}</button></div> : null}
       <p className="coach-history-notice">{t('coachConversation.historical')}</p>
-      <CoachComposer value={coach.draft} onChange={coach.setDraft} disabled={busy || coach.sending} onSend={() => void coach.send({ question: coach.draft, action: 'chat', surface: 'today' })} />
+      {coach.supportsReadConsent ? <fieldset className="coach-read-consent" disabled={busy || coach.sending}>
+        <legend>{t('coachConversation.readConsent')}</legend>
+        {(['profile','training','diet'] as const).map(domain=><label key={domain}><input type="checkbox" checked={readDomains.includes(domain)}
+          onChange={event=>setReadDomains(old=>event.target.checked ? [...old,domain] : old.filter(value=>value!==domain))} />
+          {t(domain==='profile' ? 'coachConversation.profileRead' : `plan.planTask.domain.${domain}`)}</label>)}
+        <small>{t('coachConversation.readConsentHint')}</small>
+      </fieldset> : null}
+      <CoachComposer value={coach.draft} onChange={coach.setDraft} disabled={busy || coach.sending || !coach.capabilitiesReady} onSend={() => {
+        void coach.send({ question: coach.draft, action: 'chat', surface: 'today',
+          ...(coach.supportsReadConsent ? {read_domains: readDomains} : {}) })
+          .then(()=>setReadDomains([]))
+      }} />
     </section>
   </>
 }

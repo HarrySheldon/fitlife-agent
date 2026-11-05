@@ -35,6 +35,7 @@ class AgentCommand:
     # uses it to look up the per-action answer limits instead of guessing from prose.
     coach_action: str | None = None
     recent_history: tuple[dict, ...] = ()
+    read_domains: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

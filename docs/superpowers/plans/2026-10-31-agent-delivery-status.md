@@ -1,5 +1,11 @@
 # Agent 当前交付与验收清单
 
+## 2026-11-04 两项接入修补（开发分支）
+
+2026-11-05真实模型验收交接已准备，见[完整命令与人工判定](../../evaluation/live-model-operator-guide.md)及[离线验证记录](../../evaluation/2026-11-05-live-evaluation-handoff.md)。操作者尚未执行真实批次，不勾选下文C节；教练hashing检索不算真实语义embedding验收。
+
+`codex/live-evidence-integration` 已补CLI受控live运行链路与Agent最终回答引用校验/同run一次纠正，见[实施与验证记录](../../evaluation/2026-11-04-live-citation-integration.md)和[命令说明](../../task-evaluation-live.md)。相关离线回归605 passed、1 skipped；最终live定向12项通过；只读独立审查发现关闭。下文“live明确未启用”描述旧main基线，不再适用于该开发分支；分支尚未提交或集成。真实模型验收、U7及正式迁移/发布仍未执行。
+
 核查日期：2026-10-31。代码基线：`main/f9e70fc`。本文件是当前进度入口，历史计划仍负责技术细节；新增证据应更新此表，不再通过叠加旧待办数量描述进度。本轮仅调整文档，未执行新测试、真实模型调用、迁移或部署。
 
 ## 状态规则

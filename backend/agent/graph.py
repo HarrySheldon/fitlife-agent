@@ -45,6 +45,7 @@ def run_fitlife_agent(
     answer_mode: str | None = None,
     history_loader=None,
     coach_action: str | None = None,
+    read_domains: tuple[str, ...] | None = None,
 ) -> dict:
     command = AgentCommand(
         operation=operation,
@@ -59,6 +60,7 @@ def run_fitlife_agent(
         language=language,
         answer_mode=answer_mode,
         coach_action=coach_action,
+        read_domains=read_domains,
     )
     workflow = _LazyFitLifeWorkflow(repository, gateway, user_id, preferences or UserPreferences(), history_loader=history_loader)
     return DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
@@ -93,6 +95,8 @@ class _LazyFitLifeWorkflow:
         # Evaluate actual user text before repository, contextual tools or gateway.
         text = command.raw_coach_question if command.raw_coach_question is not None else command.question
         unified = get_settings().coach_agent_mode == 'unified' and command.operation in {'chat', 'coach_action'}
+        if command.read_domains is not None and not unified:
+            raise ApplicationError(code='UNIFIED_COACH_REQUIRED',message='Explicit read consent requires the unified coach.',status_code=409)
         if unified and not command.user_id:
             raise ApplicationError(code='AUTHENTICATION_REQUIRED', message='Sign in to use the unified coach.', status_code=401)
         scope = decide_business_scope(text)

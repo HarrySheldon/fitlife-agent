@@ -21,6 +21,8 @@ export function useCoachController(owner: string, api = coachApi) {
   const [notice, setNotice] = useState('')
   const [unread, setUnread] = useState(false)
   const [sending, setSending] = useState(false)
+  const [supportsReadConsent, setSupportsReadConsent] = useState(false)
+  const [capabilitiesReady, setCapabilitiesReady] = useState(false)
   const alive = useRef(true)
   const sendingRef = useRef(false)
   const selectedRef = useRef(selected)
@@ -55,6 +57,8 @@ export function useCoachController(owner: string, api = coachApi) {
         if (stopped) return
         if (sendingRef.current || epoch !== requestEpoch.current) { timer = setTimeout(poll, 1500); return }
         setActive(result.turn)
+        setSupportsReadConsent(result.capabilities?.explicit_read_scope === true)
+        setCapabilitiesReady(true)
         const previous = tracked.current
         if (previous && previous.turn_id !== result.turn?.turn_id) {
           // The old turn may belong to a deleted chat: never retry its generation.
@@ -187,7 +191,7 @@ export function useCoachController(owner: string, api = coachApi) {
   }
   return { open, setOpen, maximized, setMaximized, conversations, selected, setSelected,
     messages: selected ? messages[selected] ?? [] : [], draft: drafts[selected ?? 'new'] ?? '', setDraft,
-    active, lastTurn: selected ? lastTurns[selected] ?? null : null, error, notice, unread, sending, show, newChat, send, stop, remove, rename }
+    active, lastTurn: selected ? lastTurns[selected] ?? null : null, error, notice, unread, sending, supportsReadConsent, capabilitiesReady, show, newChat, send, stop, remove, rename }
 }
 
 type Controller = ReturnType<typeof useCoachController>

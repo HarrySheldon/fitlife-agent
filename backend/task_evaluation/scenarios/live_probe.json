@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "live-clear-chest",
+      "version": 1,
+      "requires": [
+        "coach_conversations",
+        "unified_coach"
+      ],
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations",
+          "body": {
+            "title": "Synthetic live evaluation"
+          },
+          "capture": {
+            "chat": "data.conversation_id"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/coach/conversations/{chat}/turns",
+          "headers": {
+            "Idempotency-Key": "live-clear-chest"
+          },
+          "body": {
+            "question": "我今天想练胸，有哑铃和训练凳，可以练40分钟，初学者，没有已知伤痛。请给出完整训练建议，并说明停止条件。",
+            "language": "zh-CN",
+            "answer_mode": "detailed"
+          },
+          "capture": {
+            "turn": "data.turn_id"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/turns/{turn}",
+          "wait_for_turn": true,
+          "observe": {
+            "terminal": "data.status"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/coach/conversations/{chat}/messages",
+          "observe": {
+            "message_count": "data.messages.length"
+          }
+        }
+      ],
+      "expected": {
+        "terminal": "succeeded",
+        "message_count": 2
+      }
+    }
+  ]
+}

@@ -33,6 +33,43 @@ from backend.main import create_app
 BASE = "/api/v1/coach"
 
 
+def test_explicit_read_consent_reaches_turn_and_is_part_of_idempotency(client,service,answer,monkeypatch):
+    monkeypatch.setenv('COACH_AGENT_MODE','unified')
+    get_settings.cache_clear()
+    headers=_headers(client)
+    conversation=_conversation(client,headers)
+    received=[]
+    original=answer.run
+    def capture(request):
+        received.append(request)
+        return original(request)
+    monkeypatch.setattr(answer,'run',capture)
+    answer.release.set()
+    post_headers={**headers,'Idempotency-Key':'explicit-consent'}
+    body={'question':'卧推怎么安排','read_domains':['training']}
+    response=client.post(f'{BASE}/conversations/{conversation}/turns',headers=post_headers,json=body)
+    assert response.status_code==200
+    assert answer.started.wait(3)
+    assert received[0].read_domains==('training',)
+    conflict=client.post(f'{BASE}/conversations/{conversation}/turns',headers=post_headers,
+        json={**body,'read_domains':['diet']})
+    assert conflict.status_code==409
+    capability=client.get(f'{BASE}/active-turn',headers=headers).json()['data']['capabilities']
+    assert capability['explicit_read_scope'] is True
+
+
+def test_legacy_does_not_silently_ignore_explicit_read_consent(client,service,answer,monkeypatch):
+    monkeypatch.setenv('COACH_AGENT_MODE','legacy')
+    get_settings.cache_clear()
+    headers=_headers(client)
+    conversation=_conversation(client,headers)
+    response=client.post(f'{BASE}/conversations/{conversation}/turns',
+        headers={**headers,'Idempotency-Key':'legacy-consent'},
+        json={'question':'卧推怎么安排','read_domains':[]})
+    assert response.status_code==409
+    assert answer.calls==0
+
+
 class SlowAnswer:
     """A model that never returns on its own; the test decides when it may."""
 

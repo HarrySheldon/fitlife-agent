@@ -16,6 +16,51 @@ beforeEach(async () => {
   api.turn.mockResolvedValue({ turn_id: 't1', conversation_id: 'c1', status: 'succeeded', stopping: false, error_code: null, receipt: null })
 })
 
+it('sends explicit per-turn read consent only when the server supports it', async () => {
+  api.active.mockResolvedValue({turn:null,capabilities:{explicit_read_scope:true}})
+  api.list.mockResolvedValue({conversations:[{conversation_id:'c1',title:'Training'}]})
+  api.send.mockResolvedValue({turn_id:'t1',conversation_id:'c1',status:'running',stopping:false,error_code:null,receipt:null})
+  render(<CoachProvider owner="consent"><CoachWindow /></CoachProvider>)
+  fireEvent.click(screen.getByRole('button',{name:'Coach'}))
+  await screen.findByRole('heading',{name:'Training'})
+  const checkbox=await screen.findByRole('checkbox',{name:'Training'})
+  fireEvent.click(checkbox)
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'卧推怎么安排'}})
+  fireEvent.click(screen.getByRole('button',{name:'Send'}))
+  await waitFor(()=>expect(api.send).toHaveBeenCalledTimes(1))
+  expect(api.send.mock.calls[0][1]).toMatchObject({read_domains:['training'],question:'卧推怎么安排'})
+  await waitFor(()=>expect(checkbox).not.toBeChecked())
+})
+
+it('starts with no private data selected and sends an explicit empty scope', async () => {
+  api.active.mockResolvedValue({turn:null,capabilities:{explicit_read_scope:true}})
+  api.list.mockResolvedValue({conversations:[{conversation_id:'c1',title:'General advice'}]})
+  api.send.mockResolvedValue({turn_id:'t1',conversation_id:'c1',status:'running',stopping:false,error_code:null,receipt:null})
+  render(<CoachProvider owner="no-consent"><CoachWindow /></CoachProvider>)
+  fireEvent.click(screen.getByRole('button',{name:'Coach'}))
+  expect(await screen.findByRole('checkbox',{name:'Basic goal profile'})).not.toBeChecked()
+  expect(screen.getByRole('checkbox',{name:'Training'})).not.toBeChecked()
+  expect(screen.getByRole('checkbox',{name:'Diet'})).not.toBeChecked()
+  fireEvent.change(screen.getByRole('textbox'),{target:{value:'卧推怎么安排'}})
+  fireEvent.click(screen.getByRole('button',{name:'Send'}))
+  await waitFor(()=>expect(api.send).toHaveBeenCalledTimes(1))
+  expect(api.send.mock.calls[0][1]).toMatchObject({read_domains:[]})
+})
+
+it('a new retry does not silently restore read consent from the old turn', async () => {
+  api.active.mockResolvedValue({turn:null,capabilities:{explicit_read_scope:true}})
+  api.list.mockResolvedValue({conversations:[{conversation_id:'c1',title:'Retry'}]})
+  api.messages.mockResolvedValue({messages:[{message_id:'m1',turn_id:'t1',role:'user',body:'卧推怎么安排',created_at:'2026-11-05T00:00:00Z'}]})
+  api.turn.mockResolvedValue({turn_id:'t1',conversation_id:'c1',status:'failed',stopping:false,error_code:'MODEL_TIMEOUT',
+    receipt:{context:{action:'chat',surface:'today',read_domains:['diet']}}})
+  api.send.mockResolvedValue({turn_id:'t2',conversation_id:'c1',status:'running',stopping:false,error_code:null,receipt:null})
+  render(<CoachProvider owner="retry-consent"><CoachWindow /></CoachProvider>)
+  fireEvent.click(screen.getByRole('button',{name:'Coach'}))
+  fireEvent.click(await screen.findByRole('button',{name:'Retry as a new request'}))
+  await waitFor(()=>expect(api.send).toHaveBeenCalledTimes(1))
+  expect(api.send.mock.calls[0][1]).toMatchObject({read_domains:[]})
+})
+
 it('shows sources and date by default while keeping technical metadata collapsed', async () => {
   api.list.mockResolvedValue({ conversations: [{ conversation_id: 'c1', title: 'Saved' }] })
   api.messages.mockResolvedValue({ messages: [{ message_id: 'm1', turn_id: 't1', role: 'coach', body: 'Reviewed advice', created_at: '2026-10-19T00:00:00Z',

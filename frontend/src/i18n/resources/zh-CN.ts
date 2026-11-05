@@ -58,6 +58,8 @@ export const zhCN = {
     },
     today: {
       eyebrow: '每日工作区', title: '今天', date: '日期', loading: '正在加载今天',
+      refreshing: '正在更新所选日期的数据，当前显示上次成功加载的结果。',
+      staleData: '更新失败，当前显示所选日期上次成功加载的数据。',
       targetsLabel: '每日营养进度', meals: '餐食', training: '训练',
       recordEyebrow: '快捷操作', addRecord: '添加记录',
       addMeal: '添加餐食', addTraining: '添加训练', smartEntry: '智能输入',
@@ -205,6 +207,7 @@ export const zhCN = {
       detailEyebrow: '已启用计划', loadingPlan: '正在加载计划', instructions: '调整说明',
       instructionsPlaceholder: '描述你希望进行的调整', generateAdjustment: '生成调整草稿',
       confirmAdjustment: '确认调整后的计划', adjustmentDraft: 'Agent 调整草稿', invalidId: '请使用有效的计划 ID。',
+      diff: {"summary":"共 {{count}} 处变化","changed":"有调整","unchanged":"本次没有变化","otherField":"其他字段：{{name}}","item":"第 {{number}} 项","unset":"未设置","empty":"空列表","yes":"是","no":"否","absent":"无此项","technical":"技术详情","kind":{"added":"新增","removed":"删除","changed":"修改"},"units":{"sets":"组","reps":"次","seconds":"秒","minutes":"分钟","days":"天","kcal":"kcal","grams":"克","kg":"kg"},"fields":{"summary":"概述","days":"训练日安排","day":"日期","type":"类型","focus":"训练部位","intensity":"强度","exercises":"动作","name":"名称","sets":"组数","reps":"每组次数","rest_seconds":"组间休息","duration_min":"时长","weekly_training_days":"每周训练天数","rest_days":"休息日","daily_calorie_target":"每日热量目标","daily_protein_target":"每日蛋白质目标","meals":"餐食","weight":"重量","weight_kg":"重量","calories":"热量","protein":"蛋白质","carbs":"碳水化合物","fat":"脂肪","amount":"数量","unit":"单位","food":"食物","meal_type":"餐次"}},
       planTask: {
         recover: '查找未完成的调整',
         diffTitle: '核对具体改动', before: '修改前', after: '修改后',
@@ -383,6 +386,7 @@ export const zhCN = {
       },
     },
     coachConversation: {
+      profileRead: '基本目标档案', readConsent: '本次自由提问允许参考的个人资料', readConsentHint: '不勾选时不读取个人档案和记录；仍可参考当前对话及公开资料。此选择不授予修改权限，发送后清除。',
       brand: 'FITLIFE / 教练',
       retry: '作为新请求重试', retryNotice: '重试会新建一次尝试，可能再次计费；请先核对问题与上下文。', editQuestion: '编辑原问题',
       explainPlan: '解释已保存计划', sources: '来源', technical: '技术信息', advice: '建议 · 应用前请确认', businessTask: '关联业务任务', context: '本次上下文', recentOnly: '仅参考本条聊天近期完整回合；需要更多背景时请明确补充。',

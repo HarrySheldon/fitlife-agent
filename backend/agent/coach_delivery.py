@@ -5,6 +5,7 @@ from backend.agent.safety import review_output
 from backend.agent.semantic_review import collect_review, ObservationReviewer
 from backend.domain.coach_answer import limits_for_or_default
 from backend.domain.errors import configuration_error
+from backend.agent.knowledge_evidence import without_citation_ids
 
 
 def answer_contract(decision, executor, command):
@@ -19,6 +20,11 @@ def answer_contract(decision, executor, command):
 
 def project_answer(decision, executor, command):
     executor.check_access()
+    report = executor.knowledge_evidence.check(
+        getattr(decision, 'body', getattr(decision, 'question', '')),
+        getattr(decision, 'evidence_refs', []), executor)
+    if not report.valid:
+        raise ValueError('INVALID_KNOWLEDGE_CITATION')
     if isinstance(decision, AskDecision):
         text = decision.question
     else:
@@ -40,7 +46,7 @@ def project_answer(decision, executor, command):
                 text = text.replace(block, '')
     # Questions are also publishable content: a question may smuggle in a factual
     # premise. Figures belong in typed evidence blocks, not either prose branch.
-    if re.search(r'[0-9０-９%％]|[零一二两三四五六七八九十百千万]+\s*(?:公斤|千克|kg|组|次|秒|分钟|千卡|克)|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand)(?:[ -]+(?:and|a|hundred|thousand|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty))*\s*(?:kg|kilograms?|kilos?|grams?|kcal|calories?|sets?|reps?|minutes?|seconds?|hours?|pounds?)\b', text, re.I):
+    if re.search(r'[0-9０-９%％]|[零一二两三四五六七八九十百千万]+\s*(?:公斤|千克|kg|组|次|秒|分钟|千卡|克)|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand)(?:[ -]+(?:and|a|hundred|thousand|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty))*\s*(?:kg|kilograms?|kilos?|grams?|kcal|calories?|sets?|reps?|minutes?|seconds?|hours?|pounds?)\b', without_citation_ids(text), re.I):
         raise ValueError('UNVERIFIED_NUMERIC_PROSE')
     if not isinstance(decision, AskDecision):
         text = '\n\n'.join([text.strip(), *dict.fromkeys(block for block in blocks if block)])
@@ -83,4 +89,6 @@ async def review_delivery(decision, executor, command, context, *, gateway=None,
                         reviewer=ObservationReviewer(observation, mode))
     context.raise_if_cancelled()
     executor.check_access()
+    if not executor.knowledge_evidence.check(text, getattr(decision, 'evidence_refs', []), executor).valid:
+        raise ValueError('INVALID_KNOWLEDGE_CITATION')
     return text, verdict

@@ -406,7 +406,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
 
 
 def run_isolated_scenario(scenario, *, deadline, budget=None, strategy="reference",
-                          cache_state="cold") -> CaseResult:
+                          cache_state="cold", live_broker=None, live_settings=None) -> CaseResult:
     """Spawn a private worker; deadline is an absolute monotonic timestamp."""
     from backend.task_evaluation.worker import worker_main
     if budget is None:
@@ -418,19 +418,41 @@ def run_isolated_scenario(scenario, *, deadline, budget=None, strategy="referenc
     workspace = tempfile.TemporaryDirectory(prefix="fitlife-task-eval-")
     process = context.Process(target=worker_main, args=(
         child, scenario.model_dump(mode="json", exclude_unset=True), workspace.name,
-        strategy, cache_state))
+        strategy, cache_state, live_settings))
     outcome = None
     cleanup_status = "completed"
     owned_reservations = set()
+    deferred = []
     try:
         process.start()
         child.close()
         while time.monotonic() < deadline:
-            if parent.poll(min(0.05, max(0, deadline - time.monotonic()))):
+            if deferred or parent.poll(min(0.05, max(0, deadline - time.monotonic()))):
                 try:
-                    result = parent.recv()
+                    result = deferred.pop(0) if deferred else parent.recv()
                 except EOFError:
                     break
+                if isinstance(result, dict) and result.get('rpc') == 'model':
+                    if live_broker is None:
+                        parent.send({'request_id': result.get('request_id'), 'ok': False,
+                                     'code': 'LIVE_RPC_REJECTED'})
+                    else:
+                        def alive():
+                            if not process.is_alive():
+                                return False
+                            if parent.poll():
+                                pending = parent.recv()
+                                if (isinstance(pending, dict) and pending.get('rpc') == 'model_cancel'
+                                        and pending.get('request_id') == result.get('request_id')):
+                                    return False
+                                deferred.append(pending)
+                                # A completed worker no longer owns an active request.
+                                return False
+                            return True
+                        parent.send(live_broker.handle(result, alive=alive))
+                    continue
+                if isinstance(result, dict) and result.get('rpc') == 'model_cancel':
+                    continue  # late cancellation of an already completed call
                 if isinstance(result, dict) and result.get("rpc") in {"reserve", "settle"}:
                     try:
                         if result["rpc"] == "reserve":
@@ -460,6 +482,9 @@ def run_isolated_scenario(scenario, *, deadline, budget=None, strategy="referenc
         status = "deadline_exceeded" if time.monotonic() >= deadline else "worker_error"
         if outcome is None:
             outcome = CaseResult(scenario.id, scenario.version, status, failures=(status,), metrics={"elapsed_ms": round((time.monotonic() - started) * 1000), "ledger": budget.snapshot() if budget else None})
+    except KeyboardInterrupt:
+        outcome = CaseResult(scenario.id, scenario.version, 'interrupted', failures=('interrupted',),
+            metrics={'ledger': budget.snapshot(), 'elapsed_ms': round((time.monotonic()-started)*1000)})
     except Exception:
         outcome = CaseResult(scenario.id, scenario.version, "worker_error", failures=("worker_error",), metrics={"ledger": budget.snapshot(), "elapsed_ms": round((time.monotonic() - started) * 1000)})
     finally:
@@ -531,7 +556,8 @@ DEFINITE_STATUSES = frozenset({"passed", "failed", "unsupported"})
 
 
 def run_suite(scenarios, *, mode, deadline, budget, git_sha=None, config_fingerprint=None,
-              strategy="reference", cache_state="cold", repeat_index=0):
+              strategy="reference", cache_state="cold", repeat_index=0,
+              live_factory=None, live_settings=None, review_sink=None):
     """Run every scenario against the shared batch budget and one absolute deadline.
 
     Cases after the deadline are recorded as deadline_exceeded without spawning, so a
@@ -542,9 +568,24 @@ def run_suite(scenarios, *, mode, deadline, budget, git_sha=None, config_fingerp
         if time.monotonic() >= deadline:
             result = CaseResult(scenario.id, scenario.version, "deadline_exceeded", failures=("deadline_exceeded",))
         else:
+            live_broker = None
+            if mode == 'live':
+                if live_factory is None or live_settings is None:
+                    raise ValueError('ADMITTED_LIVE_FACTORY_REQUIRED')
+                from backend.task_evaluation.live_rpc import LiveBroker
+                live_broker = LiveBroker(live_factory, budget, deadline,
+                    model=live_settings['model'], provider=live_settings['provider'])
             result = run_isolated_scenario(scenario, deadline=deadline, budget=budget,
-                                           strategy=strategy, cache_state=cache_state)
+                strategy=strategy, cache_state=cache_state,
+                **({'live_broker': live_broker, 'live_settings': live_settings} if mode == 'live' else {}))
+            if live_broker is not None:
+                result = replace(result, metrics={**result.metrics, **live_broker.metrics()})
         from backend.task_evaluation.provenance import fingerprint, catalog_digest
+        if mode == 'live' and review_sink is not None:
+            review_sink({'case_id': scenario.id, 'version': scenario.version, 'strategy': strategy,
+                'repeat_index': repeat_index, 'status': result.status,
+                'messages': result.metrics.get('review_samples', []),
+                'turns': result.metrics.get('review_turns', [])})
         result = replace(result, metrics={**result.metrics, "dataset_hash": fingerprint(scenario.model_dump(mode="json")), "catalog_digest": catalog_digest()})
         records.append(to_run_record(result, mode=mode, git_sha=git_sha,
                                      config_fingerprint=config_fingerprint, strategy=strategy,

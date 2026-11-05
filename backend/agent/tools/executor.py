@@ -20,6 +20,8 @@ class ToolExecutor:
         self.seen_ids = set()
         self.attempts = self.executions = self.denials = self.cache_hits = 0
         self._cache = {}
+        from backend.agent.knowledge_evidence import KnowledgeEvidence
+        self.knowledge_evidence = KnowledgeEvidence()
 
     def _domains(self):
         self.catalog.verify_release()
@@ -109,6 +111,8 @@ class ToolExecutor:
                     self._cache[key] = deepcopy(data)
             if len(json.dumps(data, ensure_ascii=False, default=str)) > spec.max_result_chars:
                 raise ValueError('RESULT_TOO_LARGE')
+            if call.tool == 'knowledge.search':
+                data = list(self.knowledge_evidence.bind(call.call_id, data))
             observation = {'call_id': call.call_id, 'tool': call.tool, 'status': 'ok',
                 'data': data, 'evidence_id': call.call_id, 'source_version': version_of(data),
                 'required_domains': sorted(required), 'public': spec.public,
@@ -128,4 +132,9 @@ class ToolExecutor:
             context.record('AGENT_TOOL_DECIDED', context, {'outcome': 'refuse', 'error_code': 'AGENT_TOOL_REJECTED',
                 'agent_tool': call.tool if call.tool in RECORDED_TOOL_NAMES else 'other',
                 'tool_executions': self.executions})
-            return {'call_id': call.call_id, 'tool': call.tool, 'status': 'denied', 'code': code}
+            denied = {'call_id': call.call_id, 'tool': call.tool, 'status': 'denied', 'code': code}
+            if code == 'SCOPE_PERMISSION_REQUIRED' and spec.effect == 'private_read':
+                missing = access.required - access.domains
+                if missing and missing <= {'profile','training','diet'}:
+                    denied.update(code='READ_PERMISSION_REQUIRED', required_domains=sorted(missing))
+            return denied

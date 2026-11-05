@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+.task-modal { width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; overflow: auto; padding: 24px; border: 1px solid #cfc4b3; border-radius: 12px; background: #f4f1ea; color: #17211d; }
+.task-modal::backdrop { background: #17211d80; }
+.coach-read-consent { margin: 4px 16px; font-size: 12px; }
+.coach-read-consent label { display: inline-flex; align-items: center; margin-right: 16px; }
+.coach-read-consent small { display: block; }
+.plan-adjustment-dialog__header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.plan-diff-values { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.plan-diff-values section { min-width: 0; overflow-wrap: anywhere; padding: 12px; border: 1px solid #cfc4b3; border-radius: 8px; }
+.plan-diff-values h5 { margin: 0 0 8px; font-size: 14px; }
+.plan-diff-item h4 { overflow-wrap: anywhere; }
+.plan-diff-item pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.plan-diff-item dd { margin-inline-start: 16px; }
+@media (max-width: 640px) { .task-modal { padding: 16px; } .plan-diff-values { grid-template-columns: minmax(0,1fr); } }
+
 :root {
   color-scheme: light;
   font-family: ui-sans-serif, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
