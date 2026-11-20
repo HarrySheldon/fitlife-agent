@@ -38,6 +38,24 @@ class KnowledgeSearchArgs(ToolArgs):
     top_k: int = Field(default=3, ge=1, le=5, strict=True)
 
 
+class CatalogFoodSearchArgs(ToolArgs):
+    query: str = Field(min_length=1, max_length=120)
+    limit: int = Field(default=8, ge=1, le=15, strict=True)
+
+
+class CatalogExerciseSearchArgs(ToolArgs):
+    query: str = Field(default='', max_length=120)
+    muscle_group: str | None = Field(default=None, max_length=60)
+    equipment: str | None = Field(default=None, max_length=40)
+    exercise_type: Literal['strength', 'cardio', 'any'] = 'any'
+    limit: int = Field(default=8, ge=1, le=15, strict=True)
+
+
+class ProgressQueryArgs(ToolArgs):
+    aspect: Literal['body_trend', 'exercise_progress', 'plan_adherence', 'training_context']
+    days: int = Field(default=30, ge=7, le=365, strict=True)
+
+
 class TrainingExercise(ToolArgs):
     name: str = Field(min_length=1, max_length=80, pattern=r'^[^<>\[\]\r\n]+$')
     sets: int = Field(ge=1, le=10, strict=True)

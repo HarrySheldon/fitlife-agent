@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_model: str = "gpt-5.5"
+    # Local hashing is the default so user queries never leave for a remote
+    # embedding API merely because a deployment OPENAI_API_KEY is present.
+    rag_embedding_provider: Literal["hashing", "openai"] = "hashing"
+    # Request-path index building can be disabled (e.g. in production/multi-worker)
+    # after startup or `python -m backend.rag.build` publishes the active release.
+    rag_allow_request_build: bool = True
     embedding_model: str = "text-embedding-3-small"
     auth_secret: str = "fitlife-agent-demo-secret"
     settings_encryption_key: str | None = None

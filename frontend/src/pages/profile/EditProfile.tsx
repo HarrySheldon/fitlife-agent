@@ -9,6 +9,7 @@ import { ErrorState } from '../../components/ErrorState'
 import { LoadingState } from '../../components/LoadingState'
 import { OverallGoalForm } from '../../components/OverallGoalForm'
 import { ProfileDetailsForm } from '../../components/ProfileDetailsForm'
+import { TrainingContextCard } from '../../components/TrainingContextCard'
 import { useProfile } from '../../hooks/useProfile'
 import { useProfileSetup } from '../../hooks/useProfileSetup'
 import { usePreferences } from '../../hooks/usePreferences'
@@ -199,6 +200,7 @@ export function EditProfile() {
           ) : null}
         </ProfileSection>
 
+        <TrainingContextCard />
       </main>
     </div>
   )

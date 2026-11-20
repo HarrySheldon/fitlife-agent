@@ -32,11 +32,12 @@ export function WorkoutEntry() {
   const { user } = useAuth()
   const [params] = useSearchParams()
   const initialDate = validDate(params.get('date')) ?? browserDate()
+  const requestedDraftId = params.get('draftId')
   const ownerId = user?.user_id ?? 'anonymous'
   const initialRecoveryKey = workoutRecoveryKey(ownerId, initialDate)
   const recovered = useMemo(
-    () => readRecovery(initialRecoveryKey),
-    [initialRecoveryKey],
+    () => (requestedDraftId ? null : readRecovery(initialRecoveryKey)),
+    [initialRecoveryKey, requestedDraftId],
   )
   const [session, setSession] = useState<WorkoutSessionForm>(() => recovered?.session ?? ({
     logDate: initialDate,
@@ -52,7 +53,7 @@ export function WorkoutEntry() {
     () => recovered?.cardio ?? [],
   )
   const [recoveryDraftId, setRecoveryDraftId] = useState<string | null>(
-    recovered?.draftId ?? null,
+    requestedDraftId ?? recovered?.draftId ?? null,
   )
   const [recoveryReady, setRecoveryReady] = useState(false)
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

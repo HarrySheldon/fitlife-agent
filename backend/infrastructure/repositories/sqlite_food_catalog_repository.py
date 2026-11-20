@@ -103,6 +103,30 @@ class SQLiteFoodCatalogRepository:
                     """,
                     (user_id, user_id, user_id, match_query, limit),
                 ).fetchall()
+                if not rows:
+                    relaxed = _fts_relaxed_query(query)
+                    if relaxed:
+                        rows = connection.execute(
+                            f"""
+                            {_SEARCH_SELECT}
+                            INNER JOIN (
+                                SELECT catalog_id, bm25(catalog_search) AS fts_rank
+                                FROM catalog_search
+                                WHERE catalog_kind = 'food'
+                                  AND catalog_search MATCH ?
+                                ORDER BY fts_rank ASC
+                                LIMIT ?
+                            ) AS fuzzy ON fuzzy.catalog_id = food.id
+                            WHERE {_VISIBLE_FOOD}
+                            ORDER BY
+                                fuzzy.fts_rank ASC,
+                                rank_group,
+                                lower(food.name),
+                                food.id
+                            LIMIT ?
+                            """,
+                            (user_id, user_id, relaxed, max(limit * 3, 15), user_id, limit),
+                        ).fetchall()
             else:
                 rows = connection.execute(
                     f"""
@@ -248,7 +272,7 @@ class SQLiteFoodCatalogRepository:
         return _item_from_row(row) if row is not None else None
 
 
-def _fts_query(text: str) -> str:
+def _fts_terms(text: str) -> list[str]:
     normalized = unicodedata.normalize("NFKC", text)
     tokens = re.findall(r"[\w\u3400-\u9fff]+", normalized)
     terms: list[str] = []
@@ -261,7 +285,18 @@ def _fts_query(text: str) -> str:
             )
         else:
             terms.append(f'"{clean}"*')
-    return " AND ".join(terms)
+    return list(dict.fromkeys(terms))
+
+
+def _fts_query(text: str) -> str:
+    return " AND ".join(_fts_terms(text))
+
+
+def _fts_relaxed_query(text: str) -> str:
+    terms = _fts_terms(text)
+    if len(terms) < 2:
+        return ""
+    return " OR ".join(terms)
 
 
 def _unique_aliases(aliases: tuple[str, ...]) -> tuple[str, ...]:

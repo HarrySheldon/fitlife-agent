@@ -29,13 +29,14 @@ export function SmartEntry() {
     () => validDate(params.get('date')) ?? browserDate(),
   )
   const ownerId = user?.user_id ?? 'anonymous'
-  return <SmartEntryWorkspace key={`${ownerId}:${logDate}`} ownerId={ownerId} logDate={logDate} setLogDate={setLogDate} />
+  const initialText = params.get('text') ?? ''
+  return <SmartEntryWorkspace key={`${ownerId}:${logDate}`} ownerId={ownerId} logDate={logDate} setLogDate={setLogDate} initialText={initialText} />
 }
 
-function SmartEntryWorkspace({ ownerId, logDate, setLogDate }: { ownerId: string; logDate: string; setLogDate: (date: string) => void }) {
+function SmartEntryWorkspace({ ownerId, logDate, setLogDate, initialText }: { ownerId: string; logDate: string; setLogDate: (date: string) => void; initialText: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [rawText, setRawText] = useState('')
+  const [rawText, setRawText] = useState(initialText)
   const [candidates, setCandidates] = useState<SmartCandidate[]>([])
   const candidatesRef = useRef(candidates)
   candidatesRef.current = candidates

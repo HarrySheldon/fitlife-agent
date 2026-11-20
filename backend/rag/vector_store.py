@@ -84,7 +84,7 @@ class OpenAIEmbeddingProvider:
 
 def build_embedding_provider(*, settings: Settings | None = None, client=None) -> EmbeddingProvider:
     settings = settings or get_settings()
-    if settings.openai_api_key:
+    if settings.rag_embedding_provider == "openai" and (client is not None or settings.openai_api_key):
         if client is None:
             try:
                 from openai import OpenAI

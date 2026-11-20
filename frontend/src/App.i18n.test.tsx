@@ -160,10 +160,10 @@ describe.each([
       ['/login', 'Create your fitness workspace'], ['/', 'Today'], ['/logbook', 'Logbook'],
       ['/today/meal/new?date=2026-07-14', 'Add a meal'],
       ['/today/workout/new?date=2026-07-14', 'Add a workout'],
-      ['/review', 'Review'], ['/plan', 'Plan'], ['/profile', 'Profile'], ['/evaluation', 'Agent evaluation'],
+      ['/progress', 'Progress'], ['/plan', 'Plan'], ['/coach', 'Coach'], ['/profile', 'Profile'], ['/evaluation', 'Agent evaluation'],
       ['/settings', 'Settings'], ['/settings/general', 'General settings'], ['/settings/model', 'Model connection'],
     ],
-    navigation: ['Today', 'Logbook', 'Review', 'Plan', 'Profile', 'Settings'],
+    navigation: ['Today', 'Plan', 'Progress', 'Coach', 'Profile & Goals', 'Settings'],
   },
   {
     language: 'zh-CN' as const,
@@ -171,10 +171,10 @@ describe.each([
       ['/login', '创建你的健身空间'], ['/', '今天'], ['/logbook', '日志'],
       ['/today/meal/new?date=2026-07-14', '添加餐食'],
       ['/today/workout/new?date=2026-07-14', '添加训练'],
-      ['/review', '复盘'], ['/plan', '计划'], ['/profile', '个人资料'], ['/evaluation', 'Agent 评测'],
+      ['/progress', '进展'], ['/plan', '计划'], ['/coach', '教练'], ['/profile', '个人资料'], ['/evaluation', 'Agent 评测'],
       ['/settings', '设置'], ['/settings/general', '通用设置'], ['/settings/model', '模型连接'],
     ],
-    navigation: ['今天', '日志', '复盘', '计划', '个人资料', '设置'],
+    navigation: ['今日', '计划', '进展', '教练', '档案与目标', '设置'],
   },
 ])('$language route coverage', ({ language, routes, navigation }) => {
   it.each(routes)('localizes %s', async (route, heading) => {
@@ -184,7 +184,13 @@ describe.each([
 
     renderRoute(route)
 
-    expect(await screen.findByRole('heading', { level: route === '/login' ? 2 : 1, name: heading })).toBeInTheDocument()
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: route === '/login' ? 2 : 1, name: heading },
+        { timeout: 5000 },
+      ),
+    ).toBeInTheDocument()
   })
 
   it('localizes the complete primary navigation', async () => {

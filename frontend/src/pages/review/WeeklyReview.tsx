@@ -102,7 +102,7 @@ export function WeeklyReview() {
   }
 
   return <div className="page-stack review-page">
-    <Link className="text-link" to="/review">← {t('review.back')}</Link>
+    <Link className="text-link" to="/progress">← {t('review.back')}</Link>
     <header className="page-header inline-header">
       <div><span>{t('review.detailEyebrow')}</span><h1>{week}</h1></div>
       {validWeek ? <button className="primary-button" type="button" onClick={() => void generate()} disabled={generating || interpreting}><FileText size={17} />{generating ? t('common.generating') : t('review.generate')}</button> : null}

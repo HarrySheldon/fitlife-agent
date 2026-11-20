@@ -26,6 +26,8 @@ from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.sqlite.migrations import run_migrations
 from backend.infrastructure.sqlite.runtime import get_database
 from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.rag.retriever import build_knowledge_index
+from backend.rag.vector_store import HashingEmbeddingProvider
 from backend.safety.gate import default_pack as load_safety_packs
 
 
@@ -180,6 +182,31 @@ def run_startup(
             },
             duration_ms=_elapsed(phase_started),
             checksum_prefix=(result.backup_checksum or "")[:12],
+        )
+
+    phase_started = time.monotonic()
+    try:
+        release_id = build_knowledge_index(
+            provider=HashingEmbeddingProvider(),
+            index_path=data_dir / "vector_index.json",
+        )
+        _event(
+            operation="rag_index_build",
+            version=release_id,
+            status="completed",
+            counts={},
+            duration_ms=_elapsed(phase_started),
+            checksum_prefix="",
+        )
+    except Exception:
+        logger.exception("rag_index_build_failed")
+        _event(
+            operation="rag_index_build",
+            version="unknown",
+            status="failed",
+            counts={},
+            duration_ms=_elapsed(phase_started),
+            checksum_prefix="",
         )
 
     _last_summary = StartupSummary(

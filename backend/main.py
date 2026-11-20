@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import account, auth, calendar, chat, coach, coach_conversations, dashboard, eval, exercise_catalog, food_catalog, health, meals, plan, plan_adjustment, profile, profile_targets, report, settings as settings_api, smart_entry, today, upload, workouts
+from backend.api import account, auth, body_measurements, calendar, chat, coach, coach_conversations, dashboard, eval, exercise_catalog, food_catalog, health, meals, plan, plan_adjustment, plan_cycles, profile, profile_targets, progress, report, settings as settings_api, smart_entry, today, training_context, upload, weekly_automation, workouts
 from backend.api.utils import application_error_response
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
@@ -105,6 +105,9 @@ def create_app() -> FastAPI:
     app.include_router(settings_api.router)
     app.include_router(profile.router)
     app.include_router(profile_targets.router)
+    app.include_router(body_measurements.router)
+    app.include_router(training_context.router)
+    app.include_router(progress.router)
     app.include_router(food_catalog.router)
     app.include_router(meals.router)
     app.include_router(exercise_catalog.router)
@@ -120,6 +123,8 @@ def create_app() -> FastAPI:
     app.include_router(report.router)
     app.include_router(plan.router)
     app.include_router(plan_adjustment.router)
+    app.include_router(plan_cycles.router)
+    app.include_router(weekly_automation.router)
     app.include_router(eval.router)
     return app
 

@@ -24,9 +24,17 @@ def _spec(**overrides):
     return ToolSpec(**values)
 
 
-def test_the_five_published_tools_are_read_only_and_unchanged():
-    assert set(SPECS) == {"skills.search", "resources.read", "fitness.query",
-                          "knowledge.search", "fitness.calculate"}
+def test_the_published_tools_are_read_only_and_closed():
+    assert set(SPECS) == {
+        "skills.search",
+        "resources.read",
+        "fitness.query",
+        "knowledge.search",
+        "fitness.calculate",
+        "catalog.search_foods",
+        "catalog.search_exercises",
+        "fitness.progress",
+    }
     descriptions = tool_descriptions()
     assert [item["name"] for item in descriptions] == sorted(SPECS)
     assert all(item["read_only"] is True for item in descriptions)

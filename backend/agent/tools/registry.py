@@ -6,9 +6,12 @@ model says can widen the set.
 """
 from backend.agent.tools.contracts import (
     SkillSearchArgs, ResourceReadArgs, QueryArgs, KnowledgeSearchArgs, CalculateArgs,
+    CatalogFoodSearchArgs, CatalogExerciseSearchArgs, ProgressQueryArgs,
 )
 from backend.agent.plan_adjustment.tools import PLAN_TOOL_SPECS
-from backend.agent.tools.handlers import PROFILE_FIELDS, calculate
+from backend.agent.tools.handlers import (
+    PROFILE_FIELDS, calculate, search_public_foods, search_public_exercises,
+)
 from backend.agent.tools.spec import ToolSpec
 
 
@@ -25,6 +28,14 @@ def _calculate_domains(args: CalculateArgs) -> frozenset[str]:
     if args.operation == "validate_training":
         return frozenset()
     return frozenset({"training" if args.operation == "workout_analysis" else "diet"})
+
+
+def _progress_domains(args: ProgressQueryArgs) -> frozenset[str]:
+    if args.aspect == "body_trend":
+        return frozenset({"profile"})
+    if args.aspect == "training_context":
+        return frozenset({"profile", "training"})
+    return frozenset({"training"})
 
 
 SPECS: dict[str, ToolSpec] = {
@@ -64,6 +75,33 @@ SPECS: dict[str, ToolSpec] = {
             effect="calculate",
             required_domains=_calculate_domains,
             handler=lambda args, ctx: calculate(args, ctx.evidence, ctx.language),
+        ),
+        ToolSpec(
+            name="catalog.search_foods",
+            args_model=CatalogFoodSearchArgs,
+            effect="public_read",
+            handler=lambda args, _ctx: search_public_foods(args.query, args.limit),
+            cacheable=True,
+        ),
+        ToolSpec(
+            name="catalog.search_exercises",
+            args_model=CatalogExerciseSearchArgs,
+            effect="public_read",
+            handler=lambda args, _ctx: search_public_exercises(
+                query=args.query,
+                muscle_group=args.muscle_group,
+                equipment=args.equipment,
+                exercise_type=args.exercise_type,
+                limit=args.limit,
+            ),
+            cacheable=True,
+        ),
+        ToolSpec(
+            name="fitness.progress",
+            args_model=ProgressQueryArgs,
+            effect="private_read",
+            required_domains=_progress_domains,
+            handler=lambda args, ctx: ctx.reads.query_progress(args, ctx.domains),
         ),
     )
 }

@@ -1,4 +1,4 @@
-import { Activity, BarChart3, CalendarCheck, CalendarDays, LogOut, Settings, UserRound } from 'lucide-react'
+import { Activity, BarChart3, Bot, CalendarCheck, LogOut, Settings, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
@@ -6,9 +6,9 @@ import { useAuth } from '../hooks/useAuth'
 
 const items = [
   { to: '/', labelKey: 'navigation.today', icon: CalendarCheck },
-  { to: '/logbook', labelKey: 'navigation.logbook', icon: CalendarDays },
-  { to: '/review', labelKey: 'navigation.review', icon: BarChart3 },
   { to: '/plan', labelKey: 'navigation.plan', icon: Activity },
+  { to: '/progress', labelKey: 'navigation.progress', icon: BarChart3 },
+  { to: '/coach', labelKey: 'navigation.coach', icon: Bot },
   { to: '/profile', labelKey: 'navigation.profile', icon: UserRound },
   { to: '/settings', labelKey: 'navigation.settings', icon: Settings },
 ]

@@ -587,6 +587,11 @@ class SQLiteProfileTargetRepository:
                 "DELETE FROM daily_target_versions WHERE user_id = ?",
                 "DELETE FROM user_profile_versions WHERE user_id = ?",
                 "DELETE FROM overall_goal_versions WHERE user_id = ?",
+                "DELETE FROM body_measurements WHERE user_id = ?",
+                "DELETE FROM user_training_context WHERE user_id = ?",
+                "DELETE FROM plan_days WHERE user_id = ?",
+                "DELETE FROM plan_cycles WHERE user_id = ?",
+                "DELETE FROM weekly_automation_runs WHERE user_id = ?",
                 # The allergy list is health data and belongs to the account, so it
                 # leaves with it. A versioned table is still user data: history is
                 # kept for the owner's sake, not after the owner is gone.

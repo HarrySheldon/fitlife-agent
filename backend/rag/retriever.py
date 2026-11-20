@@ -10,6 +10,31 @@ from backend.rag.ranking import fuse, rerank, select_with_diversity
 from backend.rag.vector_store import (EmbeddingProvider, VectorIndex, build_embedding_provider, score_text, tokenize)
 
 
+class _IndexStaleError(RuntimeError):
+    """Raised when request-path retrieval finds no valid release and building is disabled."""
+
+
+_INDEX_CACHE: dict[tuple[Path, str], VectorIndex] = {}
+
+
+def clear_index_cache() -> None:
+    """Clear the in-process loaded index cache (primarily for tests)."""
+    _INDEX_CACHE.clear()
+
+
+def build_knowledge_index(
+    *,
+    provider: EmbeddingProvider | None = None,
+    index_path: str | Path | None = None,
+) -> str:
+    """Ensure an up-to-date release is published on disk and warm the in-process cache."""
+    chunks = ensure_chunk_identity(load_knowledge_chunks())
+    provider = provider or build_embedding_provider()
+    target = Path(index_path) if index_path is not None else get_settings().vector_index_path
+    _load_or_build_index(chunks, provider=provider, index_path=target, allow_build=True)
+    return active_release_id(target) or "release-unknown"
+
+
 def retrieve_knowledge(
     query: str,
     top_k: int = 3,
@@ -46,17 +71,27 @@ def retrieve_detailed(
     index_path: str | Path | None = None,
     reranker=None,
     per_source_cap: int = 2,
+    allow_build: bool | None = None,
 ) -> RetrievalResult:
     """The full answer: status, hits, release, mode and why it fell back."""
     chunks = ensure_chunk_identity(load_knowledge_chunks())
     provider = provider or build_embedding_provider()
-    index_path = Path(index_path) if index_path is not None else get_settings().vector_index_path
+    settings = get_settings()
+    index_path = Path(index_path) if index_path is not None else settings.vector_index_path
+    effective_allow_build = settings.rag_allow_request_build if allow_build is None else allow_build
 
     try:
-        index = _load_or_build_index(chunks, provider=provider, index_path=index_path)
+        index = _load_or_build_index(
+            chunks,
+            provider=provider,
+            index_path=index_path,
+            allow_build=effective_allow_build,
+        )
         release_id = active_release_id(index_path)
         vector_candidates = _vector_candidates(query, index, provider=provider,
                                                limit=len(chunks))
+    except _IndexStaleError:
+        return RetrievalResult.unavailable(reason="index_stale")
     except Exception:
         # A broken index is not "no results"; it is a different answer.
         return RetrievalResult.unavailable(reason="index_error")
@@ -135,6 +170,7 @@ def _load_or_build_index(
     *,
     provider: EmbeddingProvider,
     index_path: Path,
+    allow_build: bool = True,
 ) -> VectorIndex:
     """Return an index that provably matches these chunks.
 
@@ -144,22 +180,35 @@ def _load_or_build_index(
     """
     root = _release_root(index_path)
     documents = _documents_from_chunks(chunks)
-    loaded = load_release(root)
-    if loaded is not None:
-        manifest, payload = loaded
-        if index_is_valid(manifest, provider=provider, documents=documents,
-                          chunk_count=len(chunks)):
+    manifest = read_manifest(root)
+    if manifest is not None and index_is_valid(
+        manifest, provider=provider, documents=documents, chunk_count=len(chunks)
+    ):
+        cache_key = (root.resolve(), manifest.release_id)
+        cached = _INDEX_CACHE.get(cache_key)
+        if cached is not None and len(cached.entries) == len(chunks):
+            return cached
+        loaded = load_release(root)
+        if loaded is not None:
+            loaded_manifest, payload = loaded
             entries = payload.get("entries", [])
             if len(entries) == len(chunks):
-                return VectorIndex(
+                index = VectorIndex(
                     entries=[{"chunk": {k: v for k, v in entry.items() if k != "embedding"},
                               "embedding": entry["embedding"]} for entry in entries],
-                    embedding_model=manifest.embedding_model,
-                    embedding_dimensions=manifest.embedding_dimensions,
+                    embedding_model=loaded_manifest.embedding_model,
+                    embedding_dimensions=loaded_manifest.embedding_dimensions,
                 )
-        previous_root = root / manifest.release_id if (root / manifest.release_id).exists() else None
-    else:
-        previous_root = None
+                _INDEX_CACHE[cache_key] = index
+                return index
+    previous_root = (
+        root / manifest.release_id
+        if manifest is not None and (root / manifest.release_id).exists()
+        else None
+    )
+
+    if not allow_build:
+        raise _IndexStaleError("index_stale")
 
     publish_release(
         chunks=chunks,
@@ -174,12 +223,14 @@ def _load_or_build_index(
     if loaded is None:  # pragma: no cover - publish_release either raises or activates
         raise RuntimeError("a published release could not be read back")
     manifest, payload = loaded
-    return VectorIndex(
+    index = VectorIndex(
         entries=[{"chunk": {k: v for k, v in entry.items() if k != "embedding"},
                   "embedding": entry["embedding"]} for entry in payload.get("entries", [])],
         embedding_model=manifest.embedding_model,
         embedding_dimensions=manifest.embedding_dimensions,
     )
+    _INDEX_CACHE[(root.resolve(), manifest.release_id)] = index
+    return index
 
 
 def _next_release_id(root: Path) -> str:

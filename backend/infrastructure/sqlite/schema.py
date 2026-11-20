@@ -1307,4 +1307,133 @@ RECORDS_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=13,
+        name="body_measurements_and_training_context",
+        statements=(
+            """
+            CREATE TABLE body_measurements (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                measured_date TEXT NOT NULL,
+                measured_at TEXT NOT NULL,
+                weight_kg REAL CHECK (weight_kg IS NULL OR (weight_kg >= 25 AND weight_kg <= 350)),
+                body_fat_pct REAL CHECK (body_fat_pct IS NULL OR (body_fat_pct >= 2 AND body_fat_pct <= 70)),
+                waist_cm REAL CHECK (waist_cm IS NULL OR (waist_cm >= 30 AND waist_cm <= 250)),
+                chest_cm REAL CHECK (chest_cm IS NULL OR (chest_cm >= 40 AND chest_cm <= 250)),
+                hip_cm REAL CHECK (hip_cm IS NULL OR (hip_cm >= 40 AND hip_cm <= 250)),
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK (
+                    weight_kg IS NOT NULL
+                    OR body_fat_pct IS NOT NULL
+                    OR waist_cm IS NOT NULL
+                    OR chest_cm IS NOT NULL
+                    OR hip_cm IS NOT NULL
+                )
+            )
+            """,
+            """
+            CREATE INDEX idx_body_measurements_user_date
+            ON body_measurements (user_id, measured_date DESC, measured_at DESC)
+            """,
+            """
+            CREATE TABLE user_training_context (
+                user_id TEXT PRIMARY KEY,
+                available_equipment_json TEXT NOT NULL DEFAULT '[]'
+                    CHECK (json_valid(available_equipment_json) AND json_type(available_equipment_json) = 'array'),
+                weekly_available_days INTEGER NOT NULL DEFAULT 3
+                    CHECK (weekly_available_days BETWEEN 1 AND 7),
+                session_duration_min INTEGER NOT NULL DEFAULT 45
+                    CHECK (session_duration_min BETWEEN 15 AND 180),
+                experience_level TEXT NOT NULL DEFAULT 'beginner'
+                    CHECK (experience_level IN ('beginner', 'intermediate', 'advanced')),
+                preferred_split TEXT NOT NULL DEFAULT 'auto'
+                    CHECK (preferred_split IN ('auto', 'full_body', 'upper_lower', 'push_pull_legs', 'custom')),
+                injury_or_limitations_json TEXT NOT NULL DEFAULT '[]'
+                    CHECK (json_valid(injury_or_limitations_json) AND json_type(injury_or_limitations_json) = 'array'),
+                notes TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+            """,
+        ),
+    ),
+    Migration(
+        version=14,
+        name="plan_cycles_and_weekly_automation",
+        statements=(
+            """
+            CREATE TABLE plan_cycles (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                goal_type TEXT NOT NULL
+                    CHECK (goal_type IN ('fat_loss', 'muscle_gain', 'maintenance', 'recomposition', 'custom')),
+                start_date TEXT NOT NULL,
+                duration_weeks INTEGER NOT NULL CHECK (duration_weeks BETWEEN 1 AND 24),
+                phases_json TEXT NOT NULL DEFAULT '[]'
+                    CHECK (json_valid(phases_json) AND json_type(phases_json) = 'array'),
+                status TEXT NOT NULL
+                    CHECK (status IN ('draft', 'active', 'completed', 'archived')),
+                source TEXT NOT NULL
+                    CHECK (source IN ('manual', 'deterministic', 'agent', 'weekly_auto', 'weekly_auto_deterministic')),
+                rationale_json TEXT NOT NULL DEFAULT '{}'
+                    CHECK (json_valid(rationale_json) AND json_type(rationale_json) = 'object'),
+                version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                activated_at TEXT
+            )
+            """,
+            """
+            CREATE INDEX idx_plan_cycles_user_status
+            ON plan_cycles (user_id, status, updated_at DESC)
+            """,
+            """
+            CREATE TABLE plan_days (
+                id TEXT PRIMARY KEY,
+                cycle_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                week_index INTEGER NOT NULL CHECK (week_index >= 1),
+                day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 7),
+                scheduled_date TEXT NOT NULL,
+                day_type TEXT NOT NULL CHECK (day_type IN ('training', 'rest', 'cardio')),
+                focus TEXT NOT NULL DEFAULT '',
+                estimated_duration_min INTEGER
+                    CHECK (estimated_duration_min IS NULL OR estimated_duration_min BETWEEN 5 AND 240),
+                prescribed_exercises_json TEXT NOT NULL DEFAULT '[]'
+                    CHECK (json_valid(prescribed_exercises_json) AND json_type(prescribed_exercises_json) = 'array'),
+                nutrition_override_json TEXT NOT NULL DEFAULT '{}'
+                    CHECK (json_valid(nutrition_override_json) AND json_type(nutrition_override_json) = 'object'),
+                status_override TEXT CHECK (status_override IS NULL OR status_override IN ('skipped')),
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (cycle_id) REFERENCES plan_cycles(id) ON DELETE CASCADE,
+                UNIQUE (cycle_id, scheduled_date)
+            )
+            """,
+            """
+            CREATE INDEX idx_plan_days_user_date
+            ON plan_days (user_id, scheduled_date)
+            """,
+            """
+            CREATE TABLE weekly_automation_runs (
+                user_id TEXT NOT NULL,
+                iso_week TEXT NOT NULL,
+                report_week TEXT NOT NULL,
+                report_status TEXT NOT NULL
+                    CHECK (report_status IN ('generated', 'already_exists', 'failed')),
+                draft_cycle_id TEXT,
+                draft_status TEXT NOT NULL
+                    CHECK (draft_status IN ('generated_agent', 'generated_deterministic', 'already_exists', 'skipped', 'failed')),
+                message TEXT NOT NULL DEFAULT '',
+                dismissed INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0, 1)),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, iso_week)
+            )
+            """,
+        ),
+    ),
 )

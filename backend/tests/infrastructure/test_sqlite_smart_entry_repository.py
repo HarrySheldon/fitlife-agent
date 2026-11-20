@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 from pathlib import Path
+import tempfile
 from uuid import uuid4
 
 import pytest
@@ -19,7 +20,9 @@ from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 
 
 def _database() -> tuple[SQLiteDatabase, Path]:
-    path = Path("backend/data") / f"test-smart-entry-{uuid4().hex}.sqlite3"
+    temp_dir = Path(tempfile.gettempdir()) / "fitlife-test-smart-entry"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    path = temp_dir / f"test-smart-entry-{uuid4().hex}.sqlite3"
     database = SQLiteDatabase(path)
     run_migrations(database, RECORDS_MIGRATIONS)
     return database, path

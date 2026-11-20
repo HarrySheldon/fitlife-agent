@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, ChevronRight, Database, Download, Trash2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronRight, Database, Download, Trash2, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -78,6 +78,14 @@ export function PrivacySettings() {
       </div>
 
       <nav className="settings-list" aria-label={t('settingsPrivacy.accountActions')}>
+        <Link className="settings-row" to="/logbook/import">
+          <span className="settings-row-icon" aria-hidden="true"><Upload size={20} /></span>
+          <span className="settings-row-copy">
+            <strong>{t('settingsPrivacy.importTitle')}</strong>
+            <span>{t('settingsPrivacy.importDescription')}</span>
+          </span>
+          <ChevronRight size={20} aria-hidden="true" />
+        </Link>
         <Link className="settings-row" to="/settings/privacy/delete">
           <span className="settings-row-icon" aria-hidden="true"><Trash2 size={20} /></span>
           <span className="settings-row-copy">

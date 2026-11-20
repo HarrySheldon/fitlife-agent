@@ -38,6 +38,8 @@ vi.mock('../pages/Auth', async () => {
 })
 vi.mock('../pages/Today', () => ({ Today: () => <h1>Today route</h1> }))
 vi.mock('../pages/Review', () => ({ Review: () => <h1>Review route</h1> }))
+vi.mock('../pages/Progress', () => ({ Progress: () => <h1>Progress route</h1> }))
+vi.mock('../pages/CoachPage', () => ({ CoachPage: () => <h1>Coach route</h1> }))
 vi.mock('../pages/Plan', () => ({ Plan: () => <h1>Plan route</h1> }))
 vi.mock('../pages/Profile', () => ({ Profile: () => <h1>Profile route</h1> }))
 
@@ -55,7 +57,7 @@ const taskRoutes = [
   { path: '/today/smart-entry?date=2026-08-26', heading: 'Smart entry', back: 'Back to Today', role: 'button', expectedBack: '/' },
   { path: '/logbook/import', heading: 'CSV import', back: 'Back', role: 'link', expectedBack: '/logbook' },
   { path: '/logbook/2026-08-26', heading: '2026-08-26', back: 'Logbook', role: 'link', expectedBack: '/logbook' },
-  { path: '/review/week/2026-W35', heading: '2026-W35', back: 'Back to review', role: 'link', expectedBack: '/review' },
+  { path: '/review/week/2026-W35', heading: '2026-W35', back: 'Back to review', role: 'link', expectedBack: '/progress' },
   { path: '/plan/new', heading: 'New plan draft', back: 'Back to plans', role: 'link', expectedBack: '/plan' },
   { path: '/plan/plan-00000001', heading: 'plan-00000001', back: 'Back to plans', role: 'link', expectedBack: '/plan' },
   { path: '/profile/edit', heading: 'Profile', back: 'Back to profile', role: 'link', expectedBack: '/profile' },
@@ -68,7 +70,7 @@ const taskRoutes = [
   { path: '/settings/privacy/delete', heading: 'Delete account', back: 'Back', role: 'link', expectedBack: '/settings/privacy' },
 ] as const
 
-const protectedRoutes = ['/', '/today/meal/new', '/today/workout/new', '/today/smart-entry', '/logbook', '/logbook/import', '/logbook/2026-08-26', '/review', '/review/week/2026-W35', '/plan', '/plan/new', '/plan/plan-00000001', '/profile', '/profile/edit', '/settings', '/settings/general', '/settings/model', '/settings/security', '/settings/security/password', '/settings/security/sessions', '/settings/privacy', '/settings/privacy/delete', '/evaluation'] as const
+const protectedRoutes = ['/', '/today/meal/new', '/today/workout/new', '/today/smart-entry', '/logbook', '/logbook/import', '/logbook/2026-08-26', '/progress', '/progress/week/2026-W35', '/review', '/review/week/2026-W35', '/plan', '/plan/new', '/plan/plan-00000001', '/coach', '/profile', '/profile/edit', '/settings', '/settings/general', '/settings/model', '/settings/security', '/settings/security/password', '/settings/security/sessions', '/settings/privacy', '/settings/privacy/delete', '/evaluation'] as const
 
 function LocationProbe() { return <output data-testid="location">{useLocation().pathname}</output> }
 function renderRoute(path: string) { return render(<MemoryRouter initialEntries={[path]}><AppRoutes /><LocationProbe /></MemoryRouter>) }
