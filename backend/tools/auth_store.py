@@ -38,6 +38,10 @@ def authenticate_user(identifier: str, password: str) -> AuthenticatedUser | Non
     return _repository().authenticate(identifier, password)
 
 
+def has_registered_users() -> bool:
+    return _repository().has_users()
+
+
 def create_access_token(user: AuthenticatedUser, token_version: int | None = None) -> str:
     expires_at = datetime.now(timezone.utc) + timedelta(hours=TOKEN_TTL_HOURS)
     current_version = (

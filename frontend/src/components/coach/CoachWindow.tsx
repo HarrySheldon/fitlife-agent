@@ -1,6 +1,7 @@
-import { Bot, Maximize2, Minimize2, Plus, X } from 'lucide-react'
+import { ArrowUpRight, Bot, Maximize2, Minimize2, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useInRouterContext, useLocation, useNavigate } from 'react-router-dom'
 import { useCoach } from '../../hooks/useCoach'
 import { holdsCoachSlot } from '../../types/coach'
 import { CoachComposer } from './CoachComposer'
@@ -9,42 +10,95 @@ import { CoachHistory } from './CoachHistory'
 import { PlanAdjustmentDialog } from '../plan/PlanAdjustmentDialog'
 
 export function CoachWindow() {
+  const inRouter = useInRouterContext()
+  if (inRouter) return <RouterAwareCoachWindow />
+  return <CoachWindowBody />
+}
+
+function RouterAwareCoachWindow() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const coach = useCoach()
+  if (
+    location.pathname === '/coach'
+    || location.pathname === '/settings'
+    || location.pathname.startsWith('/settings/')
+  ) {
+    return null
+  }
+  return (
+    <CoachWindowBody
+      onOpenWorkbench={() => {
+        coach?.setOpen(false)
+        navigate('/coach')
+      }}
+    />
+  )
+}
+
+function CoachWindowBody({ onOpenWorkbench }: { onOpenWorkbench?: () => void }) {
   const coach = useCoach()
   const { t } = useTranslation()
   const launcher = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLElement>(null)
   const [history, setHistory] = useState(false)
-  const [readDomains, setReadDomains] = useState<Array<'profile' | 'training' | 'diet'>>([])
-  useEffect(() => { setReadDomains([]) }, [coach?.selected])
   const [planTask, setPlanTask] = useState<string | null | undefined>(undefined)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
+
   useEffect(() => {
     if (!coach?.open) return
     panel.current?.focus()
     return () => { launcher.current?.focus() }
   }, [coach?.open])
+
   useEffect(() => {
     const reset = () => setPosition(null)
     window.addEventListener('resize', reset)
     return () => window.removeEventListener('resize', reset)
   }, [])
+
   if (!coach) return null
   const busy = holdsCoachSlot(coach.active)
   const selected = coach.conversations.find(item => item.conversation_id === coach.selected)
   const failed = coach.lastTurn?.conversation_id === coach.selected
     && ['failed', 'interrupted', 'cancelled', 'timed_out'].includes(coach.lastTurn.status)
     ? coach.lastTurn : null
-  const retryQuestion = failed ? coach.messages.find(message => message.turn_id === failed.turn_id && message.role === 'user')?.body : null
+  const retryQuestion = failed
+    ? coach.messages.find(message => message.turn_id === failed.turn_id && message.role === 'user')?.body
+    : null
+
   return <>
-    <button ref={launcher} type="button" className="coach-launcher" aria-expanded={coach.open} aria-controls="coach-window" onClick={coach.show}>
-      <Bot size={21} />{t('coach.title')}{busy ? <span>{t('coachConversation.running')}</span> : coach.unread ? <span>{t('coachConversation.unread')}</span> : null}
+    <button
+      ref={launcher}
+      type="button"
+      className="coach-launcher"
+      aria-expanded={coach.open}
+      aria-controls="coach-window"
+      onClick={coach.show}
+    >
+      <Bot size={21} />
+      {t('coach.title')}
+      {busy ? <span>{t('coachConversation.running')}</span> : coach.unread ? <span>{t('coachConversation.unread')}</span> : null}
     </button>
-    <section id="coach-window" ref={panel} hidden={!coach.open} role="dialog" aria-label={t('coach.title')} tabIndex={-1}
+    <section
+      id="coach-window"
+      ref={panel}
+      hidden={!coach.open}
+      role="dialog"
+      aria-label={t('coach.title')}
+      tabIndex={-1}
       className={`coach-window${coach.maximized ? ' coach-window-maximized' : ''}`}
       style={position && !coach.maximized ? { left: position.x, top: position.y, transform: 'none' } : undefined}
-      onKeyDown={event => { if (event.key === 'Escape' && !(event.target as HTMLElement).closest('dialog')) { coach.setOpen(false); launcher.current?.focus() } }}>
-      <header className="coach-window-header"
+      onKeyDown={event => {
+        if (event.key === 'Escape' && !(event.target as HTMLElement).closest('dialog')) {
+          coach.setOpen(false)
+          launcher.current?.focus()
+        }
+      }}
+    >
+      <header
+        className="coach-window-header"
         onPointerDown={event => {
           if (coach.maximized || window.innerWidth < 768 || (event.target as HTMLElement).closest('button')) return
           const rect = panel.current!.getBoundingClientRect()
@@ -54,55 +108,122 @@ export function CoachWindow() {
         onPointerMove={event => {
           if (!drag.current || !panel.current) return
           const rect = panel.current.getBoundingClientRect()
-          setPosition({ x: Math.max(8, Math.min(window.innerWidth - rect.width - 8, event.clientX - drag.current.x)), y: Math.max(8, Math.min(window.innerHeight - rect.height - 8, event.clientY - drag.current.y)) })
+          setPosition({
+            x: Math.max(8, Math.min(window.innerWidth - rect.width - 8, event.clientX - drag.current.x)),
+            y: Math.max(8, Math.min(window.innerHeight - rect.height - 8, event.clientY - drag.current.y)),
+          })
         }}
-        onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
-        <div><span>{t('coachConversation.brand')}</span><h2>{selected?.title || t('coachConversation.newChat')}</h2></div>
+        onPointerUp={() => { drag.current = null }}
+        onPointerCancel={() => { drag.current = null }}
+      >
+        <div>
+          <span>{t('coachConversation.brand')}</span>
+          <h2>{selected?.title || t('coachConversation.newChat')}</h2>
+        </div>
         <nav aria-label={t('coachConversation.controls')}>
+          {onOpenWorkbench ? (
+            <button
+              type="button"
+              aria-label={t('coachWorkbench.openInWorkbench')}
+              title={t('coachWorkbench.openInWorkbench')}
+              onClick={onOpenWorkbench}
+            >
+              <ArrowUpRight size={18} />
+            </button>
+          ) : null}
           <button type="button" onClick={() => setHistory(!history)}>{t('coachConversation.history')}</button>
-          <button type="button" aria-label={t('coachConversation.newChat')} onClick={coach.newChat}><Plus size={18} /></button>
-          <button type="button" aria-label={t('coachConversation.maximize')} onClick={() => coach.setMaximized(!coach.maximized)}>{coach.maximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
-          <button type="button" aria-label={t('coachConversation.minimize')} onClick={() => { coach.setOpen(false); launcher.current?.focus() }}><X size={18} /></button>
+          <button type="button" aria-label={t('coachConversation.newChat')} onClick={() => coach.newChat()}><Plus size={18} /></button>
+          <button type="button" aria-label={t('coachConversation.maximize')} onClick={() => coach.setMaximized(!coach.maximized)}>
+            {coach.maximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+          <button type="button" aria-label={t('coachConversation.minimize')} onClick={() => { coach.setOpen(false); launcher.current?.focus() }}>
+            <X size={18} />
+          </button>
         </nav>
       </header>
       {history ? <CoachHistory /> : null}
       <CoachMessages messages={coach.messages} conversation={coach.selected} visible={coach.open} onOpenTask={setPlanTask} />
       <button type="button" disabled={busy} onClick={() => setPlanTask(null)}>{t('plan.planTask.open')}</button>
-      <PlanAdjustmentDialog open={planTask !== undefined} taskId={planTask ?? undefined}
-        onClose={() => setPlanTask(undefined)} />
+      <PlanAdjustmentDialog open={planTask !== undefined} taskId={planTask ?? undefined} onClose={() => setPlanTask(undefined)} />
       <div className="coach-turn-status" role="status">
-        {busy ? <><span>{t(coach.active?.stopping ? 'coachConversation.stopping' : 'coachConversation.running')}</span>
-          {coach.active?.conversation_id !== coach.selected ? <button type="button" onClick={() => coach.setSelected(coach.active!.conversation_id)}>{t('coachConversation.goActive')}</button> : null}
-          <button type="button" disabled={coach.active?.stopping} onClick={() => void coach.stop()}>{t('coachConversation.stop')}</button></> : null}
-        {coach.lastTurn && coach.lastTurn.conversation_id === coach.selected && !busy && coach.lastTurn.status !== 'succeeded' ? <span>{t(`coachConversation.states.${coach.lastTurn.status}`)}</span> : null}
+        {busy ? (
+          <>
+            <span>{t(coach.active?.stopping ? 'coachConversation.stopping' : 'coachConversation.running')}</span>
+            {coach.active?.conversation_id !== coach.selected ? (
+              <button type="button" onClick={() => coach.setSelected(coach.active!.conversation_id)}>
+                {t('coachConversation.goActive')}
+              </button>
+            ) : null}
+            <button type="button" disabled={coach.active?.stopping} onClick={() => void coach.stop()}>
+              {t('coachConversation.stop')}
+            </button>
+          </>
+        ) : null}
+        {coach.lastTurn && coach.lastTurn.conversation_id === coach.selected && !busy && coach.lastTurn.status !== 'succeeded' ? (
+          <span>{t(`coachConversation.states.${coach.lastTurn.status}`)}</span>
+        ) : null}
         {coach.notice ? <small>{coach.notice}</small> : null}
       </div>
       {coach.error ? <p className="form-error" role="alert">{t('coachConversation.error')}</p> : null}
-      {failed && retryQuestion ? <div className="coach-retry"><small>{t('coachConversation.retryNotice')}</small><button type="button" disabled={busy || coach.sending || !coach.capabilitiesReady} onClick={() => {
-        if (failed.receipt?.context) {
-          const context = failed.receipt.context
-          void coach.send({ question: retryQuestion, action: context.action, surface: context.surface,
-            date: context.date ?? undefined, plan_id: context.plan_id ?? undefined,
-            report_week: context.report_week ?? undefined, language: context.language,
-            answer_mode: context.answer_mode,
-            ...(context.action === 'chat' && coach.supportsReadConsent ? {read_domains: readDomains} : {}) })
-            .then(()=>setReadDomains([]))
-        }
-        else coach.setDraft(retryQuestion)
-      }}>{t(failed.receipt?.context ? 'coachConversation.retry' : 'coachConversation.editQuestion')}</button></div> : null}
+      {failed && retryQuestion ? (
+        <div className="coach-retry">
+          <small>{t('coachConversation.retryNotice')}</small>
+          <button
+            type="button"
+            disabled={busy || coach.sending || !coach.capabilitiesReady}
+            onClick={() => {
+              if (failed.receipt?.context) {
+                const context = failed.receipt.context
+                void coach.send({
+                  question: retryQuestion,
+                  action: context.action,
+                  surface: context.surface,
+                  date: context.date ?? undefined,
+                  plan_id: context.plan_id ?? undefined,
+                  report_week: context.report_week ?? undefined,
+                  language: context.language,
+                  answer_mode: context.answer_mode,
+                  ...(context.action === 'chat' && coach.supportsReadConsent ? { read_domains: coach.readDomains } : {}),
+                })
+              } else {
+                coach.setDraft(retryQuestion)
+              }
+            }}
+          >
+            {t(failed.receipt?.context ? 'coachConversation.retry' : 'coachConversation.editQuestion')}
+          </button>
+        </div>
+      ) : null}
       <p className="coach-history-notice">{t('coachConversation.historical')}</p>
-      {coach.supportsReadConsent ? <fieldset className="coach-read-consent" disabled={busy || coach.sending}>
-        <legend>{t('coachConversation.readConsent')}</legend>
-        {(['profile','training','diet'] as const).map(domain=><label key={domain}><input type="checkbox" checked={readDomains.includes(domain)}
-          onChange={event=>setReadDomains(old=>event.target.checked ? [...old,domain] : old.filter(value=>value!==domain))} />
-          {t(domain==='profile' ? 'coachConversation.profileRead' : `plan.planTask.domain.${domain}`)}</label>)}
-        <small>{t('coachConversation.readConsentHint')}</small>
-      </fieldset> : null}
-      <CoachComposer value={coach.draft} onChange={coach.setDraft} disabled={busy || coach.sending || !coach.capabilitiesReady} onSend={() => {
-        void coach.send({ question: coach.draft, action: 'chat', surface: 'today',
-          ...(coach.supportsReadConsent ? {read_domains: readDomains} : {}) })
-          .then(()=>setReadDomains([]))
-      }} />
+      {coach.supportsReadConsent ? (
+        <fieldset className="coach-read-consent" disabled={busy || coach.sending}>
+          <legend>{t('coachWorkbench.sessionScope')}</legend>
+          {(['profile', 'training', 'diet'] as const).map(domain => (
+            <label key={domain}>
+              <input
+                type="checkbox"
+                checked={coach.readDomains.includes(domain)}
+                onChange={() => coach.toggleReadDomain(domain)}
+              />
+              {t(domain === 'profile' ? 'coachConversation.profileRead' : `plan.planTask.domain.${domain}`)}
+            </label>
+          ))}
+          <small>{t('coachWorkbench.scopeRevokeHint')}</small>
+        </fieldset>
+      ) : null}
+      <CoachComposer
+        value={coach.draft}
+        onChange={coach.setDraft}
+        disabled={busy || coach.sending || !coach.capabilitiesReady}
+        onSend={() => {
+          void coach.send({
+            question: coach.draft,
+            action: 'chat',
+            surface: 'today',
+            ...(coach.supportsReadConsent ? { read_domains: coach.readDomains } : {}),
+          })
+        }}
+      />
     </section>
   </>
 }

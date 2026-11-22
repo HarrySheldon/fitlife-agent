@@ -389,10 +389,10 @@ describe('Auth onboarding destination', () => {
   }
 
   async function submitLogin() {
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Login' }))
     fireEvent.change(screen.getByLabelText('Username / email / phone'), { target: { value: 'harry' } })
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
-    fireEvent.submit(screen.getByLabelText('Password').closest('form')!)
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'password123' } })
+    fireEvent.submit(screen.getByLabelText(/^Password/).closest('form')!)
   }
 
   it('keeps the original destination for a complete login', async () => {
@@ -422,9 +422,11 @@ describe('Auth onboarding destination', () => {
     loginView.unmount()
 
     renderAuth('/review')
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Harry' } })
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'harry@example.com' } })
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('tab', { name: 'Register' }))
+    fireEvent.change(screen.getByLabelText(/Username/), { target: { value: 'harry' } })
+    fireEvent.change(screen.getByLabelText(/Display name/), { target: { value: 'Harry' } })
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'password123' } })
+    fireEvent.change(screen.getByLabelText(/Confirm password/), { target: { value: 'password123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(await screen.findByRole('heading', { name: 'Onboarding destination' })).toBeInTheDocument()

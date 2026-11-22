@@ -46,6 +46,7 @@ beforeEach(async () => {
   window.sessionStorage.clear()
   tokenStorage.set('original-token')
   vi.spyOn(api, 'me').mockResolvedValue(user)
+  vi.spyOn(api, 'authStatus').mockResolvedValue({ has_users: false })
   vi.spyOn(api, 'preferences').mockResolvedValue({ language: 'en-US', unit_system: 'metric', timezone: 'UTC' })
   await i18n.changeLanguage('en-US')
 })
@@ -236,7 +237,7 @@ it('keeps authentication after failed deletion and logs out only after successfu
 
   fireEvent.click(screen.getByRole('button', { name: 'Delete account permanently' }))
 
-  expect(await screen.findByRole('heading', { level: 2, name: 'Create your fitness workspace' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 2, name: 'Initialize your local fitness workspace' })).toBeInTheDocument()
   for (const call of deleteAccount.mock.calls) {
     expect(call[0]).toBe('/api/account')
     expect(call[1]).toEqual(expect.objectContaining({

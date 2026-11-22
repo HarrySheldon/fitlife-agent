@@ -207,6 +207,9 @@ export function Progress() {
               <strong className="kpi-value">
                 {data.kpis.calorie_hit_days_7d} / 7 {t('progress.daysUnit')}
               </strong>
+              <div className="kpi-bar" aria-hidden="true">
+                <span style={{ width: `${Math.min(100, Math.round((data.kpis.calorie_hit_days_7d / 7) * 100))}%` }} />
+              </div>
               <p className="kpi-sub">
                 {t('progress.targetLabel')}: {Math.round(data.kpis.daily_calorie_target)} kcal
               </p>
@@ -220,6 +223,9 @@ export function Progress() {
               <strong className="kpi-value">
                 {data.kpis.protein_hit_days_7d} / 7 {t('progress.daysUnit')}
               </strong>
+              <div className="kpi-bar" aria-hidden="true">
+                <span style={{ width: `${Math.min(100, Math.round((data.kpis.protein_hit_days_7d / 7) * 100))}%` }} />
+              </div>
               <p className="kpi-sub">
                 {t('progress.targetLabel')}: {Math.round(data.kpis.daily_protein_target)} g
               </p>
@@ -484,7 +490,7 @@ export function Progress() {
                   <div className="history-row progress-report-row" key={item.week}>
                     <Link to={`/progress/week/${item.week}`}>
                       <strong>{item.week}</strong>
-                      <span> · {item.report.title}</span>
+                      <span> · {formatReportTitle(item.report.title, t)}</span>
                     </Link>
                     <button
                       type="button"
@@ -514,4 +520,8 @@ export function Progress() {
       />
     </div>
   )
+}
+
+function formatReportTitle(title: string, t: (key: string) => string): string {
+  return title === 'FitLife Weekly Report' ? t('review.defaultReportTitle') : title
 }

@@ -4,6 +4,9 @@ import { coachApi } from '../services/coachApi'
 import type { CoachConversation, CoachMessage, CoachSend, CoachTurn } from '../types/coach'
 import { holdsCoachSlot } from '../types/coach'
 
+export type CoachReadDomain = 'profile' | 'training' | 'diet'
+const DEFAULT_READ_DOMAINS: CoachReadDomain[] = ['profile', 'training', 'diet']
+
 // One controller per authenticated owner; UI visibility never owns execution.
 export function useCoachController(owner: string, api = coachApi) {
   const [open, setOpen] = useState(false)
@@ -14,6 +17,7 @@ export function useCoachController(owner: string, api = coachApi) {
   })
   const [messages, setMessages] = useState<Record<string, CoachMessage[]>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [readDomains, setReadDomains] = useState<CoachReadDomain[]>(DEFAULT_READ_DOMAINS)
   const [active, setActive] = useState<CoachTurn | null>(null)
   const [lastTurns, setLastTurns] = useState<Record<string, CoachTurn>>({})
   const setLastTurn = (turn: CoachTurn) => setLastTurns(old => ({ ...old, [turn.conversation_id]: turn }))
@@ -44,6 +48,14 @@ export function useCoachController(owner: string, api = coachApi) {
   }
   selectedRef.current = selected
   openRef.current = open
+
+  const toggleReadDomain = (domain: CoachReadDomain) => {
+    setReadDomains(current =>
+      current.includes(domain)
+        ? current.filter(item => item !== domain)
+        : [...current, domain],
+    )
+  }
 
   useEffect(() => {
     alive.current = true
@@ -109,31 +121,38 @@ export function useCoachController(owner: string, api = coachApi) {
   }, [selected, api])
 
   const show = () => { setOpen(true); setUnread(false) }
-  const newChat = () => { setSelected(null); setError(false); show() }
+  const clearUnread = () => { setUnread(false) }
+  const newChat = (options?: { openWindow?: boolean }) => {
+    setSelected(null)
+    setError(false)
+    if (options?.openWindow !== false) show()
+    else clearUnread()
+  }
   const setDraft = (value: string) => setDrafts(old => ({ ...old, [selected ?? 'new']: value }))
-  async function send(payload: CoachSend) {
-    if (sendingRef.current || holdsCoachSlot(active)) return
+  async function send(payload: CoachSend, options?: { openWindow?: boolean }): Promise<boolean> {
+    if (sendingRef.current || holdsCoachSlot(active)) return false
     sendingRef.current = true
     requestEpoch.current += 1
     setSending(true)
     setError(false)
     setNotice('')
-    show()
+    if (options?.openWindow !== false) show()
+    else clearUnread()
     const original = selected
     let targetConversation = original
     try {
       const conversation = original ?? (await api.create(Array.from(payload.question).slice(0, 120).join(''))).conversation_id
       targetConversation = conversation
-      if (!alive.current) return
+      if (!alive.current) return false
       if (!original) {
         setDrafts(old => ({ ...old, [conversation]: old.new ?? '' }))
         setSelected(conversation)
         const list = await api.list()
-        if (!alive.current) return
+        if (!alive.current) return false
         setConversations(list.conversations)
       }
       const turn = await api.send(conversation, payload, crypto.randomUUID())
-      if (!alive.current) return
+      if (!alive.current) return false
       setActive(holdsCoachSlot(turn) ? turn : null)
       tracked.current = turn
       setLastTurn(turn)
@@ -146,6 +165,7 @@ export function useCoachController(owner: string, api = coachApi) {
       })
       const result = await api.messages(conversation)
       if (alive.current) setMessages(old => ({ ...old, [conversation]: result.messages }))
+      return true
     } catch {
       if (alive.current) {
         setError(true)
@@ -159,6 +179,7 @@ export function useCoachController(owner: string, api = coachApi) {
           }
         } catch { /* retain error */ }
       }
+      return false
     } finally {
       sendingRef.current = false
       if (alive.current) setSending(false)
@@ -189,9 +210,15 @@ export function useCoachController(owner: string, api = coachApi) {
       if (alive.current) setConversations(old => old.map(item => item.conversation_id === conversation ? result : item))
     } catch { if (alive.current) setError(true) }
   }
-  return { open, setOpen, maximized, setMaximized, conversations, selected, setSelected,
-    messages: selected ? messages[selected] ?? [] : [], draft: drafts[selected ?? 'new'] ?? '', setDraft,
-    active, lastTurn: selected ? lastTurns[selected] ?? null : null, error, notice, unread, sending, supportsReadConsent, capabilitiesReady, show, newChat, send, stop, remove, rename }
+  return {
+    open, setOpen, maximized, setMaximized, conversations, selected, setSelected,
+    messages: selected ? messages[selected] ?? [] : [],
+    draft: drafts[selected ?? 'new'] ?? '', setDraft,
+    readDomains, setReadDomains, toggleReadDomain,
+    active, lastTurn: selected ? lastTurns[selected] ?? null : null,
+    error, notice, unread, clearUnread, sending, supportsReadConsent, capabilitiesReady,
+    show, newChat, send, stop, remove, rename,
+  }
 }
 
 type Controller = ReturnType<typeof useCoachController>

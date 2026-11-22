@@ -70,6 +70,21 @@ def register_and_authorize(client: TestClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def test_auth_status_reports_only_boolean_user_presence(monkeypatch):
+    client = build_client(make_test_data_dir(), monkeypatch)
+
+    initial = client.get("/auth/status")
+    assert initial.status_code == 200
+    assert initial.json()["data"] == {"has_users": False}
+
+    register_and_authorize(client)
+
+    after_register = client.get("/auth/status")
+    assert after_register.status_code == 200
+    assert after_register.json()["data"] == {"has_users": True}
+    assert set(after_register.json()["data"].keys()) == {"has_users"}
+
+
 def test_register_login_and_me_return_user_session(monkeypatch):
     client = build_client(make_test_data_dir(), monkeypatch)
 

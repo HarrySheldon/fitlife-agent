@@ -60,7 +60,7 @@ const taskRoutes = [
   { path: '/review/week/2026-W35', heading: '2026-W35', back: 'Back to review', role: 'link', expectedBack: '/progress' },
   { path: '/plan/new', heading: 'New plan draft', back: 'Back to plans', role: 'link', expectedBack: '/plan' },
   { path: '/plan/plan-00000001', heading: 'plan-00000001', back: 'Back to plans', role: 'link', expectedBack: '/plan' },
-  { path: '/profile/edit', heading: 'Profile', back: 'Back to profile', role: 'link', expectedBack: '/profile' },
+  { path: '/profile/edit', heading: 'Profile & Goals', back: 'Back to profile', role: 'link', expectedBack: '/profile' },
   { path: '/settings/general', heading: 'General settings', back: 'Back', role: 'link', expectedBack: '/settings' },
   { path: '/settings/model', heading: 'Model connection', back: 'Back to settings', role: 'link', expectedBack: '/settings' },
   { path: '/settings/security', heading: 'Security', back: 'Back', role: 'link', expectedBack: '/settings' },

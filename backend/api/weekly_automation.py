@@ -13,6 +13,7 @@ from backend.application.use_cases.weekly_automation import WeeklyAutomationServ
 from backend.config import get_settings
 from backend.domain.account_clock import local_today
 from backend.domain.plan_cycles import GoalType
+from backend.api.profile_resolution import resolve_authoritative_profile_context
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
 from backend.infrastructure.repositories.file_report_repository import FileReportRepository
 from backend.infrastructure.repositories.sqlite_plan_cycle_repository import SQLitePlanCycleRepository
@@ -40,11 +41,8 @@ class PersonalizedDraftRequest(BaseModel):
 def _profile_goal_and_target(user_id: str) -> tuple[GoalType, float | None]:
     try:
         profile = get_fitness_repository().read_profile(user_id)
-        goal: GoalType = (
-            profile.goal if profile.goal in ("fat_loss", "muscle_gain", "maintenance") else "maintenance"  # type: ignore[assignment]
-        )
-        target_w = float(profile.target_weight_kg) if profile.target_weight_kg else None
-        return goal, target_w
+        ctx = resolve_authoritative_profile_context(get_database(), user_id, profile)
+        return ctx.goal, ctx.target_weight_kg
     except Exception:
         return "maintenance", None
 

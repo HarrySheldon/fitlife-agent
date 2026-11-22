@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 
 from backend.api.dependencies import require_current_user
 from backend.api.preference_context import preferences_for
+from backend.api.profile_resolution import resolve_authoritative_profile_context
 from backend.api.utils import ok
 from backend.domain.account_clock import local_today
 from backend.domain.body_measurements import compute_body_summary
@@ -61,9 +62,10 @@ def progress_overview(
     meals = fitness_repo.read_meals(user.user_id)
     workouts = fitness_repo.read_workouts(user.user_id)
 
-    calorie_target = float(profile.daily_calorie_target or 0)
-    protein_target = float(profile.daily_protein_target or 0)
-    target_weight = float(profile.target_weight_kg) if profile.target_weight_kg else None
+    ctx = resolve_authoritative_profile_context(db, user.user_id, profile)
+    calorie_target = ctx.calorie_target
+    protein_target = ctx.protein_target
+    target_weight = ctx.target_weight_kg
 
     meal_result = analyze_meals(meals, calorie_target, protein_target)
     workout_result = analyze_workouts(workouts)
@@ -95,11 +97,11 @@ def progress_overview(
         if protein_target > 0 and prot >= protein_target * 0.90:
             protein_hit_days += 1
 
-    # Workout adherence over last 7 days (M3 will override with active plan_cycle adherence when present)
+    # Workout adherence over last 7 days (M3 overrides with active plan_cycle adherence when present)
     weekly_target_sessions = (
         training_ctx.weekly_available_days
-        if training_ctx.configured
-        else int(profile.weekly_training_frequency or 3)
+        if (training_ctx.configured or ctx.has_sqlite_setup or ctx.is_synthetic_default)
+        else int(profile.weekly_training_frequency or training_ctx.weekly_available_days or 3)
     )
     recent_workout_days = _count_workout_days(workouts, last7_dates)
     adherence_mode = "weekly_frequency"

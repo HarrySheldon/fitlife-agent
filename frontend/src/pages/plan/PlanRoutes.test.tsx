@@ -62,7 +62,7 @@ describe('plan task routes', () => {
   it('keeps the overview read-only and links plan history and generation', async () => {
     renderRoute('/plan')
     expect(await screen.findByRole('link', { name: /plan-00000001/ })).toHaveAttribute('href', '/plan/plan-00000001')
-    expect(screen.getByRole('link', { name: /create plan/i })).toHaveAttribute('href', '/plan/new')
+    expect(screen.getByRole('button', { name: /new training cycle/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /generate plan/i })).not.toBeInTheDocument()
   })
 

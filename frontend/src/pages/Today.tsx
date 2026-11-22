@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  CalendarRange,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -7,6 +8,7 @@ import {
   Dumbbell,
   Flame,
   Lightbulb,
+  Minus,
   Plus,
   Scale,
   Sparkles,
@@ -45,8 +47,9 @@ export function Today() {
   const [quickInput, setQuickInput] = useState('')
   const [todayPlan, setTodayPlan] = useState<TodayPlanResponse | null>(null)
   const [prefilling, setPrefilling] = useState(false)
+  const [updatingMeals, setUpdatingMeals] = useState(false)
   const coachTriggerRef = useRef<HTMLButtonElement>(null)
-  const { data, loading, error, refreshing, stale } = useToday(selectedDate)
+  const { data, loading, error, refreshing, stale, refresh } = useToday(selectedDate)
 
   useEffect(() => {
     let active = true
@@ -102,6 +105,19 @@ export function Today() {
     const qs = new URLSearchParams({ date: selectedDate })
     if (trimmed) qs.set('text', trimmed)
     navigate(`/today/smart-entry?${qs.toString()}`)
+  }
+
+  async function handleChangePlannedMeals(delta: number) {
+    if (!data || updatingMeals || typeof api.setPlannedMealCount !== 'function') return
+    const next = Math.max(1, Math.min(8, (data.planned_meal_count || 3) + delta))
+    if (next === data.planned_meal_count) return
+    setUpdatingMeals(true)
+    try {
+      await api.setPlannedMealCount(selectedDate, next)
+      await refresh()
+    } finally {
+      setUpdatingMeals(false)
+    }
   }
 
   const coachActions = useMemo(() => {
@@ -230,7 +246,18 @@ export function Today() {
                   <p className="muted-copy">{todayPlan.day.notes || t('planCycle.restDayCopy')}</p>
                 )}
               </section>
-            ) : null}
+            ) : (
+              <section className="panel-card today-no-plan-card" aria-labelledby="today-no-plan-heading">
+                <div>
+                  <h2 id="today-no-plan-heading">{t('today.noPlanTitle')}</h2>
+                  <p className="muted-copy">{t('today.noPlanCopy')}</p>
+                </div>
+                <Link className="secondary-button" to="/plan">
+                  <CalendarRange size={15} />
+                  {t('today.goToPlan')}
+                </Link>
+              </section>
+            )}
 
             <section className="target-grid nutrition-target-grid" aria-label={t('today.targetsLabel')}>
               {progress.map((target) => <TargetProgress key={target.label} target={target} />)}
@@ -244,7 +271,27 @@ export function Today() {
               <div>
                 <div className="planned-meal-count">
                   <span>{t('today.plannedMeals')}</span>
-                  <strong>{data.planned_meal_count}</strong>
+                  <div className="planned-meal-stepper">
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={t('today.decreasePlannedMeals')}
+                      disabled={updatingMeals || data.planned_meal_count <= 1}
+                      onClick={() => void handleChangePlannedMeals(-1)}
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <strong>{data.planned_meal_count}</strong>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={t('today.increasePlannedMeals')}
+                      disabled={updatingMeals || data.planned_meal_count >= 8}
+                      onClick={() => void handleChangePlannedMeals(1)}
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -261,14 +308,6 @@ export function Today() {
                 >
                   <Plus size={17} />
                   {t('today.addTraining')}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => navigate(`/today/smart-entry?date=${encodeURIComponent(selectedDate)}`)}
-                >
-                  <Sparkles size={17} />
-                  {t('today.smartEntry')}
                 </button>
                 <button
                   type="button"
@@ -362,6 +401,13 @@ export function Today() {
               </section>
             ) : null}
 
+            {!data.meals?.length && !data.workouts?.length ? (
+              <section className="panel-card today-empty-log-card" aria-labelledby="today-empty-log-heading">
+                <h2 id="today-empty-log-heading">{t('today.emptyLogTitle')}</h2>
+                <p className="muted-copy">{t('today.emptyLogCopy')}</p>
+              </section>
+            ) : null}
+
             {buildTodayHint(data, todayPlan, t) ? (
               <section className="today-hint-bar" aria-label={t('today.hintLabel')}>
                 <Lightbulb size={17} />
@@ -385,9 +431,31 @@ export function Today() {
               </section>
             ) : null}
           </div>
-          {coach ? <div className="coach-actions">{coachActions.map(item => <button key={item.action} type="button" disabled={coach.sending || coach.active !== null} onClick={() => void coach.send({ question: `${item.label} · ${selectedDate}`, action: item.action, surface: 'today', date: selectedDate })}>{item.label}</button>)}</div> : <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" onClick={() => setCoachOpen(true)}>
-            <Bot size={17} />{t('coach.open')}
-          </button>}
+          <section className="today-coach-strip" aria-label={t('coach.eyebrow')}>
+            <div className="today-coach-strip-label">
+              <Bot size={16} />
+              <span>{t('coach.eyebrow')}</span>
+            </div>
+            {coach ? (
+              <div className="today-coach-pills">
+                {coachActions.map((item) => (
+                  <button
+                    key={item.action}
+                    type="button"
+                    className="ghost-action-btn"
+                    disabled={coach.sending || coach.active !== null}
+                    onClick={() => void coach.send({ question: `${item.label} · ${selectedDate}`, action: item.action, surface: 'today', date: selectedDate })}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button ref={coachTriggerRef} className="secondary-button coach-trigger" type="button" onClick={() => setCoachOpen(true)}>
+                <Bot size={17} />{t('coach.open')}
+              </button>
+            )}
+          </section>
           {!coach ? <CoachDrawer open={coachOpen} onClose={() => setCoachOpen(false)} returnFocusRef={coachTriggerRef} surface="today" date={selectedDate} actions={coachActions} /> : null}
         </div>
       ) : null}
@@ -436,7 +504,7 @@ function buildTodayHint(
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string | null {
   const proteinGap = (data.target?.protein ?? 0) - data.consumed.protein
-  if (proteinGap >= 25) {
+  if (data.consumed.calories > 0 && proteinGap >= 25) {
     return t('today.hintProteinGap', { grams: Math.round(proteinGap) })
   }
   if (todayPlan?.day && todayPlan.day.day_type !== 'rest' && todayPlan.day.adherence === 'upcoming') {

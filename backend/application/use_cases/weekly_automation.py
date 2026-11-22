@@ -4,6 +4,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+import threading
 
 from backend.domain.body_measurements import compute_body_summary
 from backend.domain.plan_cycles import (
@@ -62,8 +64,21 @@ def previous_iso_week_id(day: date) -> str:
 
 
 class WeeklyAutomationService:
+    _LOCKS_GUARD = threading.Lock()
+    _USER_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+
     def __init__(self, database: SQLiteDatabase) -> None:
         self.database = database
+
+    @classmethod
+    def _automation_lock(cls, db_path: Path | str, user_id: str) -> threading.Lock:
+        key = (str(Path(db_path).resolve()), user_id)
+        with cls._LOCKS_GUARD:
+            lock = cls._USER_LOCKS.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                cls._USER_LOCKS[key] = lock
+            return lock
 
     def get_run(self, user_id: str, iso_week: str) -> WeeklyAutomationRun | None:
         with self.database.connection() as conn:
@@ -150,6 +165,24 @@ class WeeklyAutomationService:
         return cycle_repo.create_draft(user_id, cycle_payload, days_payload)
 
     def check_and_run(
+        self,
+        user_id: str,
+        today_date: date,
+        *,
+        goal_type: GoalType = "maintenance",
+        target_weight_kg: float | None = None,
+        ensure_weekly_report: Callable[[str, str], str] | None = None,
+    ) -> WeeklyAutomationRun:
+        with self._automation_lock(self.database.path, user_id):
+            return self._check_and_run_locked(
+                user_id,
+                today_date,
+                goal_type=goal_type,
+                target_weight_kg=target_weight_kg,
+                ensure_weekly_report=ensure_weekly_report,
+            )
+
+    def _check_and_run_locked(
         self,
         user_id: str,
         today_date: date,

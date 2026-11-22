@@ -148,6 +148,7 @@ export class ApiRequestError extends Error {
 }
 
 export const api = {
+  authStatus: () => request<{ has_users: boolean }>('/auth/status'),
   register: (payload: AuthRequest) => request<AuthSession>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   login: (payload: AuthRequest) => request<AuthSession>('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
   me: () => request<AuthenticatedUser>('/auth/me'),
@@ -202,7 +203,7 @@ export const api = {
   clearModelApiKey: () => request<ModelConnectionSettings>('/settings/model/api-key', { method: 'DELETE' }),
   listModels: () => request<{ models: string[] }>('/settings/model/models', { method: 'POST' }),
   testModelConnection: () => request<ModelConnectionTestResult>('/settings/model/test', { method: 'POST' }),
-  chat: (question: string) => request<ChatResponse>('/chat', { method: 'POST', body: JSON.stringify({ question }) }),
+  chat: (question: string, signal?: AbortSignal) => request<ChatResponse>('/chat', { method: 'POST', body: JSON.stringify({ question }), signal }),
   today: (date: string) => request<TodayOverview>(`/today?date=${encodeURIComponent(date)}`),
   setPlannedMealCount: (date: string, plannedMealCount: number) =>
     requestV1<TodayOverview>(`/daily-logs/${encodeURIComponent(date)}`, {

@@ -175,6 +175,7 @@ export function Plan() {
 
   const activeCycle = cycleState?.active ?? null
   const drafts = cycleState?.drafts ?? []
+  const cycleHistory = cycleState?.history ?? []
   const adherence = cycleState?.adherence ?? null
 
   return (
@@ -185,14 +186,16 @@ export function Plan() {
           <h1>{t('plan.title')}</h1>
         </div>
         <div className="progress-toolbar">
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() => setShowCreateForm((v) => !v)}
-          >
-            <Plus size={16} />
-            {t('planCycle.newCycle')}
-          </button>
+          {activeCycle ? (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setShowCreateForm((v) => !v)}
+            >
+              <Plus size={16} />
+              {t('planCycle.newCycle')}
+            </button>
+          ) : null}
           <button
             type="button"
             className="secondary-button"
@@ -208,13 +211,10 @@ export function Plan() {
             <Bot size={16} />
             {t('planCycle.askCoach')}
           </button>
-          <Link className="secondary-button" to="/plan/new">
-            {t('plan.create')}
-          </Link>
         </div>
       </header>
 
-      <WeeklyAutomationBanner />
+      <WeeklyAutomationBanner onDraftGenerated={() => { loadCycle(selectedWeek) }} />
 
       {cycleError ? <ErrorState message={cycleError} /> : null}
 
@@ -495,18 +495,43 @@ export function Plan() {
       <section className="content-panel">
         <h2>{t('plan.history')}</h2>
         {error ? <ErrorState message={error} /> : null}
-        {loading ? <LoadingState label={t('plan.loadingHistory')} /> : null}
-        {!loading && !error && plans.length === 0 ? <EmptyState label={t('plan.noHistory')} /> : null}
-        {plans.length > 0 ? (
-          <ul>
-            {plans.map((item) => (
-              <li key={item.plan_id}>
-                <Link to={`/plan/${item.plan_id}`}>
-                  {item.plan_id} · {new Date(item.activated_at).toLocaleString()}
-                </Link>
+        {cycleLoading && !cycleState ? <LoadingState label={t('plan.loadingHistory')} /> : null}
+        {!cycleLoading && cycleHistory.length === 0 ? (
+          <EmptyState label={t('planCycle.noCycleHistory')} />
+        ) : null}
+        {cycleHistory.length > 0 ? (
+          <ul className="cycle-history-list">
+            {cycleHistory.map((item) => (
+              <li key={item.id} className="cycle-history-row">
+                <div>
+                  <strong>{item.title}</strong>
+                  <small className="muted-copy">
+                    {t('planCycle.cycleMeta', {
+                      weeks: item.duration_weeks,
+                      start: item.start_date,
+                    })}
+                  </small>
+                </div>
+                <span className={`cycle-status-pill ${item.status}`}>
+                  {t(`planCycle.cycleStatus.${item.status}`, { defaultValue: item.status })}
+                </span>
               </li>
             ))}
           </ul>
+        ) : null}
+        {!loading && plans.length > 0 ? (
+          <details className="legacy-plans-details">
+            <summary>{t('plan.legacyArchive', { count: plans.length })}</summary>
+            <ul>
+              {plans.map((item) => (
+                <li key={item.plan_id}>
+                  <Link to={`/plan/${item.plan_id}`}>
+                    {item.plan_id} · {new Date(item.activated_at).toLocaleString()}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </details>
         ) : null}
       </section>
     </div>

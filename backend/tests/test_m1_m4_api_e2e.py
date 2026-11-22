@@ -127,3 +127,118 @@ def test_m1_to_m4_http_end_to_end_flow(tmp_path: Path, monkeypatch):
     assert pers.json()["data"]["cycle"]["status"] == "draft"
 
     get_settings.cache_clear()
+
+
+def test_progress_overview_uses_sqlite_setup_instead_of_default_profile(tmp_path: Path, monkeypatch):
+    from backend.application.ports.profile_target_repository import (
+        GoalVersionInput,
+        ProfileVersionInput,
+        TargetVersionInput,
+    )
+    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
+        SQLiteProfileTargetRepository,
+    )
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db_path = data_dir / "fitlife.sqlite3"
+    db = SQLiteDatabase(db_path)
+    run_migrations(db, RECORDS_MIGRATIONS)
+
+    monkeypatch.setenv("DATA_DIR", str(data_dir))
+    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    get_settings.cache_clear()
+    monkeypatch.setattr(sqlite_runtime, "get_database", lambda: db)
+
+    app = create_app()
+    client = TestClient(app)
+
+    reg = client.post(
+        "/auth/register",
+        json={
+            "username": "sqlite_truth_user",
+            "password": "Password123!",
+            "display_name": "SQLite Truth User",
+        },
+    )
+    assert reg.status_code in (200, 201), reg.text
+    token = reg.json()["data"]["access_token"]
+    user_id = reg.json()["data"]["user"]["user_id"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    repo = SQLiteProfileTargetRepository(db)
+    profile_v = repo.append_profile(
+        user_id,
+        ProfileVersionInput(
+            age=26,
+            height_cm=175.0,
+            weight_kg=70.0,
+            energy_parameter="male",
+            activity_level="moderate",
+            auto_target_disabled=False,
+            safety_conditions=(),
+            effective_from="2026-11-01T00:00:00Z",
+        ),
+    )
+    goal_v = repo.append_goal(
+        user_id,
+        GoalVersionInput(goal="maintenance", effective_from="2026-11-01T00:00:00Z"),
+    )
+    repo.append_target(
+        user_id,
+        TargetVersionInput(
+            profile_version_id=profile_v.id,
+            overall_goal_version_id=goal_v.id,
+            calories=2090.0,
+            carbs=261.0,
+            protein=112.0,
+            fat=66.0,
+            source="deterministic_calculation",
+            formula_version="v1",
+            rationale={},
+            effective_from="2026-11-01T00:00:00Z",
+        ),
+    )
+
+    prog = client.get("/api/v1/progress/overview?days=30", headers=headers)
+    assert prog.status_code == 200, prog.text
+    kpis = prog.json()["data"]["kpis"]
+    assert kpis["target_weight_kg"] is None
+    assert kpis["adherence_planned"] == 3
+    assert kpis["daily_calorie_target"] == 2090.0
+    assert kpis["daily_protein_target"] == 112.0
+
+    # Simulate partial LegacyProfileProjection from onboarding/profile edits
+    # (updates weight/goal/calorie/protein while leaving synthetic target_weight_kg=68 and weekly_training_frequency=4)
+    from backend.tools.data_access import update_profile_atomically
+    update_profile_atomically(
+        lambda current: current.model_copy(
+            update={
+                "weight_kg": 70.0,
+                "goal": "maintenance",
+                "daily_calorie_target": 2090,
+                "daily_protein_target": 112,
+            }
+        ),
+        user_id,
+    )
+    prog_projected = client.get("/api/v1/progress/overview?days=30", headers=headers)
+    assert prog_projected.status_code == 200, prog_projected.text
+    kpis_projected = prog_projected.json()["data"]["kpis"]
+    assert kpis_projected["target_weight_kg"] is None
+    assert kpis_projected["adherence_planned"] == 3
+
+    bm_list = client.get("/api/v1/body-measurements?days=30", headers=headers)
+    assert bm_list.status_code == 200, bm_list.text
+    assert bm_list.json()["data"]["summary"]["target_weight_kg"] is None
+
+    draft_res = client.post(
+        "/api/v1/plan-cycles",
+        headers=headers,
+        json={"duration_weeks": 4},
+    )
+    assert draft_res.status_code == 201, draft_res.text
+    assert draft_res.json()["data"]["cycle"]["goal_type"] == "maintenance"
+
+    get_settings.cache_clear()

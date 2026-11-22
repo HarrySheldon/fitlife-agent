@@ -82,6 +82,10 @@ class FileIdentityRepository:
             user = _find_user(self._read_users_unlocked(), user_id)
             return _public_user(user) if user is not None else None
 
+    def has_users(self) -> bool:
+        with _lock_for(self.path):
+            return len(self._read_users_unlocked()) > 0
+
     def project_export_metadata(
         self,
         user_id: str,

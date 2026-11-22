@@ -61,7 +61,7 @@ export function Profile() {
       <div><span>{t('profile.eyebrow')}</span><h1>{t('profile.title')}</h1></div>
       <Link className="primary-button" to="/profile/edit"><Pencil size={17} />{t('profile.editProfile')}</Link>
     </header>
-    <main className="profile-summary" aria-label={t('profile.summary')}>
+    <section className="profile-summary" aria-label={t('profile.summary')}>
       <dl>
         <Summary label={t('profile.age')} value={String(profile.age)} />
         <Summary label={t('profile.heightSummary')} value={height(profile.height_cm, preferences.unit_system)} />
@@ -81,26 +81,43 @@ export function Profile() {
       <button ref={coachTriggerRef} className="secondary-button" type="button" disabled={Boolean(coach?.sending || coach?.active)} onClick={() => coach ? void coach.send({ question: t('profile.askCoachAdvice'), action: 'suggest_targets', surface: 'profile' }) : setCoachOpen(true)}>
         <Bot size={17} />{t('profile.askCoachAdvice')}
       </button>
-    </main>
+    </section>
     {trainingCtx ? (
-      <section className="panel-card" aria-label={t('trainingContext.title')}>
+      <section className="profile-summary" aria-label={t('trainingContext.title')}>
         <h2>{t('trainingContext.title')}</h2>
-        <dl className="profile-summary">
+        <dl>
           <Summary
             label={t('trainingContext.equipment')}
             value={trainingCtx.available_equipment.map((eq) => t(`trainingContext.equipmentOptions.${eq}`)).join(', ')}
           />
           <Summary
             label={t('trainingContext.weeklyDays')}
-            value={`${trainingCtx.weekly_available_days}`}
+            value={`${trainingCtx.weekly_available_days} ${t('progress.daysUnit')}`}
           />
           <Summary
-            label={t('trainingContext.durationMin')}
+            label={t('trainingContext.durationSummary')}
             value={`${trainingCtx.session_duration_min} ${t('common.minutesShort')}`}
           />
           <Summary
             label={t('trainingContext.experience')}
             value={t(`trainingContext.experienceOptions.${trainingCtx.experience_level}`)}
+          />
+          <Summary
+            label={t('trainingContext.preferredSplit')}
+            value={t(`trainingContext.splitOptions.${trainingCtx.preferred_split}`)}
+          />
+          <Summary
+            label={t('trainingContext.injuries')}
+            value={
+              trainingCtx.injury_or_limitations.length
+                ? trainingCtx.injury_or_limitations
+                  .map((item) => {
+                    const area = t(`trainingContext.injuryAreas.${item.area}`, { defaultValue: item.area })
+                    return item.note ? `${area} (${item.note})` : area
+                  })
+                  .join(' · ')
+                : t('trainingContext.noInjuriesShort')
+            }
           />
         </dl>
       </section>

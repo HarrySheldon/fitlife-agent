@@ -1,37 +1,83 @@
-import { useContext, useEffect } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UNSAFE_DataRouterContext, useBlocker } from 'react-router-dom'
+import { UNSAFE_DataRouterContext, useBlocker, useNavigate } from 'react-router-dom'
 
+import { ConfirmModal } from '../../components/ConfirmModal'
 
 function DataRouterGuard({ dirty }: { dirty: boolean }) {
   const { t } = useTranslation()
   const blocker = useBlocker(dirty)
+  const blocked = blocker.state === 'blocked'
+  return (
+    <ConfirmModal
+      open={blocked}
+      title={t('settingsModel.flow.confirmDiscardTitle')}
+      message={t('settingsModel.flow.confirmDiscardBody')}
+      confirmLabel={t('settingsModel.flow.confirmLeave')}
+      cancelLabel={t('settingsModel.flow.confirmStay')}
+      tone="danger"
+      onConfirm={() => { if (blocker.state === 'blocked') blocker.proceed() }}
+      onCancel={() => { if (blocker.state === 'blocked') blocker.reset() }}
+    />
+  )
+}
+
+function LinkClickGuard({ dirty }: { dirty: boolean }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+  const allowing = useRef(false)
+
   useEffect(() => {
-    if (blocker.state !== 'blocked') return
-    if (window.confirm(t('settingsModel.flow.discard'))) blocker.proceed()
-    else blocker.reset()
-  }, [blocker, t])
-  return null
+    if (!dirty) {
+      setPendingHref(null)
+      return
+    }
+    const click = (event: MouseEvent) => {
+      if (allowing.current) return
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
+      if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+      const href = link.getAttribute('href')
+      if (!href || href.startsWith('#')) return
+      event.preventDefault()
+      event.stopPropagation()
+      setPendingHref(href)
+    }
+    document.addEventListener('click', click, true)
+    return () => { document.removeEventListener('click', click, true) }
+  }, [dirty])
+
+  return (
+    <ConfirmModal
+      open={pendingHref !== null}
+      title={t('settingsModel.flow.confirmDiscardTitle')}
+      message={t('settingsModel.flow.confirmDiscardBody')}
+      confirmLabel={t('settingsModel.flow.confirmLeave')}
+      cancelLabel={t('settingsModel.flow.confirmStay')}
+      tone="danger"
+      onConfirm={() => {
+        const destination = pendingHref
+        setPendingHref(null)
+        if (!destination) return
+        allowing.current = true
+        navigate(destination)
+        allowing.current = false
+      }}
+      onCancel={() => setPendingHref(null)}
+    />
+  )
 }
 
 export function UnsavedModelChanges({ dirty }: { dirty: boolean }) {
   const dataRouter = useContext(UNSAFE_DataRouterContext)
-  const { t } = useTranslation()
   useEffect(() => {
     if (!dirty) return
-    const unload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-    // Plain MemoryRouter embedding has no route blocker; production uses the
-    // data router and its blocker for links, programmatic navigation and POP.
-    const click = (event: MouseEvent) => {
-      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
-      if (!dataRouter && link && !event.ctrlKey && !event.metaKey && !window.confirm(t('settingsModel.flow.discard'))) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
+    const unload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
     }
     window.addEventListener('beforeunload', unload)
-    document.addEventListener('click', click, true)
-    return () => { window.removeEventListener('beforeunload', unload); document.removeEventListener('click', click, true) }
-  }, [dirty, dataRouter, t])
-  return dataRouter ? <DataRouterGuard dirty={dirty} /> : null
+    return () => { window.removeEventListener('beforeunload', unload) }
+  }, [dirty])
+  return dataRouter ? <DataRouterGuard dirty={dirty} /> : <LinkClickGuard dirty={dirty} />
 }

@@ -3,9 +3,9 @@ import { beforeEach, expect, it, vi } from 'vitest'
 
 import { useModelSettings } from './useModelSettings'
 
-const mocks = vi.hoisted(() => ({ workspace: vi.fn(), providers: vi.fn(), probe: vi.fn(), models: vi.fn() }))
+const mocks = vi.hoisted(() => ({ workspace: vi.fn(), providers: vi.fn(), probe: vi.fn(), models: vi.fn(), activate: vi.fn() }))
 vi.mock('../services/api', () => ({ api: {
-  modelWorkspace: mocks.workspace, modelProviders: mocks.providers, previewModelTest: mocks.probe, previewModels: mocks.models,
+  modelWorkspace: mocks.workspace, modelProviders: mocks.providers, previewModelTest: mocks.probe, previewModels: mocks.models, activateModel: mocks.activate,
 } }))
 
 beforeEach(() => {
@@ -13,6 +13,7 @@ beforeEach(() => {
   mocks.providers.mockResolvedValue({ providers: [] })
   mocks.probe.mockReset()
   mocks.models.mockReset()
+  mocks.activate.mockReset()
 })
 
 it('ignores a successful probe if the form changed while it was running', async () => {
@@ -89,4 +90,47 @@ it('does not accept an aggregate success or token when business parsing failed',
   act(() => result.current.patch({ provider_id: 'custom', base_url: 'https://models.example.com/v1', model: 'a', api_key: 'synthetic' }))
   await act(async () => { await result.current.testConnection() })
   expect(result.current.verificationToken).toBeNull()
+})
+
+
+it('testAndEnable probes then activates on pass, and never activates when structured parsing fails', async () => {
+  mocks.probe.mockResolvedValueOnce({
+    status: 'failed',
+    generation: { status: 'passed' },
+    structured: { status: 'failed' },
+    verification_token: null,
+    tested_at: new Date().toISOString(),
+  })
+  const { result } = renderHook(() => useModelSettings())
+  await waitFor(() => expect(result.current.loading).toBe(false))
+  act(() => result.current.patch({ provider_id: 'custom', base_url: 'https://models.example.com/v1', model: 'a', api_key: 'synthetic' }))
+  await act(async () => { await result.current.testAndEnable() })
+  expect(mocks.activate).not.toHaveBeenCalled()
+  expect(result.current.justActivated).toBe(false)
+
+  mocks.probe.mockResolvedValueOnce({
+    status: 'success',
+    generation: { status: 'passed' },
+    structured: { status: 'passed' },
+    verification_token: 'valid-token',
+    tested_at: new Date().toISOString(),
+  })
+  mocks.activate.mockResolvedValueOnce({
+    revision: 1,
+    active: {
+      provider: 'custom',
+      provider_id: 'custom',
+      protocol: 'chat_completions',
+      base_url: 'https://models.example.com/v1',
+      model: 'a',
+      enabled: true,
+      api_key_configured: true,
+      api_key_hint: 'syn***tic',
+    },
+    draft: null,
+  })
+  await act(async () => { await result.current.testAndEnable() })
+  expect(mocks.activate).toHaveBeenCalledWith(expect.objectContaining({ verification_token: 'valid-token', model: 'a' }))
+  expect(result.current.justActivated).toBe(true)
+  expect(result.current.dirty).toBe(false)
 })

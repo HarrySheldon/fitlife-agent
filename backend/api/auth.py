@@ -10,7 +10,12 @@ from backend.api.utils import ok
 from backend.domain.errors import ApplicationError
 from backend.i18n import message_for_request
 from backend.schemas import AuthLoginRequest, AuthRegisterRequest, AuthSession, AuthenticatedUser
-from backend.tools.auth_store import authenticate_user, create_access_token, register_user
+from backend.tools.auth_store import (
+    authenticate_user,
+    create_access_token,
+    has_registered_users,
+    register_user,
+)
 from backend.tools.data_access import ensure_user_data
 from backend.config import get_settings
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
@@ -18,6 +23,11 @@ from backend.infrastructure.sqlite.runtime import get_database
 
 
 router = APIRouter(prefix="/auth")
+
+
+@router.get("/status")
+def auth_status():
+    return ok({"has_users": has_registered_users()}, processing_mode="deterministic")
 
 
 @router.post("/logout")

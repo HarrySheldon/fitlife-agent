@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.api.dependencies import require_current_user
 from backend.api.preference_context import preferences_for
+from backend.api.profile_resolution import resolve_authoritative_profile_context
 from backend.api.utils import ok
 from backend.domain.account_clock import local_today
 from backend.domain.body_measurements import compute_body_summary
@@ -118,6 +119,8 @@ def delete_body_measurement(
 def _target_weight_for(user_id: str) -> float | None:
     try:
         profile = get_fitness_repository().read_profile(user_id)
-        return float(profile.target_weight_kg) if profile.target_weight_kg else None
+        return resolve_authoritative_profile_context(
+            get_database(), user_id, profile
+        ).target_weight_kg
     except Exception:
         return None

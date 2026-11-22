@@ -171,3 +171,21 @@ def test_weekly_automation_is_idempotent_and_never_auto_activates_draft(tmp_path
 
     assert service.dismiss("u1", "2026-W47") is True
     assert service.get_run("u1", "2026-W47").dismissed is True
+
+
+def test_weekly_automation_concurrent_checks_create_only_one_draft(tmp_path: Path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = _db(tmp_path, monkeypatch)
+    service = WeeklyAutomationService(db)
+
+    def _run_once(_index: int):
+        return service.check_and_run("u1", date(2026, 11, 20), goal_type="maintenance")
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        runs = list(pool.map(_run_once, range(4)))
+
+    draft_ids = {run.draft_cycle_id for run in runs}
+    assert len(draft_ids) == 1
+    cycles = SQLitePlanCycleRepository(db).list_cycles("u1")
+    assert len(cycles) == 1

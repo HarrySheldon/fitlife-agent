@@ -74,15 +74,19 @@ const failedEvaluation: EvalResult = {
   cases: [],
 }
 
-vi.mock('./hooks/useAuth', () => ({
-  useAuth: () => ({
+vi.mock('./hooks/useAuth', () => {
+  const getAuth = () => ({
     user: state.authenticated ? { user_id: 'user-1', username: 'user', email: null, phone: null, display_name: 'User Record' } : null,
     initializing: false,
     login: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
-  }),
-}))
+  })
+  return {
+    useAuth: getAuth,
+    useOptionalAuth: getAuth,
+  }
+})
 
 vi.mock('./hooks/usePreferences', () => ({
   usePreferences: () => ({
@@ -133,8 +137,10 @@ vi.mock('./hooks/useModelSettings', () => ({
   useModelSettings: () => ({
     workspace: { revision: 0, active: null, draft: null }, providers: [], dirty: false,
     editing: { provider_id: '', protocol: 'chat_completions', base_url: '', model: '', expected_revision: 0, credential_mode: 'new', api_key: '' },
-    patch: vi.fn(), load: vi.fn(), probeResult: null, verificationToken: null, disable: vi.fn(),
-    models: [], loading: false, action: null, feedback: null, refresh: vi.fn(), save: vi.fn(),
+    patch: vi.fn(), selectProvider: vi.fn(), load: vi.fn(), probeResult: null, verificationToken: null, disable: vi.fn(),
+    models: [], loading: false, action: null, probePhase: 'idle', feedback: null, lastErrorCode: null,
+    conflictDetected: false, tokenExpiredNotice: false, justActivated: false,
+    refresh: vi.fn(), save: vi.fn(), testAndEnable: vi.fn(),
     clearApiKey: vi.fn(), listModels: vi.fn(), testConnection: vi.fn(),
   }),
 }))
@@ -148,6 +154,8 @@ beforeEach(async () => {
   state.authenticated = true
   state.todayLoading = false
   state.todayError = null
+  vi.spyOn(api, 'authStatus').mockResolvedValue({ has_users: true })
+  vi.spyOn(api, 'modelWorkspace').mockResolvedValue({ revision: 0, active: null, draft: null })
   vi.spyOn(api, 'calendarDays').mockResolvedValue([])
   vi.spyOn(api, 'calendarDay').mockResolvedValue(emptyDay)
   await i18n.changeLanguage(state.language)
@@ -157,10 +165,10 @@ describe.each([
   {
     language: 'en-US' as const,
     routes: [
-      ['/login', 'Create your fitness workspace'], ['/', 'Today'], ['/logbook', 'Logbook'],
+      ['/login', 'Log in to FitLife Agent'], ['/', 'Today'], ['/logbook', 'Logbook'],
       ['/today/meal/new?date=2026-07-14', 'Add a meal'],
       ['/today/workout/new?date=2026-07-14', 'Add a workout'],
-      ['/progress', 'Progress'], ['/plan', 'Plan'], ['/coach', 'Coach'], ['/profile', 'Profile'], ['/evaluation', 'Agent evaluation'],
+      ['/progress', 'Progress'], ['/plan', 'Plan'], ['/coach', 'Coach'], ['/profile', 'Profile & Goals'], ['/evaluation', 'Agent evaluation'],
       ['/settings', 'Settings'], ['/settings/general', 'General settings'], ['/settings/model', 'Model connection'],
     ],
     navigation: ['Today', 'Plan', 'Progress', 'Coach', 'Profile & Goals', 'Settings'],
@@ -168,10 +176,10 @@ describe.each([
   {
     language: 'zh-CN' as const,
     routes: [
-      ['/login', '创建你的健身空间'], ['/', '今天'], ['/logbook', '日志'],
+      ['/login', '登录 FitLife Agent'], ['/', '今日'], ['/logbook', '日志'],
       ['/today/meal/new?date=2026-07-14', '添加餐食'],
       ['/today/workout/new?date=2026-07-14', '添加训练'],
-      ['/progress', '进展'], ['/plan', '计划'], ['/coach', '教练'], ['/profile', '个人资料'], ['/evaluation', 'Agent 评测'],
+      ['/progress', '进展'], ['/plan', '计划'], ['/coach', '教练'], ['/profile', '档案与目标'], ['/evaluation', 'Agent 评测'],
       ['/settings', '设置'], ['/settings/general', '通用设置'], ['/settings/model', '模型连接'],
     ],
     navigation: ['今日', '计划', '进展', '教练', '档案与目标', '设置'],
@@ -247,6 +255,9 @@ it.each([
   await i18n.changeLanguage(language)
   renderRoute('/login')
 
+  fireEvent.click(screen.getByRole('tab', {
+    name: language === 'en-US' ? 'Register' : '注册',
+  }))
   const submit = screen.getByRole('button', {
     name: language === 'en-US' ? 'Create account' : '创建账号',
   })

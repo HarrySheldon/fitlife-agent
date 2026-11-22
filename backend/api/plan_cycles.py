@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.api.dependencies import require_current_user
 from backend.api.preference_context import preferences_for
+from backend.api.profile_resolution import resolve_authoritative_profile_context
 from backend.api.utils import ok
 from backend.application.ports.workout_repository import (
     CardioItemInput,
@@ -420,8 +421,8 @@ def prefill_workout_from_plan_day(
 def _goal_from_profile(user_id: str) -> GoalType:
     try:
         profile = get_fitness_repository().read_profile(user_id)
-        if profile.goal in ("fat_loss", "muscle_gain", "maintenance"):
-            return profile.goal  # type: ignore[return-value]
+        return resolve_authoritative_profile_context(
+            get_database(), user_id, profile
+        ).goal
     except Exception:
-        pass
-    return "maintenance"
+        return "maintenance"

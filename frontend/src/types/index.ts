@@ -232,6 +232,7 @@ export interface ModelProviderPreset {
   default_base_url: string | null
   protocols: ModelProtocol[]
   recommended_protocol: ModelProtocol
+  recommended_models?: string[]
 }
 export interface ModelWorkspace {
   revision: number
