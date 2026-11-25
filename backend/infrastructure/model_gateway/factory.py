@@ -21,7 +21,8 @@ from backend.infrastructure.model_gateway.openai_chat_completions import OpenAIC
 from backend.infrastructure.model_gateway.openai_responses import OpenAIResponsesAdapter
 from backend.infrastructure.model_gateway.protocol_registry import adapter_for
 from backend.infrastructure.settings.fernet_cipher import FernetCredentialCipher
-from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
+from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
+from backend.infrastructure.sqlite.database import SQLiteDatabase
 
 
 ModelGatewayFactory = Callable[[ModelConnection, str], ConfigurableModelGateway]
@@ -96,7 +97,10 @@ def resolve_user_model_gateway(
     gateway_factory: ModelGatewayFactory | None = None,
 ) -> ConfigurableModelGateway:
     settings = settings or get_settings()
-    repository = repository or FileModelConnectionRepository(settings.data_dir)
+    repository = repository or SQLiteModelConnectionRepository(
+        SQLiteDatabase(settings.database_path),
+        settings.data_dir,
+    )
     connection = repository.get(user_id)
     if connection is None:
         raise ai_not_configured_error()

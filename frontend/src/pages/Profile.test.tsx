@@ -113,6 +113,7 @@ const mocks = vi.hoisted(() => ({
   saveLegacyProfile: vi.fn(),
   targetHistory: vi.fn(),
   legacyError: null as string | null,
+  goalOverride: null as OverallGoalVersion | null,
 }))
 
 vi.mock('../hooks/usePreferences', () => ({
@@ -121,7 +122,10 @@ vi.mock('../hooks/usePreferences', () => ({
 
 vi.mock('../hooks/useProfileSetup', () => ({
   useProfileSetup: () => {
-    const [currentSetup, setCurrentSetup] = useState(setup)
+    const [currentSetup, setCurrentSetup] = useState<ProfileSetup>(() => ({
+      ...setup,
+      goal: mocks.goalOverride ?? setup.goal,
+    }))
     const [currentPreview, setCurrentPreview] = useState<TargetPreview | null>(null)
     const [stalePreview, setStalePreview] = useState(false)
 
@@ -199,6 +203,7 @@ describe('Profile', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.legacyError = null
+    mocks.goalOverride = null
     mocks.targetHistory.mockResolvedValue([target])
     mocks.updateProfile.mockResolvedValue({
       profile: { ...profile, weight_kg: 71 },
@@ -516,5 +521,41 @@ describe('Profile', () => {
     await user.click(screen.getByRole('button', { name: 'Ask Coach for target advice' }))
     expect(screen.getByText('Coach analysis is advice only and never changes saved targets.')).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Coach' })).toBeInTheDocument()
+  })
+
+  it('allows setting and clearing optional target weight and displays it on summary only when set', async () => {
+    const user = userEvent.setup()
+    mocks.goalOverride = { ...goal, target_weight_kg: 65.5 }
+    mocks.updateOverallGoal.mockResolvedValue({
+      profile,
+      goal: { ...goal, id: 'goal-2', goal: 'fat_loss', target_weight_kg: null },
+      recalculation_preview: preview,
+      recalculation_restriction: null,
+    })
+
+    const summaryView = render(<MemoryRouter><ProfileSummary /></MemoryRouter>)
+    expect(screen.getByText('Target weight')).toBeInTheDocument()
+    expect(screen.getByText('65.5 kg')).toBeInTheDocument()
+    summaryView.unmount()
+
+    mocks.goalOverride = { ...goal, target_weight_kg: null }
+    const unsetSummaryView = render(<MemoryRouter><ProfileSummary /></MemoryRouter>)
+    expect(screen.queryByText('Target weight')).not.toBeInTheDocument()
+    unsetSummaryView.unmount()
+
+    render(<MemoryRouter><Profile /></MemoryRouter>)
+    const targetInput = screen.getByLabelText('Target weight (kg, optional)')
+    expect(targetInput).toHaveValue(null)
+    await user.type(targetInput, '65.5')
+    await user.click(screen.getByRole('button', { name: 'Save overall goal' }))
+    expect(mocks.updateOverallGoal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goal: 'fat_loss', target_weight_kg: 65.5 }),
+    )
+
+    await user.clear(targetInput)
+    await user.click(screen.getByRole('button', { name: 'Save overall goal' }))
+    expect(mocks.updateOverallGoal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goal: 'fat_loss', target_weight_kg: null }),
+    )
   })
 })

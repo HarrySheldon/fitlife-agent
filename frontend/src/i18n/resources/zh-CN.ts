@@ -8,6 +8,7 @@ export const zhCN = {
     },
     navigation: {
       today: '今日', logbook: '日志', review: '复盘', progress: '进展', plan: '计划', coach: '教练', profile: '档案与目标', settings: '设置',
+      modelNotConfiguredHint: 'AI 模型未配置',
       tagline: '每日健身日志', logout: '退出登录',
     },
     auth: {
@@ -50,6 +51,7 @@ export const zhCN = {
       },
       goal: {
         title: '目标与活动水平', overall: '总体目标', activity: '活动水平', calculate: '计算每日目标',
+        targetWeightOptional: '目标体重（千克，选填）', targetWeightPlaceholder: '不需要可留空',
         options: { fat_loss: '减脂', maintenance: '保持', muscle_gain: '增肌' },
         activityOptions: { sedentary: '久坐', light: '轻度活动', moderate: '中度活动', high: '高强度活动' },
       },
@@ -300,6 +302,10 @@ export const zhCN = {
       disableAutomaticTargets: '停用自动目标计算',
       saveBodyProfile: '保存身体档案', overallGoalChoice: '选择总体目标',
       goalOptions: { fat_loss: '减脂', maintenance: '保持', muscle_gain: '增肌' },
+      targetWeightOptional: '目标体重（{{unit}}，选填）',
+      targetWeightPlaceholder: '如无明确目标体重可留空',
+      targetWeightHint: '填写后将在进展页体重曲线上显示参考线。',
+      targetWeightSummary: '目标体重',
       saveOverallGoal: '保存总体目标', currentTargets: '当前每日目标',
       calories: '热量', carbs: '碳水化合物', protein: '蛋白质', fat: '脂肪',
       caloriesInput: '热量（kcal）', carbsInput: '碳水化合物（g）', proteinInput: '蛋白质（g）', fatInput: '脂肪（g）',

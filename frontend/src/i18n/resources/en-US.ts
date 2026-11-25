@@ -9,6 +9,7 @@ export const enUS = {
     },
     navigation: {
       today: 'Today', logbook: 'Logbook', review: 'Review', progress: 'Progress', plan: 'Plan', coach: 'Coach', profile: 'Profile & Goals', settings: 'Settings',
+      modelNotConfiguredHint: 'AI model not configured',
       tagline: 'Daily fitness log', logout: 'Log out',
     },
     auth: {
@@ -53,6 +54,7 @@ export const enUS = {
       },
       goal: {
         title: 'Goal and activity', overall: 'Overall goal', activity: 'Activity level', calculate: 'Calculate targets',
+        targetWeightOptional: 'Target weight (kg, optional)', targetWeightPlaceholder: 'Leave blank if not needed',
         options: { fat_loss: 'Fat loss', maintenance: 'Maintenance', muscle_gain: 'Muscle gain' },
         activityOptions: { sedentary: 'Sedentary', light: 'Light', moderate: 'Moderate', high: 'High' },
       },
@@ -308,6 +310,10 @@ export const enUS = {
       disableAutomaticTargets: 'Disable automatic target calculation',
       saveBodyProfile: 'Save body profile', overallGoalChoice: 'Choose an overall goal',
       goalOptions: { fat_loss: 'Fat loss', maintenance: 'Maintenance', muscle_gain: 'Muscle gain' },
+      targetWeightOptional: 'Target weight ({{unit}}, optional)',
+      targetWeightPlaceholder: 'Leave blank if no specific weight target',
+      targetWeightHint: 'Used as a reference line on the Progress chart when set.',
+      targetWeightSummary: 'Target weight',
       saveOverallGoal: 'Save overall goal', currentTargets: 'Current daily targets',
       calories: 'Calories', carbs: 'Carbohydrate', protein: 'Protein', fat: 'Fat',
       caloriesInput: 'Calories (kcal)', carbsInput: 'Carbohydrate (g)', proteinInput: 'Protein (g)', fatInput: 'Fat (g)',

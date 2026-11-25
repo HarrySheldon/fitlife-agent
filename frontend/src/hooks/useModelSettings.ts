@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { notifyModelWorkspaceChanged } from '../lib/modelStatusEvents'
 import { ApiRequestError, api } from '../services/api'
 import type { ModelConnectionInput, ModelConnectionSettings, ModelProbeResult, ModelProviderPreset, ModelWorkspace } from '../types'
 
@@ -110,6 +111,7 @@ export function useModelSettings(options?: UseModelSettingsOptions) {
       const [next, available] = await Promise.all([api.modelWorkspace(), api.modelProviders()])
       if (!mounted.current) return
       setWorkspace(next)
+      notifyModelWorkspaceChanged(Boolean(next.active?.enabled && next.active?.api_key_configured))
       setProviders(available.providers)
       setConflictDetected(false)
       if (!initialized.current) {
@@ -352,6 +354,7 @@ export function useModelSettings(options?: UseModelSettingsOptions) {
         : await api.saveModelDraft(next)
       if (!mounted.current) return
       setWorkspace(result)
+      notifyModelWorkspaceChanged(Boolean(result.active?.enabled && result.active?.api_key_configured))
       invalidate()
       if (id + 1 === generation.current) {
         const saved = enable ? result.active : result.draft
@@ -403,6 +406,7 @@ export function useModelSettings(options?: UseModelSettingsOptions) {
       const result = await api.activateModel({ ...next, verification_token: tokenToUse })
       if (!mounted.current) return
       setWorkspace(result)
+      notifyModelWorkspaceChanged(Boolean(result.active?.enabled && result.active?.api_key_configured))
       invalidate()
       if (id + 1 === generation.current) {
         if (result.active) setEditing(fromConnection(result.active, 'active', result.revision))
@@ -422,6 +426,7 @@ export function useModelSettings(options?: UseModelSettingsOptions) {
       const result = await operation(workspace.revision)
       if (!mounted.current) return
       setWorkspace(result)
+      notifyModelWorkspaceChanged(Boolean(result.active?.enabled && result.active?.api_key_configured))
       invalidate()
       setEditing(previous => reconcileRevision(previous, result))
     })

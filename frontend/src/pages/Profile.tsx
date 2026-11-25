@@ -74,6 +74,12 @@ export function Profile() {
           }
         />
         <Summary label={t('profile.overallGoal')} value={t(`profile.goalOptions.${goal.goal}`)} />
+        {goal.target_weight_kg != null ? (
+          <Summary
+            label={t('profile.targetWeightSummary')}
+            value={`${displayWeight(goal.target_weight_kg, preferences.unit_system)} ${weightUnit(preferences.unit_system)}`}
+          />
+        ) : null}
         <Summary label={t('profile.dailyCalories')} value={`${target.calories} kcal`} />
         <Summary label={t('profile.dailyProtein')} value={`${target.protein} g`} />
       </dl>

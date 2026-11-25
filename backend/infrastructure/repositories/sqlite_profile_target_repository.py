@@ -230,7 +230,10 @@ class SQLiteProfileTargetRepository:
                 current_row = _latest_goal_row(connection, user_id)
                 if current_row is not None:
                     current = _goal_from_row(current_row)
-                    if current.goal == goal.goal:
+                    if (
+                        current.goal == goal.goal
+                        and current.target_weight_kg == goal.target_weight_kg
+                    ):
                         return current
                 if _goal_at_effective_from(
                     connection, user_id, goal.effective_from
@@ -649,6 +652,7 @@ def _goal_from_row(row) -> GoalVersion:
         id=row["id"],
         user_id=row["user_id"],
         goal=row["goal"],
+        target_weight_kg=row["target_weight_kg"],
         effective_from=row["effective_from"],
         created_at=row["created_at"],
     )
@@ -695,10 +699,10 @@ def _insert_goal(
     connection.execute(
         """
         INSERT INTO overall_goal_versions (
-            id, user_id, goal, effective_from, created_at
-        ) VALUES (?, ?, ?, ?, ?)
+            id, user_id, goal, target_weight_kg, effective_from, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (goal_id, user_id, goal.goal, goal.effective_from, created_at),
+        (goal_id, user_id, goal.goal, goal.target_weight_kg, goal.effective_from, created_at),
     )
 
 

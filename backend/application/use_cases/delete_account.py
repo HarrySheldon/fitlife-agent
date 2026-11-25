@@ -31,6 +31,8 @@ class DeleteAccount:
         coach_conversations: CoachConversationExportPort | None = None,
         plans=None,
         plan_tasks=None,
+        user_preferences=None,
+        model_connections=None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identities = identities
@@ -46,6 +48,8 @@ class DeleteAccount:
         # the tasks would leave a record of what the user was trying to change,
         # which is exactly the kind of residue a deletion must not leave.
         self.plan_tasks = plan_tasks
+        self.user_preferences = user_preferences
+        self.model_connections = model_connections
 
     def execute(
         self,
@@ -136,6 +140,10 @@ class DeleteAccount:
                     self.plans.delete_user_data(user_id)
                 if self.plan_tasks is not None:
                     self.plan_tasks.delete_user_data(user_id)
+                if self.user_preferences is not None:
+                    self.user_preferences.delete_user_data(user_id)
+                if self.model_connections is not None:
+                    self.model_connections.delete_user_data(user_id)
             except (OSError, ValueError, sqlite3.Error):
                 if staged_quarantine is not None:
                     _restore_quarantine(

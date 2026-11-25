@@ -86,8 +86,10 @@ def test_factory_policy_resolution_does_not_read_user_connections(tmp_path, monk
     from backend.config import Settings
     from backend.infrastructure.agent_runtime import factory
     from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
+    from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
     reads = []
     monkeypatch.setattr(FileModelConnectionRepository, "get", lambda self, user_id: reads.append(user_id))
+    monkeypatch.setattr(SQLiteModelConnectionRepository, "get", lambda self, user_id: reads.append(user_id))
     monkeypatch.setattr(factory, "get_settings", lambda: Settings(data_dir=tmp_path))
     runtime = isolated_agent_runtime()
     runtime.resolver.resolve("chat", "u")

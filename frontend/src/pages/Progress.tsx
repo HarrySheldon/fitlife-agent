@@ -99,6 +99,17 @@ export function Progress() {
     return data.exercises.find((item) => item.exercise_key === selectedExerciseKey) ?? data.exercises[0]
   }, [data?.exercises, selectedExerciseKey])
 
+  const weightAxisDomain = useMemo<
+    ['auto', 'auto'] | [(dataMin: number) => number, (dataMax: number) => number]
+  >(() => {
+    const target = data?.kpis.target_weight_kg
+    if (target == null) return ['auto', 'auto']
+    return [
+      (dataMin: number) => Math.floor(Math.min(Number.isFinite(dataMin) ? dataMin : target, target) - 1),
+      (dataMax: number) => Math.ceil(Math.max(Number.isFinite(dataMax) ? dataMax : target, target) + 1),
+    ]
+  }, [data?.kpis.target_weight_kg])
+
   function askCoachAboutProgress(prompt: string) {
     const params = new URLSearchParams({
       surface: 'progress',
@@ -269,7 +280,7 @@ export function Progress() {
                     <ComposedChart data={data.body_summary.trend}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2d9cb" />
                       <XAxis dataKey="date" tickFormatter={(v: string) => v.slice(5)} />
-                      <YAxis yAxisId="weight" domain={['auto', 'auto']} width={44} />
+                      <YAxis yAxisId="weight" domain={weightAxisDomain} width={44} />
                       {(showBodyFat || showWaist) ? (
                         <YAxis yAxisId="secondary" orientation="right" domain={['auto', 'auto']} width={40} />
                       ) : null}
@@ -279,9 +290,10 @@ export function Progress() {
                         <ReferenceLine
                           yAxisId="weight"
                           y={data.kpis.target_weight_kg}
+                          ifOverflow="extendDomain"
                           stroke="#8f5c38"
                           strokeDasharray="4 4"
-                          label={{ value: t('progress.kgValue', { value: data.kpis.target_weight_kg }), fill: '#8f5c38', fontSize: 11 }}
+                          label={{ value: t('progress.kgValue', { value: data.kpis.target_weight_kg }), fill: '#8f5c38', fontSize: 11, position: 'insideTopRight' }}
                         />
                       ) : null}
                       <Line

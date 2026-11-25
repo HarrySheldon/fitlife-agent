@@ -6,7 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
-from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.main import create_app
 from backend.tools import auth_store as auth_store_module
 from backend.tools.data_access import DEFAULT_PROFILE
@@ -90,7 +91,7 @@ def test_optional_auth_rejects_expired_token(monkeypatch):
 def test_optional_auth_rejects_version_stale_token(monkeypatch):
     client = build_client(monkeypatch)
     session = register(client, "version-stale-token")
-    FileIdentityRepository(get_settings().data_dir).rotate_token_version(
+    SQLiteIdentityRepository(get_database(), get_settings().data_dir).rotate_token_version(
         session["user"]["user_id"]
     )
 

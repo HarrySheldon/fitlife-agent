@@ -113,6 +113,7 @@ def update_overall_goal(
         user.user_id,
         GoalVersionInput(
             goal=payload.goal,
+            target_weight_kg=payload.target_weight_kg,
             effective_from=_canonical_utc(payload.effective_from),
         ),
     )

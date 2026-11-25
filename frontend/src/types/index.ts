@@ -70,12 +70,14 @@ export interface OverallGoalVersion {
   id: string
   user_id: string
   goal: OverallGoal
+  target_weight_kg?: number | null
   effective_from: string
   created_at: string
 }
 
 export interface OverallGoalVersionUpdate {
   goal: OverallGoal
+  target_weight_kg?: number | null
   effective_from: string
 }
 

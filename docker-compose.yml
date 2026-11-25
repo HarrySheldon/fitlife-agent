@@ -12,6 +12,8 @@ services:
     env_file:
       - .env.example
     environment:
+      DATA_DIR: ${DOCKER_DATA_DIR:-/app/data}
+      SEED_DIR: /app/backend/data
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
       INTERACTIVE_ENTRY_ENABLED: ${INTERACTIVE_ENTRY_ENABLED:-false}
       COACH_CONVERSATIONS_ENABLED: ${COACH_CONVERSATIONS_ENABLED:-false}
@@ -19,7 +21,7 @@ services:
       ENTRY_TASK_TTL_DAYS: ${ENTRY_TASK_TTL_DAYS:-30}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000}
     volumes:
-      - ./backend/data:/app/backend/data
+      - ${FITLIFE_DATA_DIR:-./backend/data}:/app/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
       interval: 10s

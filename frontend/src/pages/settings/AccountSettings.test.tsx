@@ -48,6 +48,7 @@ beforeEach(async () => {
   vi.spyOn(api, 'me').mockResolvedValue(user)
   vi.spyOn(api, 'authStatus').mockResolvedValue({ has_users: false })
   vi.spyOn(api, 'preferences').mockResolvedValue({ language: 'en-US', unit_system: 'metric', timezone: 'UTC' })
+  vi.spyOn(api, 'modelWorkspace').mockResolvedValue({ revision: 0, active: null, draft: null })
   await i18n.changeLanguage('en-US')
 })
 

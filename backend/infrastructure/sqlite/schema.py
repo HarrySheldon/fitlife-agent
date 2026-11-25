@@ -1436,4 +1436,50 @@ RECORDS_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=15,
+        name="account_state_and_target_weight",
+        statements=(
+            """
+            CREATE TABLE users (
+                user_id TEXT PRIMARY KEY,
+                username TEXT UNIQUE,
+                email TEXT UNIQUE,
+                phone TEXT UNIQUE,
+                display_name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                token_version INTEGER NOT NULL DEFAULT 0 CHECK (token_version >= 0),
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE user_preferences (
+                user_id TEXT PRIMARY KEY,
+                language TEXT NOT NULL CHECK (language IN ('en-US', 'zh-CN')),
+                unit_system TEXT NOT NULL CHECK (unit_system IN ('metric', 'imperial')),
+                timezone TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE model_connections (
+                user_id TEXT PRIMARY KEY,
+                schema_version INTEGER NOT NULL DEFAULT 2 CHECK (schema_version = 2),
+                revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+                active_json TEXT CHECK (
+                    active_json IS NULL OR (json_valid(active_json) AND json_type(active_json) = 'object')
+                ),
+                draft_json TEXT CHECK (
+                    draft_json IS NULL OR (json_valid(draft_json) AND json_type(draft_json) = 'object')
+                ),
+                updated_at TEXT NOT NULL
+            )
+            """,
+            """
+            ALTER TABLE overall_goal_versions
+            ADD COLUMN target_weight_kg REAL
+                CHECK (target_weight_kg IS NULL OR (target_weight_kg >= 30 AND target_weight_kg <= 300))
+            """,
+        ),
+    ),
 )

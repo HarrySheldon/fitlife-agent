@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     backend_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     data_dir: Path = BACKEND_ROOT / "data"
+    seed_dir: Path = BACKEND_ROOT / "data"
     sqlite_database_path: Path | None = None
     knowledge_base_dir: Path = BACKEND_ROOT / "knowledge_base"
 
@@ -110,6 +111,25 @@ class Settings(BaseSettings):
     @property
     def database_path(self) -> Path:
         return self.sqlite_database_path or self.data_dir / "fitlife.sqlite3"
+
+    @property
+    def runtime_database_path(self) -> Path:
+        return self.data_dir / "agent_runtime.sqlite3"
+
+    @property
+    def food_catalog_seed_path(self) -> Path:
+        return self.seed_dir / "catalog" / "foods.zh-CN.v1.json"
+
+    @property
+    def exercise_catalog_seed_path(self) -> Path:
+        return self.seed_dir / "catalog" / "exercises.zh-CN.v1.json"
+
+    @property
+    def eval_dataset_path(self) -> Path:
+        override = self.data_dir / "eval_questions.json"
+        if override.exists():
+            return override
+        return self.seed_dir / "eval_questions.json"
 
 
 @lru_cache

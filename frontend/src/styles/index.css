@@ -126,6 +126,7 @@ select {
 }
 
 .sidebar-icon-link {
+  position: relative;
   width: 34px;
   height: 34px;
   flex-shrink: 0;
@@ -144,6 +145,18 @@ select {
   background: #28433a;
   border-color: rgba(215, 179, 119, 0.55);
   color: #ffffff;
+}
+
+.sidebar-status-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #d99b38;
+  box-shadow: 0 0 0 2px #192d27;
+  pointer-events: none;
 }
 
 .nav-item {

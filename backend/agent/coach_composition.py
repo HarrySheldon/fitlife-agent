@@ -8,7 +8,8 @@ from backend.agent.tools.handlers import BoundFitnessReads
 from backend.agent.unified_coach import UnifiedCoachWorkflow
 from backend.config import get_settings
 from backend.domain.errors import configuration_error
-from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.infrastructure.model_gateway.agent_decision_adapter import StructuredDecisionAdapter
 from backend.rag.evidence import build_evidence
 from backend.rag.retriever import retrieve_detailed
@@ -85,7 +86,7 @@ def build_unified_workflow(command, repository, gateway):
     if not callable(getattr(gateway, 'parse_structured', None)):
         raise configuration_error('Unified coach requires structured JSON generation')
     settings = get_settings()
-    identities = FileIdentityRepository(settings.data_dir)
+    identities = SQLiteIdentityRepository(get_database(), settings.data_dir)
     principal = ExecutionPrincipal(command.user_id or '', authorized_domains=requested_domains(command))
     initial_token_version = identities.get_token_version(principal.owner_id)
     if initial_token_version is None:

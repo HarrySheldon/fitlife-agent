@@ -8,6 +8,8 @@ from backend.application.use_cases.account_security import ChangePassword, Revok
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.schemas import AuthSession, AuthenticatedPrincipal
 from backend.tools.auth_store import create_access_token, user_from_token
 
@@ -102,7 +104,7 @@ def test_successful_password_change_rotates_credentials_and_returns_valid_replac
     data_dir = make_data_dir()
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     get_settings.cache_clear()
-    repository = FileIdentityRepository(data_dir)
+    repository = SQLiteIdentityRepository(get_database(), data_dir)
     user = repository.register("changed-user", None, None, "password123", "Changed User")
     old_token = create_access_token(user)
 
@@ -126,19 +128,24 @@ def test_revoke_other_sessions_rotates_only_current_users_version_and_keeps_pass
     data_dir = make_data_dir()
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     get_settings.cache_clear()
-    repository = FileIdentityRepository(data_dir)
+    db = get_database()
+    repository = SQLiteIdentityRepository(db, data_dir)
     user = repository.register("revoked-user", None, None, "password123", "Revoked User")
     other = repository.register("other-user", None, None, "password456", "Other User")
     old_token = create_access_token(user)
     other_token = create_access_token(other)
-    users_path = data_dir / "users.json"
-    password_hash = json.loads(users_path.read_text(encoding="utf-8"))[0]["password_hash"]
+    with db.connection() as conn:
+        password_hash = conn.execute(
+            "SELECT password_hash FROM users WHERE user_id = ?", (user.user_id,)
+        ).fetchone()["password_hash"]
 
     replacement = RevokeOtherSessions(repository, issue_real_session).execute(principal(user))
 
-    stored_users = json.loads(users_path.read_text(encoding="utf-8"))
-    stored_user = next(item for item in stored_users if item["user_id"] == user.user_id)
-    assert stored_user["password_hash"] == password_hash
+    with db.connection() as conn:
+        stored_hash = conn.execute(
+            "SELECT password_hash FROM users WHERE user_id = ?", (user.user_id,)
+        ).fetchone()["password_hash"]
+    assert stored_hash == password_hash
     assert repository.authenticate("revoked-user", "password123") == user
     assert user_from_token(old_token) is None
     assert user_from_token(replacement.access_token) == user

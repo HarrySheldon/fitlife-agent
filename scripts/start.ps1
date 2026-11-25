@@ -14,7 +14,9 @@ $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 function Invoke-Startup {
     Assert-EnvironmentFileIsPrivate
     Initialize-Environment
+    $resolvedDataDir = Resolve-DataDirectory
     Write-Host "Local environment is ready. The deployment encryption key is configured."
+    Write-Host "Runtime data directory: $resolvedDataDir"
 
     if ($InitializeOnly) {
         return
@@ -230,6 +232,45 @@ function Invoke-QuietNative {
     finally {
         $ErrorActionPreference = $previousPreference
     }
+}
+
+function Resolve-DataDirectory {
+    $configured = Get-ConfiguredSetting -Name "FITLIFE_DATA_DIR"
+    if ($configured) {
+        $expanded = [Environment]::ExpandEnvironmentVariables($configured.Trim())
+        $candidate = if ([System.IO.Path]::IsPathRooted($expanded)) {
+            $expanded
+        }
+        else {
+            Join-Path $script:ProjectRoot $expanded
+        }
+        $resolved = [System.IO.Path]::GetFullPath($candidate)
+        if (-not (Test-Path -LiteralPath $resolved -PathType Container)) {
+            New-Item -ItemType Directory -Force -Path $resolved | Out-Null
+        }
+        [Environment]::SetEnvironmentVariable("FITLIFE_DATA_DIR", $resolved, "Process")
+        return $resolved
+    }
+
+    $defaultDir = [System.IO.Path]::GetFullPath((Join-Path $script:ProjectRoot "backend\data"))
+    if (-not (Test-Path -LiteralPath $defaultDir -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $defaultDir | Out-Null
+    }
+    return $defaultDir
+}
+
+function Get-ConfiguredSetting {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $value = [Environment]::GetEnvironmentVariable($Name, "Process")
+    if (-not $value -and (Test-Path -LiteralPath $script:EnvPath -PathType Leaf)) {
+        foreach ($line in [System.IO.File]::ReadAllLines($script:EnvPath)) {
+            if ($line -match "^$Name=(.*)$") {
+                $value = $Matches[1].Trim()
+            }
+        }
+    }
+    return $value
 }
 
 function Get-ConfiguredPort {

@@ -6,6 +6,7 @@ import pytest
 from backend.config import get_settings
 from backend.domain.model_connection import ModelConnection
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
+from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
 from backend.task_evaluation.contracts import Scenario
 from backend.task_evaluation.seeding import seed_environment
 from backend.tests.task_evaluation.test_runner import _build_client, reset_settings_cache
@@ -54,6 +55,7 @@ def test_initial_unresolved_start_uses_only_enabled_user_connection(tmp_path, mo
     def forbidden(*args, **kwargs):
         raise AssertionError('recovery must not access model configuration or provider')
     monkeypatch.setattr(FileModelConnectionRepository, 'get', forbidden)
+    monkeypatch.setattr(SQLiteModelConnectionRepository, 'get', forbidden)
     monkeypatch.setattr('backend.api.smart_entry.resolve_user_model_gateway', forbidden)
     recovered = client.get(base + '/' + created['id'], headers=actors['primary'])
     assert recovered.status_code == 200

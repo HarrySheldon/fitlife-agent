@@ -227,7 +227,10 @@ def test_cutover_user_csv_upload_imports_and_replays_from_sqlite(monkeypatch):
     headers = register_and_authorize(client)
     user_id = client.get("/auth/me", headers=headers).json()["data"]["user_id"]
     initialize_database()
-    assert LegacyCsvMigrator(get_database(), data_dir).migrate_user(user_id).status == "completed"
+    from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
+
+    assert LegacyCsvMigrator(get_database(), data_dir).migrate_user(user_id).status in {"completed", "skipped"}
+    assert get_fitness_repository().is_cutover(user_id) is True
     content = (
         b"date,meal,food,amount,calories,protein,carbs,fat\n"
         b"2026-07-09,dinner,tofu,200g,288,34.6,5.56,17.44\n"

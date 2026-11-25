@@ -42,9 +42,10 @@ class ProfileVersion(ProfileVersionInput):
 class GoalVersionInput:
     goal: OverallGoal
     effective_from: str
+    target_weight_kg: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class GoalVersion(GoalVersionInput):
     id: str
     user_id: str

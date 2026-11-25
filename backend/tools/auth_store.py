@@ -18,6 +18,8 @@ from backend.infrastructure.auth.file_identity_repository import (
     normalize_username,
     verify_password,
 )
+from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.schemas import AuthTokenClaims, AuthenticatedPrincipal, AuthenticatedUser
 
 
@@ -96,8 +98,8 @@ def _sign(payload_part: str) -> str:
     return _b64encode(digest)
 
 
-def _repository() -> FileIdentityRepository:
-    return FileIdentityRepository(get_settings().data_dir)
+def _repository() -> SQLiteIdentityRepository:
+    return SQLiteIdentityRepository(get_database(), get_settings().data_dir)
 
 
 def _b64encode(data: bytes) -> str:

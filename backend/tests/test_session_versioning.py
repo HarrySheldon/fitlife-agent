@@ -12,7 +12,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
-from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository, hash_password
+from backend.infrastructure.auth.file_identity_repository import hash_password
+from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
+from backend.infrastructure.sqlite.runtime import get_database
 from backend.main import create_app
 from backend.tools import auth_store as auth_store_module
 from backend.tools.auth_store import authenticate_user, create_access_token, register_user, user_from_token
@@ -37,7 +39,7 @@ def test_token_is_bound_to_current_integer_identity_version(monkeypatch):
     assert type(payload["ver"]) is int
     assert user_from_token(token) == user
 
-    FileIdentityRepository(data_dir).rotate_token_version(user.user_id)
+    SQLiteIdentityRepository(get_database(), data_dir).rotate_token_version(user.user_id)
 
     assert user_from_token(token) is None
 
@@ -53,7 +55,7 @@ def test_legacy_token_without_version_is_version_zero_until_rotation(monkeypatch
 
     assert user_from_token(legacy_token) == user
 
-    FileIdentityRepository(data_dir).rotate_token_version(user.user_id)
+    SQLiteIdentityRepository(get_database(), data_dir).rotate_token_version(user.user_id)
 
     assert user_from_token(legacy_token) is None
 
@@ -86,7 +88,8 @@ def test_new_token_for_legacy_identity_migrates_and_carries_version_zero(monkeyp
     token = create_access_token(user)
 
     assert _decode_payload(token)["ver"] == 0
-    assert json.loads(users_path.read_text(encoding="utf-8"))[0]["token_version"] == 0
+    assert SQLiteIdentityRepository(get_database(), data_dir).get_token_version("legacy-identity") == 0
+    assert "token_version" not in json.loads(users_path.read_text(encoding="utf-8"))[0]
 
 
 def test_protected_request_rejects_older_token_after_rotation(monkeypatch):
@@ -100,7 +103,7 @@ def test_protected_request_rejects_older_token_after_rotation(monkeypatch):
 
     assert client.get("/auth/me", headers=headers).status_code == 200
 
-    FileIdentityRepository(data_dir).rotate_token_version(user.user_id)
+    SQLiteIdentityRepository(get_database(), data_dir).rotate_token_version(user.user_id)
     rejected = client.get("/auth/me", headers=headers)
 
     assert rejected.status_code == 401

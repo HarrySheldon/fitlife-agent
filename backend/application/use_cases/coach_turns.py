@@ -539,13 +539,17 @@ class CoachTurnService:
         if turn.status in TERMINAL_TURN_STATUSES:
             return
         cancelled = execution.abort.aborted or turn.cancel_requested_at is not None
-        self.repository.publish_turn(
-            user_id,
-            turn_id,
-            status="cancelled" if cancelled else "failed",
-            updated_at=self.clock(),
-            error_code=None if cancelled else _error_code(error),
-        )
+        try:
+            self.repository.publish_turn(
+                user_id,
+                turn_id,
+                status="cancelled" if cancelled else "failed",
+                updated_at=self.clock(),
+                error_code=None if cancelled else _error_code(error),
+            )
+        except KeyError:
+            # Account deletion can remove the turn row after get_turn() above.
+            return
 
     def _execution(self, turn_id: str) -> _Execution | None:
         with self._lock:

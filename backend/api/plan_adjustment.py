@@ -53,7 +53,7 @@ from backend.application.use_cases.plan_adjustment import (
 from backend.application.ports.plan_repository import legacy_head
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError, configuration_error
-from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
 from backend.infrastructure.model_gateway.agent_decision_adapter import (
     StructuredDecisionAdapter,
 )
@@ -74,10 +74,11 @@ from backend.infrastructure.repositories.sqlite_profile_target_repository import
 from backend.infrastructure.repositories.sqlite_task_budget_repository import (
     SQLiteTaskBudgetRepository,
 )
+from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.sqlite.runtime import get_database
 from backend.schemas import AuthenticatedUser
 from backend.domain.user_preferences import UserPreferences
-from backend.infrastructure.settings.file_user_preferences_repository import FileUserPreferencesRepository
+from backend.infrastructure.settings.sqlite_user_preferences_repository import SQLiteUserPreferencesRepository
 
 
 router = APIRouter(prefix="/api/v1/plan-adjustment-tasks")
@@ -224,7 +225,9 @@ def _runner(settings):
     The domains come from the task row, not from the request text, so a task that
     was granted training only cannot widen itself by describing a diet.
     """
-    identities = FileIdentityRepository(settings.data_dir)
+    database = SQLiteDatabase(settings.database_path)
+    identities = SQLiteIdentityRepository(database, settings.data_dir)
+    preferences_repo = SQLiteUserPreferencesRepository(database, settings.data_dir)
 
     async def run(session, binding, request: RoundRequest):
         owner = session.owner
@@ -276,7 +279,7 @@ def _runner(settings):
         command = AgentCommand(
             "plan_adjustment", request.instructions, owner, surface="plan",
             task_ref=TaskRef(snapshot.task_id, snapshot.version),
-            language=(FileUserPreferencesRepository(settings.data_dir).get(owner) or UserPreferences()).language,
+            language=(preferences_repo.get(owner) or UserPreferences()).language,
         )
         runtime = AgentRuntime(
             task_budget_binding_factory=lambda user, ref: binding)

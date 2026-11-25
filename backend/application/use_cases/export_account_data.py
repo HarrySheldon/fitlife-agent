@@ -18,7 +18,9 @@ from backend.application.ports.coach_conversation_repository import (
 from backend.application.ports.model_connection_repository import ModelConnectionRepository
 from backend.application.ports.plan_repository import PlanRepository, StoredPlan
 from backend.application.ports.report_repository import StoredWeeklyReport
+from backend.application.ports.user_preferences_repository import UserPreferencesRepository
 from backend.domain.errors import account_export_failed_error
+from backend.domain.model_connection import ModelConnection
 
 
 _USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -60,6 +62,9 @@ _MODEL_CONNECTION_FIELDS = (
 )
 _FILE_EXPORTS = (
     ("preferences.json", "preferences.json", _PREFERENCE_FIELDS),
+    ("profile.json", "user_profile.json", _PROFILE_FIELDS),
+)
+_SQLITE_PREF_FILE_EXPORTS = (
     ("profile.json", "user_profile.json", _PROFILE_FIELDS),
 )
 _RECORD_EXPORTS = (
@@ -117,6 +122,7 @@ class ExportAccountData:
         identities: IdentityRepository,
         model_connections: ModelConnectionRepository | None = None,
         *,
+        user_preferences: UserPreferencesRepository | None = None,
         entry_tasks: EntryTaskExportPort | None = None,
         coach_conversations: CoachConversationExportPort | None = None,
         plans: PlanRepository | None = None,
@@ -125,6 +131,7 @@ class ExportAccountData:
         self.data_dir = Path(data_dir)
         self.identities = identities
         self.model_connections = model_connections
+        self.user_preferences = user_preferences
         self.entry_tasks = entry_tasks
         self.coach_conversations = coach_conversations
         # The authoritative plan store, when the deployment has one. Without it
@@ -144,18 +151,70 @@ class ExportAccountData:
         if not _USER_ID_PATTERN.fullmatch(user_id):
             raise ValueError("Invalid user id")
         budget = _ExportBudget()
-        identity_snapshot = budget.read_snapshot(self.data_dir, "users.json")
-        if identity_snapshot is None:
-            raise ValueError("Identity source not found")
-        identity = self.identities.project_export_metadata(user_id, identity_snapshot)
+        export_metadata = getattr(self.identities, "export_metadata", None)
+        if callable(export_metadata):
+            identity = export_metadata(user_id)
+        else:
+            identity_snapshot = budget.read_snapshot(self.data_dir, "users.json")
+            if identity_snapshot is None:
+                raise ValueError("Identity source not found")
+            identity = self.identities.project_export_metadata(user_id, identity_snapshot)
         if identity is None:
             raise ValueError("Identity not found")
 
         entries: dict[str, bytes] = {}
-        budget.add_entry(entries, "identity.json", _stable_json(asdict(identity)))
+        identity_bytes = _stable_json(asdict(identity))
+        if callable(export_metadata):
+            limit = min(MAX_SOURCE_BYTES, max(0, MAX_EXPORT_BYTES - budget.source_bytes))
+            if len(identity_bytes) > limit:
+                raise ValueError("Identity source exceeds the size limit")
+            budget.source_bytes += len(identity_bytes)
+        budget.add_entry(entries, "identity.json", identity_bytes)
+
+        if self.user_preferences is not None:
+            prefs = self.user_preferences.get(user_id)
+            if prefs is not None:
+                prefs_bytes = _stable_json(
+                    _project_fields(prefs.model_dump(mode="json"), _PREFERENCE_FIELDS)
+                )
+                limit = min(MAX_SOURCE_BYTES, max(0, MAX_EXPORT_BYTES - budget.source_bytes))
+                if len(prefs_bytes) > limit:
+                    raise ValueError("Preferences source exceeds the size limit")
+                budget.source_bytes += len(prefs_bytes)
+                budget.add_entry(entries, "preferences.json", prefs_bytes)
+
+        use_repo_models = bool(
+            self.model_connections is not None
+            and callable(getattr(self.model_connections, "has_stored_workspace", None))
+        )
+        if use_repo_models and self.model_connections.has_stored_workspace(user_id):
+            workspace = self.model_connections.get_workspace(user_id)
+            model_public = (workspace.active or ModelConnection()).to_public()
+            model_bytes = _stable_json(
+                _project_fields(model_public.model_dump(mode="json"), _MODEL_CONNECTION_FIELDS)
+            )
+            limit = min(MAX_SOURCE_BYTES, max(0, MAX_EXPORT_BYTES - budget.source_bytes))
+            if len(model_bytes) > limit:
+                raise ValueError("Model connection source exceeds the size limit")
+            budget.source_bytes += len(model_bytes)
+            budget.add_entry(entries, "model-connection.json", model_bytes)
+            if workspace.draft is not None:
+                draft_bytes = _stable_json(
+                    _project_fields(
+                        workspace.draft.to_public().model_dump(mode="json"),
+                        _MODEL_CONNECTION_FIELDS,
+                    )
+                )
+                limit = min(MAX_SOURCE_BYTES, max(0, MAX_EXPORT_BYTES - budget.source_bytes))
+                if len(draft_bytes) > limit:
+                    raise ValueError("Model connection draft exceeds the size limit")
+                budget.source_bytes += len(draft_bytes)
+                budget.add_entry(entries, "model-connection-draft.json", draft_bytes)
+
         user_root = _validated_user_root(self.data_dir, user_id)
         if user_root.exists():
-            for archive_path, filename, fields in _FILE_EXPORTS:
+            file_exports = _SQLITE_PREF_FILE_EXPORTS if self.user_preferences is not None else _FILE_EXPORTS
+            for archive_path, filename, fields in file_exports:
                 snapshot = budget.read_snapshot(
                     user_root,
                     filename,
@@ -198,7 +257,7 @@ class ExportAccountData:
                             f"{archive_root}/{filename}",
                             _stable_json(projected),
                         )
-            if self.model_connections is not None:
+            if self.model_connections is not None and not use_repo_models:
                 model_snapshot = budget.read_snapshot(
                     user_root,
                     "model_connection.json",

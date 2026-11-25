@@ -61,14 +61,13 @@ def resolve_authoritative_profile_context(
         else float(legacy_profile.daily_protein_target or 0)
     )
 
-    if setup.goal is not None and setup.goal.goal == "maintenance":
-        target_weight_kg: float | None = None
-    elif (
-        has_sqlite_setup
-        and legacy_profile.target_weight_kg is not None
-        and DEFAULT_PROFILE.target_weight_kg is not None
-        and float(legacy_profile.target_weight_kg) == float(DEFAULT_PROFILE.target_weight_kg)
-    ):
+    if setup.goal is not None:
+        target_weight_kg: float | None = (
+            float(setup.goal.target_weight_kg)
+            if setup.goal.target_weight_kg is not None
+            else None
+        )
+    elif has_sqlite_setup or is_synthetic_default:
         target_weight_kg = None
     else:
         target_weight_kg = (

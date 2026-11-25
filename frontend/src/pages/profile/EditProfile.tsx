@@ -155,7 +155,12 @@ export function EditProfile() {
           title={t('profile.overallGoal')}
           description={t('profile.overallGoalDescription')}
         >
-          <OverallGoalForm goal={setup.goal} saving={saving} onSave={updateOverallGoal} />
+          <OverallGoalForm
+            goal={setup.goal}
+            unitSystem={preferences.unit_system}
+            saving={saving}
+            onSave={updateOverallGoal}
+          />
         </ProfileSection>
 
         <ProfileSection

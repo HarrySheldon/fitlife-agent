@@ -95,6 +95,7 @@ class OverallGoalUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     goal: Literal["fat_loss", "maintenance", "muscle_gain"]
+    target_weight_kg: float | None = Field(default=None, ge=30, le=300)
     effective_from: UtcAwareDatetime
 
 

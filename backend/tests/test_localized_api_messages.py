@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
 from backend.i18n import language_from_accept_language, translate_public_message
-from backend.infrastructure.settings.file_user_preferences_repository import (
-    FileUserPreferencesRepository,
+from backend.infrastructure.settings.sqlite_user_preferences_repository import (
+    SQLiteUserPreferencesRepository,
 )
 from backend.main import create_app
 
@@ -178,7 +178,7 @@ def test_upload_messages_use_account_language_and_invalid_files_have_stable_code
     success = client.post(
         "/upload/meals",
         headers=localized_headers,
-        files={"file": ("meals.csv", b"date,name\n2026-07-14,Lunch\n", "text/csv")},
+        files={"file": ("meals.csv", b"date,meal,food,amount,calories,protein,carbs,fat\n2026-07-14,Lunch,Tofu,200g,160,16,8,8\n", "text/csv")},
     )
     invalid = client.post(
         "/upload/workouts",
@@ -219,7 +219,7 @@ def test_application_error_survives_preferences_read_failure(
     def fail_preferences_read(_repository, _user_id):
         raise OSError("preferences unavailable")
 
-    monkeypatch.setattr(FileUserPreferencesRepository, "get", fail_preferences_read)
+    monkeypatch.setattr(SQLiteUserPreferencesRepository, "get", fail_preferences_read)
     if accept_language is not None:
         headers["Accept-Language"] = accept_language
 
@@ -249,7 +249,7 @@ def test_validation_error_survives_preferences_read_failure(
     def fail_preferences_read(_repository, _user_id):
         raise OSError("preferences unavailable")
 
-    monkeypatch.setattr(FileUserPreferencesRepository, "get", fail_preferences_read)
+    monkeypatch.setattr(SQLiteUserPreferencesRepository, "get", fail_preferences_read)
     if accept_language is not None:
         headers["Accept-Language"] = accept_language
 

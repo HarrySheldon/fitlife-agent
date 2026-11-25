@@ -16,7 +16,7 @@ _lock = RLock()
 
 def get_agent_runtime():
     global _runtime, _path
-    path = (Path(get_settings().data_dir) / "agent_runtime.sqlite3").resolve()
+    path = get_settings().runtime_database_path.resolve()
     with _lock:
         if _runtime is None or path != _path:
             repository = SQLiteRunRepository(path)

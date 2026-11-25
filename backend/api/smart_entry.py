@@ -37,7 +37,7 @@ from backend.domain.smart_entry import CatalogChoice, ResolvedCandidate
 from backend.infrastructure.model_gateway.factory import (
     resolve_user_model_gateway,
 )
-from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
+from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
 from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
     SQLiteExerciseCatalogRepository,
 )
@@ -78,7 +78,7 @@ def get_interactive_entry_service() -> InteractiveEntryService:
     settings = get_settings()
     def model_available(user):
         # Metadata admission only. Runtime resolves and decrypts after its guards.
-        connection = FileModelConnectionRepository(settings.data_dir).get(user)
+        connection = SQLiteModelConnectionRepository(database, settings.data_dir).get(user)
         return bool(connection and connection.enabled and connection.encrypted_api_key)
     return InteractiveEntryService(
         SQLiteSmartEntryRepository(database), SQLiteFoodCatalogRepository(database),

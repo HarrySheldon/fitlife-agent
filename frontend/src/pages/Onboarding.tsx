@@ -78,6 +78,7 @@ export function Onboarding() {
   const [step, setStep] = useState<Step>(0)
   const [profile, setProfile] = useState<ProfileFields>(defaultProfile)
   const [goal, setGoal] = useState<OverallGoal>('maintenance')
+  const [targetWeightInput, setTargetWeightInput] = useState<string>('')
   const [manualMode, setManualMode] = useState(false)
   const [deterministicTargets, setDeterministicTargets] = useState<DailyTargetValues>(emptyTargets)
   const [manualTargets, setManualTargets] = useState<DailyTargetValues>(emptyTargets)
@@ -99,7 +100,10 @@ export function Onboarding() {
       })
       savedActivity.current = setup.profile.activity_level
     }
-    if (setup.goal) setGoal(setup.goal.goal)
+    if (setup.goal) {
+      setGoal(setup.goal.goal)
+      setTargetWeightInput(setup.goal.target_weight_kg != null ? String(setup.goal.target_weight_kg) : '')
+    }
     if (setup.target) {
       const values = targetValues(setup.target)
       setManualTargets(values)
@@ -168,8 +172,11 @@ export function Onboarding() {
         result = mutation.recalculation_preview
         blocked = mutation.recalculation_restriction
       }
+      const trimmedTargetWeight = targetWeightInput.trim()
+      const targetWeightKg = trimmedTargetWeight === '' ? null : Number(trimmedTargetWeight)
       const mutation = await updateOverallGoal({
         goal,
+        target_weight_kg: targetWeightKg,
         effective_from: effectiveFrom(),
       })
       result = mutation.recalculation_preview ?? result
@@ -347,6 +354,18 @@ export function Onboarding() {
                     <option value={value} key={value}>{t(`onboarding.goal.activityOptions.${value}`)}</option>
                   ))}
                 </select>
+              </label>
+              <label className="onboarding-field">
+                <span>{t('onboarding.goal.targetWeightOptional')}</span>
+                <input
+                  type="number"
+                  min={30}
+                  max={300}
+                  step="0.1"
+                  placeholder={t('onboarding.goal.targetWeightPlaceholder')}
+                  value={targetWeightInput}
+                  onChange={(event) => setTargetWeightInput(event.target.value)}
+                />
               </label>
               <TaskFeedback error={localError ?? error} stale={stalePreview} />
               <TaskActions

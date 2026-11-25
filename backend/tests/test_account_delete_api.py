@@ -11,9 +11,15 @@ from backend.application.ports.profile_target_repository import (
     ProfileVersionInput,
     TargetVersionInput,
 )
-from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
+from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
 from backend.infrastructure.repositories.sqlite_profile_target_repository import (
     SQLiteProfileTargetRepository,
+)
+from backend.infrastructure.settings.sqlite_model_connection_repository import (
+    SQLiteModelConnectionRepository,
+)
+from backend.infrastructure.settings.sqlite_user_preferences_repository import (
+    SQLiteUserPreferencesRepository,
 )
 from backend.infrastructure.sqlite.runtime import get_database, initialize_database
 from backend.main import create_app
@@ -158,11 +164,11 @@ def test_identity_failure_is_localized_and_can_retry_after_storage_is_missing(mo
         json={"language": "zh-CN"},
     ).status_code == 200
 
-    def fail_identity_write(_repository, _source: Path, _destination: Path) -> None:
+    def fail_identity_write(_repository, _user_id: str) -> bool:
         raise OSError("private identity write detail")
 
     with monkeypatch.context() as deletion_patch:
-        deletion_patch.setattr(FileIdentityRepository, "replace_file", fail_identity_write)
+        deletion_patch.setattr(SQLiteIdentityRepository, "_delete_user_row", fail_identity_write)
         failed = client.request(
             "DELETE",
             "/account",
@@ -308,10 +314,20 @@ def _seed_versioned_setup(repository, user_id: str, weight_kg: float = 70):
 
 
 def test_account_deletion_erases_only_authenticated_users_versioned_sqlite_data(monkeypatch):
-    client, _ = build_client(monkeypatch)
+    client, data_dir = build_client(monkeypatch)
     current = register(client, "sqlite-delete-user")
     other = register(client, "sqlite-preserved-user", "password456")
-    repository = SQLiteProfileTargetRepository(get_database())
+    db = get_database()
+    repository = SQLiteProfileTargetRepository(db)
+    prefs_repo = SQLiteUserPreferencesRepository(db, data_dir)
+    models_repo = SQLiteModelConnectionRepository(db, data_dir)
+    from backend.domain.model_connection import ModelConnection
+    from backend.domain.user_preferences import UserPreferences
+
+    prefs_repo.save(current["user"]["user_id"], UserPreferences(language="zh-CN"))
+    prefs_repo.save(other["user"]["user_id"], UserPreferences(language="en-US"))
+    models_repo.save(current["user"]["user_id"], ModelConnection(model="m-del", encrypted_api_key="enc-1"))
+    models_repo.save(other["user"]["user_id"], ModelConnection(model="m-keep", encrypted_api_key="enc-2"))
     _seed_versioned_setup(repository, current["user"]["user_id"])
     other_target = _seed_versioned_setup(
         repository, other["user"]["user_id"], weight_kg=80
@@ -330,6 +346,13 @@ def test_account_deletion_erases_only_authenticated_users_versioned_sqlite_data(
     assert deleted_setup.goal is None
     assert deleted_setup.target is None
     assert repository.get_setup(other["user"]["user_id"]).target == other_target
+    with db.connection() as connection:
+        assert connection.execute("SELECT 1 FROM users WHERE user_id = ?", (current["user"]["user_id"],)).fetchone() is None
+        assert connection.execute("SELECT 1 FROM user_preferences WHERE user_id = ?", (current["user"]["user_id"],)).fetchone() is None
+        assert connection.execute("SELECT 1 FROM model_connections WHERE user_id = ?", (current["user"]["user_id"],)).fetchone() is None
+        assert connection.execute("SELECT 1 FROM users WHERE user_id = ?", (other["user"]["user_id"],)).fetchone() is not None
+        assert connection.execute("SELECT 1 FROM user_preferences WHERE user_id = ?", (other["user"]["user_id"],)).fetchone() is not None
+        assert connection.execute("SELECT 1 FROM model_connections WHERE user_id = ?", (other["user"]["user_id"],)).fetchone() is not None
 
 
 def test_sqlite_cleanup_failure_restores_files_and_preserves_identity(monkeypatch):

@@ -42,6 +42,11 @@ def data_path(filename: str, user_id: str | None = None) -> Path:
     return get_settings().data_dir / "users" / user_id / filename
 
 
+def seed_path(filename: str) -> Path:
+    """Resolve a bundled read-only seed asset independent of runtime DATA_DIR."""
+    return get_settings().seed_dir / filename
+
+
 def ensure_user_data(user_id: str) -> Path:
     data_dir = get_settings().data_dir
     with user_lifecycle_guard(data_dir, user_id):
@@ -146,7 +151,17 @@ def write_data_bytes(filename: str, content: bytes, user_id: str | None = None) 
 
 
 def read_eval_cases() -> list[EvalCase]:
-    path = data_path("eval_questions.json")
+    candidate = data_path("eval_questions.json")
+    settings = get_settings()
+    if candidate.exists():
+        path = candidate
+    elif (
+        candidate == settings.data_dir / "eval_questions.json"
+        and settings.seed_dir != settings.data_dir
+    ):
+        path = settings.eval_dataset_path
+    else:
+        path = candidate
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, list):
         raise ValueError("Evaluation dataset must be a JSON array")

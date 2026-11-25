@@ -127,7 +127,9 @@ def test_compose_health_contract_uses_configurable_ports_and_dependency():
     assert "${FRONTEND_PORT:-3000}:80" in compose
     assert "/health/ready" in compose
     assert "condition: service_healthy" in compose
-    assert "./backend/data:/app/backend/data" in compose
+    assert "${FITLIFE_DATA_DIR:-./backend/data}:/app/data" in compose
+    assert "DATA_DIR: ${DOCKER_DATA_DIR:-/app/data}" in compose
+    assert "SEED_DIR: /app/backend/data" in compose
 
 
 def test_compose_exposes_disabled_by_default_entry_task_configuration():

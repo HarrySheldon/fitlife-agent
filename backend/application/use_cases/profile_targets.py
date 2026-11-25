@@ -96,16 +96,17 @@ class FileLegacyProfileProjection:
         target: TargetVersion,
     ) -> None:
         def update(current):
-            return current.model_copy(
-                update={
-                    "height_cm": profile.height_cm,
-                    "weight_kg": profile.weight_kg,
-                    "age": profile.age,
-                    "goal": goal.goal,
-                    "daily_calorie_target": int(target.calories),
-                    "daily_protein_target": int(target.protein),
-                }
-            )
+            fields: dict[str, object] = {
+                "height_cm": profile.height_cm,
+                "weight_kg": profile.weight_kg,
+                "age": profile.age,
+                "goal": goal.goal,
+                "daily_calorie_target": int(target.calories),
+                "daily_protein_target": int(target.protein),
+            }
+            if goal.target_weight_kg is not None:
+                fields["target_weight_kg"] = goal.target_weight_kg
+            return current.model_copy(update=fields)
 
         self.repository.update_profile_atomically(update, user_id)
 

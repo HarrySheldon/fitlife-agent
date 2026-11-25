@@ -18,6 +18,10 @@ from backend.infrastructure.catalog.seed_foods import (
     DEFAULT_SEED_PATH as FOOD_SEED_PATH,
     seed_bundled_foods,
 )
+from backend.infrastructure.migration.legacy_account_state import (
+    MIGRATION_KEY as ACCOUNT_STATE_MIGRATION_KEY,
+    LegacyAccountStateMigrator,
+)
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
 from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
     SQLiteCoachConversationRepository,
@@ -58,8 +62,15 @@ def run_startup(
 ) -> StartupSummary:
     global _last_summary
     started = time.monotonic()
+    settings = get_settings()
     database = database or get_database()
-    data_dir = Path(data_dir or get_settings().data_dir)
+    data_dir = Path(data_dir or settings.data_dir)
+    food_seed_path = settings.food_catalog_seed_path if settings.food_catalog_seed_path.exists() else FOOD_SEED_PATH
+    exercise_seed_path = (
+        settings.exercise_catalog_seed_path
+        if settings.exercise_catalog_seed_path.exists()
+        else EXERCISE_SEED_PATH
+    )
 
     # The safety rule packs are validated here rather than on first use. A broken,
     # missing or unsupported pack must refuse to start, not fail the first request
@@ -103,10 +114,25 @@ def run_startup(
         (), at=datetime.now(timezone.utc)
     )
 
+    account_phase_started = time.monotonic()
+    account_result = LegacyAccountStateMigrator(database, data_dir).migrate()
+    _event(
+        operation="legacy_account_state_import",
+        version=ACCOUNT_STATE_MIGRATION_KEY,
+        status=account_result.status,
+        counts={
+            "users_imported": account_result.users_imported,
+            "preferences_imported": account_result.preferences_imported,
+            "model_connections_imported": account_result.model_connections_imported,
+        },
+        duration_ms=_elapsed(account_phase_started),
+        checksum_prefix="",
+    )
+
     catalog_completed = catalog_failed = 0
     for operation, path, importer in (
-        ("food_catalog_import", FOOD_SEED_PATH, seed_bundled_foods),
-        ("exercise_catalog_import", EXERCISE_SEED_PATH, seed_bundled_exercises),
+        ("food_catalog_import", food_seed_path, seed_bundled_foods),
+        ("exercise_catalog_import", exercise_seed_path, seed_bundled_exercises),
     ):
         phase_started = time.monotonic()
         version, checksum = _source_identity(path)
@@ -150,7 +176,10 @@ def run_startup(
 
     legacy_completed = legacy_skipped = legacy_failed = 0
     migrator = LegacyCsvMigrator(database, data_dir)
-    for user_id in _registered_user_ids(data_dir):
+    all_user_ids = tuple(
+        dict.fromkeys((*_registered_user_ids(data_dir), *_sqlite_user_ids(database)))
+    )
+    for user_id in all_user_ids:
         phase_started = time.monotonic()
         try:
             result = migrator.migrate_user(user_id)
@@ -257,6 +286,20 @@ def _registered_user_ids(data_dir: Path) -> tuple[str, ...]:
         if isinstance(item, dict)
         and isinstance((user_id := item.get("user_id")), str)
     )
+
+
+def _sqlite_user_ids(database: SQLiteDatabase) -> tuple[str, ...]:
+    with database.connection() as connection:
+        has_table = (
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+            ).fetchone()
+            is not None
+        )
+        if not has_table:
+            return ()
+        rows = connection.execute("SELECT user_id FROM users").fetchall()
+    return tuple(row["user_id"] for row in rows if isinstance(row["user_id"], str))
 
 
 def _source_identity(path: Path) -> tuple[str, str]:
