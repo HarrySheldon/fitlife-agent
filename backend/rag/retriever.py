@@ -1,5 +1,8 @@
 ﻿from __future__ import annotations
 
+import time
+
+from backend.agent.telemetry import SafeTelemetryContext, active_telemetry_context
 from backend.config import get_settings
 from backend.infrastructure.postgres.database import PostgresDatabase
 from backend.infrastructure.postgres.runtime import get_database
@@ -77,64 +80,89 @@ def retrieve_detailed(
     reranker=None,
     per_source_cap: int = 2,
     allow_build: bool | None = None,
+    telemetry=None,
 ) -> RetrievalResult:
     """The full answer: status, hits, release, mode and why it fell back."""
+    tel = SafeTelemetryContext(telemetry) if telemetry is not None else SafeTelemetryContext(active_telemetry_context())
+    started = time.monotonic()
     chunks = ensure_chunk_identity(load_knowledge_chunks())
     provider = provider or build_embedding_provider()
     settings = get_settings()
     db = _resolve_database(database)
     effective_allow_build = settings.rag_allow_request_build if allow_build is None else allow_build
 
-    try:
-        manifest, release_chunks = _load_or_build_release(
-            chunks,
-            provider=provider,
-            database=db,
-            allow_build=effective_allow_build,
-        )
-        release_id = manifest.release_id
-        vector_candidates = _vector_candidates(
-            query,
-            database=db,
-            release_id=release_id,
-            provider=provider,
-            limit=len(release_chunks) or len(chunks),
-        )
-    except _IndexStaleError:
-        return RetrievalResult.unavailable(reason="index_stale")
-    except Exception:
-        return RetrievalResult.unavailable(reason="index_error")
+    with tel.sync_span("fitlife.rag.retrieve", {"provider": str(getattr(provider, "provider_name", "unknown")), "model": str(getattr(provider, "model_name", "unknown"))}) as retrieve_span:
+        try:
+            manifest, release_chunks = _load_or_build_release(
+                chunks,
+                provider=provider,
+                database=db,
+                allow_build=effective_allow_build,
+            )
+            release_id = manifest.release_id
+            vector_candidates = _vector_candidates(
+                query,
+                database=db,
+                release_id=release_id,
+                provider=provider,
+                limit=len(release_chunks) or len(chunks),
+            )
+        except _IndexStaleError:
+            retrieve_span.set_attributes({"outcome": "failed", "fallback_reason": "index_stale", "duration_ms": max(0.0, (time.monotonic() - started) * 1000)})
+            return RetrievalResult.unavailable(reason="index_stale")
+        except Exception:
+            retrieve_span.set_attributes({"outcome": "failed", "fallback_reason": "index_error", "duration_ms": max(0.0, (time.monotonic() - started) * 1000)})
+            return RetrievalResult.unavailable(reason="index_error")
 
-    lexical_candidates = _lexical_candidates(query, release_chunks, limit=len(release_chunks))
-    if not lexical_candidates:
-        return RetrievalResult.insufficient(release_id=release_id)
+        lexical_candidates = _lexical_candidates(query, release_chunks, limit=len(release_chunks))
+        if not lexical_candidates:
+            retrieve_span.set_attributes({"outcome": "succeeded", "release_id": release_id, "fallback_reason": "no_matching_chunk", "candidate_count": len(vector_candidates), "hit_count": 0, "duration_ms": max(0.0, (time.monotonic() - started) * 1000)})
+            return RetrievalResult.insufficient(release_id=release_id)
 
-    fused = (
-        fuse([vector_candidates, lexical_candidates])
-        if _query_is_wordlike(query)
-        else fuse([vector_candidates])
-    )
-    picked = select_with_diversity(fused, top_k=top_k, per_source_cap=per_source_cap)
-    outcome = rerank(query, picked, reranker=reranker)
-
-    hits = [
-        Hit(
-            chunk_id=item.chunk_id,
-            content_hash=item.content_hash,
-            source=item.source,
-            heading=item.heading,
-            text=item.text,
-            rank=position,
-            score=item.score,
+        fused = (
+            fuse([vector_candidates, lexical_candidates])
+            if _query_is_wordlike(query)
+            else fuse([vector_candidates])
         )
-        for position, item in enumerate(outcome.hits, start=1)
-    ]
-    return RetrievalResult.found(
-        hits=hits,
-        release_id=release_id or "release-unknown",
-        retrieval_mode="hybrid",
-        fallback_reason=outcome.reason,
-    )
+        picked = select_with_diversity(fused, top_k=top_k, per_source_cap=per_source_cap)
+        rerank_started = time.monotonic()
+        with tel.sync_span("fitlife.rag.rerank", {"candidate_count": len(picked)}) as rerank_span:
+            outcome = rerank(query, picked, reranker=reranker)
+            rerank_span.set_attributes({
+                "outcome": "succeeded",
+                "hit_count": len(outcome.hits),
+                **({"fallback_reason": outcome.reason} if outcome.reason else {}),
+                "duration_ms": max(0.0, (time.monotonic() - rerank_started) * 1000),
+            })
+
+        hits = [
+            Hit(
+                chunk_id=item.chunk_id,
+                content_hash=item.content_hash,
+                source=item.source,
+                heading=item.heading,
+                text=item.text,
+                rank=position,
+                score=item.score,
+            )
+            for position, item in enumerate(outcome.hits, start=1)
+        ]
+        result = RetrievalResult.found(
+            hits=hits,
+            release_id=release_id or "release-unknown",
+            retrieval_mode="hybrid",
+            fallback_reason=outcome.reason,
+        )
+        retrieve_span.set_attributes({
+            "outcome": "succeeded",
+            "release_id": release_id or "release-unknown",
+            "retrieval_mode": result.retrieval_mode or "hybrid",
+            "candidate_count": len(fused),
+            "hit_count": len(hits),
+            **({"fallback_reason": outcome.reason} if outcome.reason else {}),
+            "duration_ms": max(0.0, (time.monotonic() - started) * 1000),
+        })
+        return result
 
 
 def _vector_candidates(

@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # after startup or `python -m backend.rag.build` publishes the active release.
     rag_allow_request_build: bool = True
     embedding_model: str = "text-embedding-3-small"
+    telemetry_exporter: Literal["none", "memory", "otlp", "langfuse"] = "none"
+    otel_service_name: str = "fitlife-agent"
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_exporter_otlp_headers: str | None = None
+    langfuse_host: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
     auth_secret: str = "fitlife-agent-demo-secret"
     settings_encryption_key: str | None = None
     backend_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

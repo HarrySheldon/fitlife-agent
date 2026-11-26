@@ -11,6 +11,7 @@ from backend.infrastructure.agent_runtime.postgres_checkpoint_store import (
 from backend.infrastructure.agent_runtime.postgres_run_repository import (
     PostgresRunRepository,
 )
+from backend.infrastructure.observability.otel import build_telemetry_context
 from backend.infrastructure.postgres.database import PostgresDatabase
 
 _runtime = None
@@ -21,7 +22,14 @@ _lock = RLock()
 def get_agent_runtime():
     global _runtime, _target_key
     settings = get_settings()
-    key = (settings.database_url, settings.database_schema or "public")
+    key = (
+        settings.database_url,
+        settings.database_schema or "public",
+        settings.telemetry_exporter,
+        settings.otel_service_name,
+        settings.otel_exporter_otlp_endpoint,
+        settings.langfuse_host,
+    )
     with _lock:
         if _runtime is None or key != _target_key:
             database = PostgresDatabase(
@@ -33,9 +41,11 @@ def get_agent_runtime():
                 store=MemoryPolicyStore(),
                 environment=settings.agent_runtime_policy,
             )
+            telemetry = build_telemetry_context(settings)
             _runtime = AgentRuntime(
                 repository=repository,
                 checkpoint_store=PostgresCheckpointStore(repository),
+                telemetry=telemetry,
                 resolver=resolver,
             )
             _target_key = key

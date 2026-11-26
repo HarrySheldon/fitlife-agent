@@ -17,6 +17,7 @@ from backend.i18n import (
     language_from_accept_language,
     translate_public_message,
 )
+from backend.infrastructure.observability import shutdown_telemetry
 from backend.infrastructure.startup import run_startup
 from backend.schemas import ApiError, ApiResponse
 from backend.agent.runtime import BudgetExceeded, TaskBudgetExceeded, RunCancelled, RunTimedOut, RuntimeControlError
@@ -32,7 +33,10 @@ def _safe_language_for_request(request: Request) -> AppLanguage:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     run_startup()
-    yield
+    try:
+        yield
+    finally:
+        shutdown_telemetry()
 
 
 def create_app() -> FastAPI:

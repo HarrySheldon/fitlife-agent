@@ -17,7 +17,12 @@ from backend.agent.contracts import AgentCommand, AgentOutcome, AgentRunSnapshot
 from backend.agent.failures import Disposition, classify_failure, decide_disposition
 from backend.agent.policy import RuntimePolicy
 from backend.agent.persistence import ERROR_CODES, TERMINAL_STATUSES, utc_now
-from backend.agent.telemetry import SafeTelemetryContext
+from backend.agent.telemetry import (
+    SafeTelemetryContext,
+    bind_telemetry_context,
+    current_trace_id,
+    reset_telemetry_context,
+)
 from backend.infrastructure.agent_runtime.memory_run_repository import MemoryCheckpointStore, MemoryRunRepository
 from backend.application.ports.model_call_context import current_abort, remaining_model_timeout
 from backend.configuration.resolver import ConfigurationResolver
@@ -334,8 +339,24 @@ class RuntimeContext:
                 self.record("TOOL_STARTED" if is_tool else "STEP_STARTED", self,
                             {**metadata, "attempt_id": attempt_id} if is_tool else metadata)
                 if is_tool and name.endswith("_model"):
-                    async with self.telemetry.span("fitlife.ai.request", {"attempt": attempt}):
+                    async with self.telemetry.span("fitlife.ai.request", {"attempt": attempt}) as ai_span:
                         result = await self._budgeted_model_call(operation)
+                        measured_usage = self._measure_usage(result)
+                        span_attrs: dict[str, object] = {}
+                        if measured_usage.measured:
+                            span_attrs["input_tokens"] = measured_usage.input_tokens
+                            span_attrs["output_tokens"] = measured_usage.output_tokens
+                            span_attrs["total_tokens"] = (
+                                measured_usage.input_tokens + measured_usage.output_tokens
+                            )
+                            if measured_usage.cached_input_tokens is not None:
+                                span_attrs["cached_tokens"] = measured_usage.cached_input_tokens
+                        if self.provider:
+                            span_attrs["provider"] = self.provider
+                        if self.model:
+                            span_attrs["model"] = self.model
+                        if span_attrs:
+                            ai_span.set_attributes(span_attrs)
                 else:
                     result = await self.call(operation)
                 self.raise_if_cancelled()
@@ -558,6 +579,13 @@ class AgentRuntime:
                                initial_checkpoint=initial_checkpoint, resumed_from_run_id=resumed_from_run_id)
         context.effective_config = config
         span.set_attributes({"policy_version": f"policy-{config.revision}"})
+        active_trace_id = current_trace_id()
+        trace_payload = (
+            {"trace_id": active_trace_id}
+            if isinstance(active_trace_id, str) and re.fullmatch(r"[0-9a-f]{32}", active_trace_id)
+            else None
+        )
+        telemetry_token = bind_telemetry_context(self.telemetry)
         try:
             with self._lock:
                 self._runs[run_id] = self.repository.create(AgentRunSnapshot(
@@ -567,7 +595,7 @@ class AgentRuntime:
                     task_id=command.task_ref.task_id if command.task_ref else None,
                     task_version=command.task_ref.version if command.task_ref else None,
                     policy_snapshot_json=RunPolicySnapshot(revision=config.revision, policy=policy).model_dump_json()))
-                self._runs[run_id] = self.repository.update(replace(self._runs[run_id], status="running", started_at=utc_now()), "RUN_STARTED")
+                self._runs[run_id] = self.repository.update(replace(self._runs[run_id], status="running", started_at=utc_now()), "RUN_STARTED", trace_payload)
             if resumed_from_run_id is not None:
                 step_idx = 0
                 if isinstance(initial_checkpoint, dict) and type(initial_checkpoint.get("step_index")) is int:
@@ -615,6 +643,13 @@ class AgentRuntime:
                                sources=() if decision.outcome != "allow" else result.sources)
             result = await context.step("output_guard", review)
             result = await context.step("public_result_projector", lambda: result)
+            result_trace_id = current_trace_id()
+            if (
+                isinstance(result_trace_id, str)
+                and re.fullmatch(r"[0-9a-f]{32}", result_trace_id)
+                and "trace_id" not in result.trace
+            ):
+                result = replace(result, trace={**result.trace, "trace_id": result_trace_id})
             context.raise_if_cancelled()
             with self._lock:
                 self._finish(run_id, "succeeded", context)
@@ -641,6 +676,7 @@ class AgentRuntime:
                 pass
             raise
         finally:
+            reset_telemetry_context(telemetry_token)
             if lease is not None:
                 lease.release()
             # Anything still open never reached its own terminal record: the
@@ -701,6 +737,9 @@ class AgentRuntime:
             public_error_code=code, internal_error_id=internal_error_id,
             failure_stage=context.current_step if error else None, finished_at=utc_now())
         payload = {"error_code": code, "internal_error_id": internal_error_id} if error else {}
+        trace_id = current_trace_id()
+        if isinstance(trace_id, str) and re.fullmatch(r"[0-9a-f]{32}", trace_id):
+            payload["trace_id"] = trace_id
         try:
             self._runs[run_id] = self.repository.update(proposed, "RUN_" + status.upper(), payload)
         except Exception as storage_error:

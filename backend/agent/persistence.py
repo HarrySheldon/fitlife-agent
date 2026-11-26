@@ -42,7 +42,7 @@ def safe_payload(payload: Mapping[str, object]) -> dict:
     source and a token count are registered here by name. Queries, records,
     prompts and keys have no field, so they cannot be recorded by accident.
     """
-    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions", "agent_tool", "resource_release", "loaded_skill_ids", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status", "attempt_id", "usage_source", "checkpoint_name", "step_index", "resumed_from_run_id", "invalidated_domains"}
+    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions", "agent_tool", "resource_release", "loaded_skill_ids", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status", "attempt_id", "usage_source", "checkpoint_name", "step_index", "resumed_from_run_id", "invalidated_domains", "trace_id"}
     result = {}
     for key, value in payload.items():
         if key not in allowed:
@@ -50,6 +50,9 @@ def safe_payload(payload: Mapping[str, object]) -> dict:
         if key in {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions"}:
             if type(value) not in (int, float) or value < 0 or not math.isfinite(value):
                 raise ValueError("Invalid event metric")
+        elif key == "trace_id":
+            if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{32}", value) is None:
+                raise ValueError("Invalid trace identifier")
         elif key == "step_index":
             if type(value) is not int or value < 0:
                 raise ValueError("Invalid step index")

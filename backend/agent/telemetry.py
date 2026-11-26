@@ -5,9 +5,9 @@ import asyncio
 import math
 import re
 import time
-from collections.abc import AsyncIterator, Mapping
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from contextvars import ContextVar
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from threading import RLock
 from typing import Protocol
@@ -17,9 +17,45 @@ Scalar = str | int | float | bool
 _SPAN_NAMES = frozenset({
     "fitlife.agent.run", "fitlife.agent.step", "fitlife.ai.request",
     "fitlife.agent.tool", "fitlife.agent.retry_wait", "fitlife.safety.review",
+    "fitlife.rag.retrieve", "fitlife.rag.rerank", "fitlife.coach.sse",
 })
-_METRICS = frozenset({"input_tokens", "output_tokens", "tool_calls", "model_calls", "attempt", "retry_count", "delay_ms"})
-_LABELS = frozenset({"policy_version", "error_code", "step", "operation", "outcome"})
+_METRICS = frozenset({
+    "input_tokens", "output_tokens", "cached_tokens", "total_tokens",
+    "tool_calls", "model_calls", "attempt", "retry_count", "delay_ms",
+    "candidate_count", "hit_count", "duration_ms",
+})
+_LABELS = frozenset({
+    "policy_version", "error_code", "step", "operation", "outcome",
+    "retrieval_mode", "fallback_reason", "provider", "model", "tool_name",
+    "trace_id", "release_id",
+})
+_SAFE_LABEL_RE = re.compile(r"^[A-Za-z0-9_.:/-]{1,100}$")
+_TRACE_ID: ContextVar[str | None] = ContextVar("fitlife_trace_id", default=None)
+_ACTIVE_TELEMETRY: ContextVar["TelemetryContext | None"] = ContextVar("fitlife_active_telemetry", default=None)
+
+
+def current_trace_id() -> str | None:
+    return _TRACE_ID.get()
+
+
+def bind_trace_id(trace_id: str | None) -> Token[str | None]:
+    return _TRACE_ID.set(trace_id)
+
+
+def reset_trace_id(token: Token[str | None]) -> None:
+    _TRACE_ID.reset(token)
+
+
+def active_telemetry_context() -> "TelemetryContext":
+    return _ACTIVE_TELEMETRY.get() or NoopTelemetryContext()
+
+
+def bind_telemetry_context(telemetry: "TelemetryContext | None") -> Token["TelemetryContext | None"]:
+    return _ACTIVE_TELEMETRY.set(telemetry)
+
+
+def reset_telemetry_context(token: Token["TelemetryContext | None"]) -> None:
+    _ACTIVE_TELEMETRY.reset(token)
 
 
 def _safe_attributes(attributes: Mapping[str, object]) -> dict[str, Scalar]:
@@ -29,7 +65,7 @@ def _safe_attributes(attributes: Mapping[str, object]) -> dict[str, Scalar]:
             if value >= 0 and math.isfinite(value):
                 result[key] = value
         elif key in _LABELS and isinstance(value, str):
-            if re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", value):
+            if _SAFE_LABEL_RE.fullmatch(value) and not value.startswith(("sk-", "http")):
                 result[key] = value
     return result
 
@@ -41,6 +77,10 @@ class TelemetryContext(Protocol):
 class NoopTelemetryContext:
     @asynccontextmanager
     async def span(self, name: str, attributes: Mapping[str, Scalar]) -> AsyncIterator[None]:
+        yield
+
+    @contextmanager
+    def sync_span(self, name: str, attributes: Mapping[str, Scalar]) -> Iterator[None]:
         yield
 
 
@@ -98,6 +138,41 @@ class SafeTelemetryContext:
                 except Exception:
                     pass
 
+    @contextmanager
+    def sync_span(self, name: str, attributes: Mapping[str, object]) -> Iterator[SafeSpan]:
+        manager = None
+        entered = False
+        handle = None
+        try:
+            sync_factory = getattr(self.adapter, "sync_span", None)
+            if name in _SPAN_NAMES and callable(sync_factory):
+                manager = sync_factory(name, _safe_attributes(attributes))
+                handle = manager.__enter__()
+                entered = True
+        except Exception:
+            pass
+
+        try:
+            yield SafeSpan(handle)
+        except BaseException as error:
+            if entered:
+                try:
+                    diagnostic = (
+                        asyncio.CancelledError()
+                        if isinstance(error, asyncio.CancelledError) or getattr(error, "code", None) == "RUN_CANCELLED"
+                        else RuntimeError("operation_failed")
+                    )
+                    manager.__exit__(type(diagnostic), diagnostic, None)
+                except Exception:
+                    pass
+            raise
+        else:
+            if entered:
+                try:
+                    manager.__exit__(None, None, None)
+                except Exception:
+                    pass
+
 
 @dataclass
 class RecordedSpan:
@@ -123,10 +198,16 @@ class InMemoryTelemetryContext:
 
     @asynccontextmanager
     async def span(self, name: str, attributes: Mapping[str, Scalar]) -> AsyncIterator[RecordedSpan]:
+        with self.sync_span(name, attributes) as span:
+            yield span
+
+    @contextmanager
+    def sync_span(self, name: str, attributes: Mapping[str, Scalar]) -> Iterator[RecordedSpan]:
         span = RecordedSpan(uuid4().hex, self._parent.get(), name, _safe_attributes(attributes))
         with self._lock:
             self.spans.append(span)
         parent_token = self._parent.set(span.span_id)
+        trace_token = _TRACE_ID.set(_TRACE_ID.get() or span.span_id)
         started = self.clock()
         try:
             yield span
@@ -137,4 +218,5 @@ class InMemoryTelemetryContext:
             span.outcome = "succeeded"
         finally:
             span.duration_ms = max(0, (self.clock() - started) * 1000)
+            _TRACE_ID.reset(trace_token)
             self._parent.reset(parent_token)
