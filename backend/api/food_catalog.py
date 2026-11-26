@@ -12,10 +12,10 @@ from backend.application.use_cases.food_catalog import (
     FoodCatalogService,
 )
 from backend.config import get_settings
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-    SQLiteFoodCatalogRepository,
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    PostgresFoodCatalogRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedUser
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/v1/catalog/foods")
 
 def get_food_catalog_service() -> FoodCatalogService:
     return FoodCatalogService(
-        SQLiteFoodCatalogRepository(get_database()),
+        PostgresFoodCatalogRepository(get_database()),
         mutation_scope=lambda user_id: user_lifecycle_guard(
             get_settings().data_dir,
             user_id,

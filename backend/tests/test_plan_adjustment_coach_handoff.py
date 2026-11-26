@@ -28,7 +28,7 @@ from backend.api.plan_adjustment import reset_plan_adjustment_services
 from backend.application.use_cases.plan_adjustment import PlanAdjustmentService
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
-from backend.infrastructure.sqlite.runtime import initialize_database
+from backend.infrastructure.postgres.runtime import initialize_database
 from backend.tests.test_plan_adjustment_api import (
     INSTRUCTIONS,
     _service,

@@ -19,11 +19,13 @@ from backend.infrastructure.catalog.import_ledger import (
 )
 from backend.infrastructure.catalog.seed_exercises import seed_exercise_payload
 from backend.infrastructure.catalog.seed_foods import seed_food_payload
-from backend.infrastructure.sqlite.database import SQLiteDatabase
+from backend.infrastructure.postgres.database import PostgresDatabase
+
+_UTC_NOW = "to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')"
 
 
-class SQLiteCatalogSink:
-    def __init__(self, database: SQLiteDatabase) -> None:
+class PostgresCatalogSink:
+    def __init__(self, database: PostgresDatabase) -> None:
         self.database = database
 
     def import_records(
@@ -67,7 +69,7 @@ class SQLiteCatalogSink:
 
 
 def retire_public_sources(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     *,
     catalog_kind: str,
     active_source: str,
@@ -161,7 +163,7 @@ def _retire_public_rows(
     connection.execute(
         f"""
         UPDATE {table}
-        SET active = 0, updated_at = CURRENT_TIMESTAMP
+        SET active = 0, updated_at = ({_UTC_NOW})
         WHERE owner_user_id IS NULL AND id IN ({id_placeholders})
         """,
         identities,

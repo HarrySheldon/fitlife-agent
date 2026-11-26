@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 from backend.config import get_settings
 from backend.infrastructure.agent_runtime.factory import get_agent_runtime
-from backend.infrastructure.sqlite.database import SQLiteDatabase
 from backend.infrastructure.startup import run_startup
 from backend.tools.data_access import read_eval_cases
 
 
-def test_external_empty_data_dir_boots_using_bundled_code_seeds(tmp_path, monkeypatch):
+def test_external_empty_data_dir_boots_using_bundled_code_seeds(
+    tmp_path, monkeypatch, make_isolated_pg_db
+):
     external_data_dir = tmp_path / "external-user-data"
+    database = make_isolated_pg_db(initialize=False)
     monkeypatch.setenv("DATA_DIR", str(external_data_dir))
+    monkeypatch.setenv("DATABASE_URL", database.dsn)
+    monkeypatch.setenv("DATABASE_SCHEMA", database.target_schema)
     get_settings.cache_clear()
 
     try:
@@ -23,21 +26,21 @@ def test_external_empty_data_dir_boots_using_bundled_code_seeds(tmp_path, monkey
         assert settings.food_catalog_seed_path.is_file()
         assert settings.exercise_catalog_seed_path.is_file()
         assert settings.eval_dataset_path.is_file()
-        assert settings.runtime_database_path == external_data_dir / "agent_runtime.sqlite3"
+        assert settings.database_schema == database.target_schema
 
-        summary = run_startup(SQLiteDatabase(settings.database_path), external_data_dir)
+        summary = run_startup(database, external_data_dir)
         assert summary.status == "ready"
-        assert summary.schema_version == 15
-        assert (external_data_dir / "fitlife.sqlite3").is_file()
-        assert (external_data_dir / "vector_index-releases").is_dir()
+        assert summary.schema_version == 16
+        assert not (external_data_dir / "fitlife.sqlite3").exists()
+        assert not (external_data_dir / "vector_index-releases").exists()
 
         # Bundled seed directories are NOT copied into runtime DATA_DIR.
         assert not (external_data_dir / "catalog").exists()
         assert not (external_data_dir / "safety").exists()
         assert not (external_data_dir / "eval_questions.json").exists()
 
-        # Catalog seeds were imported from SEED_DIR into SQLite.
-        with sqlite3.connect(settings.database_path) as connection:
+        # Catalog seeds were imported from SEED_DIR into PostgreSQL.
+        with database.connection() as connection:
             food_count = connection.execute("SELECT COUNT(*) FROM food_catalog WHERE source = 'public'").fetchone()[0]
             exercise_count = connection.execute("SELECT COUNT(*) FROM exercise_catalog WHERE source = 'public'").fetchone()[0]
         assert food_count > 0
@@ -47,9 +50,10 @@ def test_external_empty_data_dir_boots_using_bundled_code_seeds(tmp_path, monkey
         eval_cases = read_eval_cases()
         assert len(eval_cases) > 0
 
-        # Agent runtime database lives inside DATA_DIR.
-        _ = get_agent_runtime()
-        assert (external_data_dir / "agent_runtime.sqlite3").is_file()
+        # Agent runtime uses PostgreSQL and leaves DATA_DIR free of SQLite files.
+        runtime = get_agent_runtime()
+        assert runtime is not None
+        assert not (external_data_dir / "agent_runtime.sqlite3").exists()
     finally:
         get_settings.cache_clear()
 

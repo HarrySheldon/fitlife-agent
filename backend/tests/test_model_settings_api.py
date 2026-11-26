@@ -28,7 +28,6 @@ def make_data_dir() -> Path:
 def build_client(monkeypatch, *, with_cipher=True, data_dir=None):
     root = data_dir or make_data_dir()
     monkeypatch.setenv("DATA_DIR", str(root))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(root / "fitlife.sqlite3"))
     monkeypatch.setenv("SETTINGS_ENCRYPTION_KEY", Fernet.generate_key().decode() if with_cipher else "")
     policy = ModelEndpointPolicy(resolver=lambda *_a, **_kw: [(None, None, None, None, ("8.8.8.8", 443))])
     monkeypatch.setattr("backend.api.settings._endpoint_policy", lambda: policy)

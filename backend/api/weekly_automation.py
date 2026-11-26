@@ -16,8 +16,8 @@ from backend.domain.plan_cycles import GoalType
 from backend.api.profile_resolution import resolve_authoritative_profile_context
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
 from backend.infrastructure.repositories.file_report_repository import FileReportRepository
-from backend.infrastructure.repositories.sqlite_plan_cycle_repository import SQLitePlanCycleRepository
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.repositories.postgres_plan_cycle_repository import PostgresPlanCycleRepository
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 
 router = APIRouter()
@@ -117,7 +117,7 @@ def generate_personalized_plan_draft(
         source="agent",
         title=payload.title,
     )
-    week1 = SQLitePlanCycleRepository(get_database()).get_cycle_days(
+    week1 = PostgresPlanCycleRepository(get_database()).get_cycle_days(
         user.user_id, created.id, week_index=1
     )
     return ok(

@@ -36,7 +36,7 @@ def test_profile_accepts_v2_personalization_fields():
     assert profile.target_mode == "suggested"
 
 
-def test_legacy_profile_accepts_pinned_sqlite_projection_boundaries():
+def test_legacy_profile_accepts_pinned_legacy_projection_boundaries():
     profile = UserProfile(
         height_cm=230,
         weight_kg=300,
@@ -72,7 +72,7 @@ def test_legacy_profile_retains_minimum_age_16():
     assert profile.age == 16
 
 
-def test_legacy_profile_accepts_pinned_sqlite_projection_minimums():
+def test_legacy_profile_accepts_pinned_legacy_projection_minimums():
     profile = UserProfile(
         height_cm=120,
         weight_kg=30,

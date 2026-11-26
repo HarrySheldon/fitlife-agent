@@ -29,19 +29,19 @@ from backend.domain.plan_cycles import (
 )
 from backend.domain.workouts import StrengthSet
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
-from backend.infrastructure.repositories.sqlite_exercise_progress_repository import (
-    SQLiteExerciseProgressRepository,
+from backend.infrastructure.repositories.postgres_exercise_progress_repository import (
+    PostgresExerciseProgressRepository,
 )
-from backend.infrastructure.repositories.sqlite_plan_cycle_repository import (
-    SQLitePlanCycleRepository,
+from backend.infrastructure.repositories.postgres_plan_cycle_repository import (
+    PostgresPlanCycleRepository,
 )
-from backend.infrastructure.repositories.sqlite_training_context_repository import (
-    SQLiteTrainingContextRepository,
+from backend.infrastructure.repositories.postgres_training_context_repository import (
+    PostgresTrainingContextRepository,
 )
-from backend.infrastructure.repositories.sqlite_workout_repository import (
-    SQLiteWorkoutRepository,
+from backend.infrastructure.repositories.postgres_workout_repository import (
+    PostgresWorkoutRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 
 router = APIRouter(prefix="/api/v1/plan-cycles")
@@ -82,8 +82,8 @@ class UpdatePlanDayRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=400)
 
 
-def _repo() -> SQLitePlanCycleRepository:
-    return SQLitePlanCycleRepository(get_database())
+def _repo() -> PostgresPlanCycleRepository:
+    return PostgresPlanCycleRepository(get_database())
 
 
 @router.get("")
@@ -217,9 +217,9 @@ def create_plan_cycle_draft(
     db = get_database()
     prefs = preferences_for(user)
     today_date = local_today(prefs.timezone)
-    repo = SQLitePlanCycleRepository(db)
-    training_ctx = SQLiteTrainingContextRepository(db).get(user.user_id)
-    exercises_progress = SQLiteExerciseProgressRepository(db).list_progress(
+    repo = PostgresPlanCycleRepository(db)
+    training_ctx = PostgresTrainingContextRepository(db).get(user.user_id)
+    exercises_progress = PostgresExerciseProgressRepository(db).list_progress(
         user.user_id, days=90, end_date=today_date.isoformat()
     )
     adherence = repo.week_adherence_summary(user.user_id, (today_date - timedelta(days=7)).isoformat())
@@ -328,7 +328,7 @@ def prefill_workout_from_plan_day(
     Formal workout records still require explicit user review and confirmation in WorkoutEntry.
     """
     db = get_database()
-    repo = SQLitePlanCycleRepository(db)
+    repo = PostgresPlanCycleRepository(db)
     day = repo.get_day(user.user_id, day_id)
     if day is None:
         raise ApplicationError(
@@ -394,7 +394,7 @@ def prefill_workout_from_plan_day(
                     )
                 )
 
-    workout_service = WorkoutService(SQLiteWorkoutRepository(db))
+    workout_service = WorkoutService(PostgresWorkoutRepository(db))
     draft = workout_service.create_draft(
         user.user_id,
         WorkoutDraftInput(

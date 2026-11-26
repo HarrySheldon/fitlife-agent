@@ -24,10 +24,10 @@ from backend.application.ports.coach_answer import CoachTurnAnswer
 from backend.application.ports.model_call_context import current_abort
 from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.config import get_settings
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.main import create_app
 
 BASE = "/api/v1/coach"
@@ -115,7 +115,7 @@ def service(client, answer):
 
     def build() -> CoachTurnService:
         return CoachTurnService(
-            SQLiteCoachConversationRepository(get_database()),
+            PostgresCoachConversationRepository(get_database()),
             answer,
             lease_id="test-lease",
         )

@@ -330,7 +330,7 @@ def execute_scenario(scenario, client, *, headers_factory, observer=None, before
             snapshots[(step.actor, '/api/v1/smart-entry-drafts/' + data['id'])] = data
         candidates = data.get("payload", {}).get("candidates", []) if isinstance(data.get("payload"), dict) else []
         if response.status_code == 200 and candidates:
-            from backend.infrastructure.repositories.sqlite_smart_entry_repository import _candidate, _validate_selected_candidates
+            from backend.infrastructure.repositories.postgres_smart_entry_repository import _candidate, _validate_selected_candidates
             try:
                 selected = tuple(_candidate(item) for item in candidates if isinstance(item, dict) and item.get("selected"))
                 _validate_selected_candidates(selected)

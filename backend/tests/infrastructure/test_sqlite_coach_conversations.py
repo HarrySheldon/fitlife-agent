@@ -1,4 +1,3 @@
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -8,26 +7,24 @@ from backend.application.ports.coach_conversation_repository import (
     CoachConversationDeleted,
 )
 from backend.domain.coach_conversation import CoachMessage
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import DatabaseIntegrityError
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture
-def database(tmp_path):
-    database = SQLiteDatabase(tmp_path / "coach.sqlite")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
+def database():
+    return PostgresDatabase(TEST_DATABASE_URL)
 
 
 @pytest.fixture
 def repository(database):
-    return SQLiteCoachConversationRepository(database)
+    return PostgresCoachConversationRepository(database)
 
 
 def _ensure_conversation(repository, *, user="alice", conversation="c1", created_at=NOW):
@@ -135,7 +132,7 @@ def test_the_schema_refuses_a_message_from_another_account(database, repository)
     )
     _seed_round(repository, asked_at=NOW, answered_at=NOW)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -265,7 +262,7 @@ def test_blank_titles_are_stored_as_null_and_rename_can_clear_them(repository):
     )
     assert cleared.title is None
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with repository.database.transaction() as connection:
             connection.execute(
                 "UPDATE coach_conversations SET title='' WHERE conversation_id='c1'"

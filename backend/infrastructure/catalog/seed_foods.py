@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import sqlite3
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +14,9 @@ from backend.infrastructure.catalog.import_ledger import (
     CatalogMutationResult,
 )
 from backend.infrastructure.catalog.release import catalog_import_version
-from backend.infrastructure.sqlite.database import SQLiteDatabase
+from backend.infrastructure.postgres.database import PostgresConnection, PostgresDatabase
+
+_UTC_NOW = "to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')"
 
 
 DEFAULT_SEED_PATH = (
@@ -36,7 +37,7 @@ class FoodSeedResult:
 
 
 def seed_bundled_foods(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     path: Path = DEFAULT_SEED_PATH,
 ) -> FoodSeedResult:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -44,7 +45,7 @@ def seed_bundled_foods(
 
 
 def seed_food_payload(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     payload: dict[str, object],
 ) -> FoodSeedResult:
     if payload.get("schema_version") != 1:
@@ -100,24 +101,32 @@ def seed_food_payload(
 
 
 def _import_records(
-    connection: sqlite3.Connection,
+    connection: PostgresConnection,
     *,
     source_name: str,
     records: list[dict[str, object]],
     source_ids: set[str],
 ) -> CatalogMutationResult:
+    existing_rows = connection.execute(
+        """
+        SELECT id, source_record_id, content_hash, active
+        FROM food_catalog
+        WHERE owner_user_id IS NULL
+          AND source_name = ?
+        """,
+        (source_name,),
+    ).fetchall()
+    existing_by_source_id = {row["source_record_id"]: row for row in existing_rows}
+
     inserted = updated = unchanged = deactivated = 0
+    to_insert_foods: list[tuple[object, ...]] = []
+    to_update_foods: list[tuple[object, ...]] = []
+    updated_food_ids: list[str] = []
+    alias_rows: list[tuple[object, ...]] = []
+    search_rows: list[tuple[object, ...]] = []
+
     for record in records:
-        existing = connection.execute(
-            """
-            SELECT id, content_hash, active
-            FROM food_catalog
-            WHERE owner_user_id IS NULL
-              AND source_name = ?
-              AND source_record_id = ?
-            """,
-            (source_name, record["source_record_id"]),
-        ).fetchone()
+        existing = existing_by_source_id.get(record["source_record_id"])
         if (
             existing is not None
             and existing["content_hash"] == record["content_hash"]
@@ -131,43 +140,119 @@ def _import_records(
                 NAMESPACE_URL,
                 f"food:{source_name}:{record['source_record_id']}",
             ).hex
-            _insert_food(connection, food_id, record)
+            to_insert_foods.append(_food_parameters(food_id, record))
             inserted += 1
         else:
             food_id = existing["id"]
-            _update_food(connection, food_id, record)
+            parameters = _food_parameters(food_id, record)
+            to_update_foods.append((*parameters[1:], food_id))
+            updated_food_ids.append(food_id)
             updated += 1
-        _replace_aliases_and_search(connection, food_id, record)
 
-    existing_source_rows = connection.execute(
-        """
-        SELECT id, source_record_id
-        FROM food_catalog
-        WHERE owner_user_id IS NULL
-          AND source_name = ?
-          AND active = 1
-        """,
-        (source_name,),
-    ).fetchall()
-    for existing_source in existing_source_rows:
-        if existing_source["source_record_id"] in source_ids:
-            continue
-        connection.execute(
+        aliases = record["aliases"]
+        for alias in aliases:
+            alias_rows.append(
+                (
+                    uuid5(
+                        NAMESPACE_URL,
+                        f"food-alias:{food_id}:{alias['kind']}:{alias['value']}",
+                    ).hex,
+                    food_id,
+                    alias["value"],
+                    _normalize(alias["value"]),
+                    alias["kind"],
+                )
+            )
+        search_rows.append(
+            (
+                food_id,
+                record["name"],
+                " ".join(alias["value"] for alias in aliases),
+                " ".join(
+                    alias["value"] for alias in aliases if alias["kind"] == "pinyin"
+                ),
+                _source_tokens(record),
+            )
+        )
+
+    if to_insert_foods:
+        connection.executemany(
             """
+            INSERT INTO food_catalog (
+                id, owner_user_id, source, source_name, source_record_id,
+                dataset_version, name, basis_type, basis_amount, unit, calories,
+                carbs, protein, fat, license, attribution, provenance_json,
+                content_hash, active
+            ) VALUES (
+                ?, NULL, 'public', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1
+            )
+            """,
+            to_insert_foods,
+        )
+    if to_update_foods:
+        connection.executemany(
+            f"""
             UPDATE food_catalog
-            SET active = 0, updated_at = CURRENT_TIMESTAMP
+            SET source_name = ?, source_record_id = ?, dataset_version = ?,
+                name = ?, basis_type = ?, basis_amount = ?, unit = ?,
+                calories = ?, carbs = ?, protein = ?, fat = ?, license = ?,
+                attribution = ?, provenance_json = ?, content_hash = ?,
+                active = 1, updated_at = ({_UTC_NOW})
             WHERE id = ?
             """,
-            (existing_source["id"],),
+            to_update_foods,
+        )
+    if updated_food_ids:
+        connection.execute(
+            "DELETE FROM catalog_aliases WHERE food_id = ANY(?)",
+            (updated_food_ids,),
+        )
+        connection.execute(
+            "DELETE FROM catalog_search WHERE catalog_kind = 'food' AND catalog_id = ANY(?)",
+            (updated_food_ids,),
+        )
+    if alias_rows:
+        connection.executemany(
+            """
+            INSERT INTO catalog_aliases (
+                id, food_id, alias, normalized_alias, alias_kind
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            alias_rows,
+        )
+    if search_rows:
+        connection.executemany(
+            """
+            INSERT INTO catalog_search (
+                catalog_kind, catalog_id, name, aliases, pinyin, source_tokens
+            ) VALUES ('food', ?, ?, ?, ?, ?)
+            """,
+            search_rows,
+        )
+
+    deactivated_ids = [
+        existing_source["id"]
+        for existing_source in existing_by_source_id.values()
+        if existing_source["active"] == 1
+        and existing_source["source_record_id"] not in source_ids
+    ]
+    if deactivated_ids:
+        connection.execute(
+            f"""
+            UPDATE food_catalog
+            SET active = 0, updated_at = ({_UTC_NOW})
+            WHERE id = ANY(?)
+            """,
+            (deactivated_ids,),
         )
         connection.execute(
             """
             DELETE FROM catalog_search
-            WHERE catalog_kind = 'food' AND catalog_id = ?
+            WHERE catalog_kind = 'food' AND catalog_id = ANY(?)
             """,
-            (existing_source["id"],),
+            (deactivated_ids,),
         )
-        deactivated += 1
+        deactivated = len(deactivated_ids)
     return CatalogMutationResult(
         inserted_count=inserted,
         updated_count=updated,
@@ -264,7 +349,7 @@ def _validated_record(
 
 
 def _insert_food(
-    connection: sqlite3.Connection,
+    connection: PostgresConnection,
     food_id: str,
     record: dict[str, object],
 ) -> None:
@@ -284,19 +369,19 @@ def _insert_food(
 
 
 def _update_food(
-    connection: sqlite3.Connection,
+    connection: PostgresConnection,
     food_id: str,
     record: dict[str, object],
 ) -> None:
     parameters = _food_parameters(food_id, record)
     connection.execute(
-        """
+        f"""
         UPDATE food_catalog
         SET source_name = ?, source_record_id = ?, dataset_version = ?,
             name = ?, basis_type = ?, basis_amount = ?, unit = ?,
             calories = ?, carbs = ?, protein = ?, fat = ?, license = ?,
             attribution = ?, provenance_json = ?, content_hash = ?,
-            active = 1, updated_at = CURRENT_TIMESTAMP
+            active = 1, updated_at = ({_UTC_NOW})
         WHERE id = ?
         """,
         (*parameters[1:], food_id),
@@ -333,7 +418,7 @@ def _food_parameters(
 
 
 def _replace_aliases_and_search(
-    connection: sqlite3.Connection,
+    connection: PostgresConnection,
     food_id: str,
     record: dict[str, object],
 ) -> None:

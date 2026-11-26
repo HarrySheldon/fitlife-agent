@@ -45,19 +45,19 @@ from backend.application.ports.profile_target_repository import (
 from backend.application.use_cases.plan_adjustment import PlanAdjustmentService
 from backend.config import get_settings
 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
-from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import (
-    SQLitePlanAdjustmentRepository,
+from backend.infrastructure.repositories.postgres_plan_adjustment_repository import (
+    PostgresPlanAdjustmentRepository,
 )
-from backend.infrastructure.repositories.sqlite_plan_repository import (
-    SQLitePlanRepository,
+from backend.infrastructure.repositories.postgres_plan_repository import (
+    PostgresPlanRepository,
 )
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.repositories.sqlite_task_budget_repository import (
-    SQLiteTaskBudgetRepository,
+from backend.infrastructure.repositories.postgres_task_budget_repository import (
+    PostgresTaskBudgetRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database, initialize_database
+from backend.infrastructure.postgres.runtime import get_database, initialize_database
 from backend.main import create_app
 from backend.schemas import GeneratedPlan
 from backend.tests.test_plan_adjustment_service import (
@@ -113,7 +113,7 @@ def _auth(session: dict) -> dict[str, str]:
 
 
 # -- the world the task runs in -----------------------------------------
-def _seed(owner: str) -> SQLitePlanRepository:
+def _seed(owner: str) -> PostgresPlanRepository:
     """A profile with versioned targets and a plan the task may be based on.
 
     The versioned rows are what makes confirmation possible at all: without them
@@ -122,7 +122,7 @@ def _seed(owner: str) -> SQLitePlanRepository:
     store's current one agree -- a drift here would (correctly) refuse.
     """
     database = get_database()
-    profiles = SQLiteProfileTargetRepository(database)
+    profiles = PostgresProfileTargetRepository(database)
     setup = profiles.bootstrap(
         owner,
         ProfileVersionInput(age=30, height_cm=175.0, weight_kg=70.0,
@@ -139,7 +139,7 @@ def _seed(owner: str) -> SQLitePlanRepository:
         rationale={"confirmed_warnings": []}, effective_from="2026-10-02"))
     profiles.append_safety_if_changed(
         owner, SafetyVersionInput(allergies_or_restrictions=("花生",)))
-    plans = SQLitePlanRepository(
+    plans = PostgresPlanRepository(
         database, clock=lambda: NOW,
         constraints_reader=profiles.constraint_snapshot_with)
     plans.save(owner, StoredPlan(plan_id=PLAN_ID, activated_at=NOW,
@@ -187,9 +187,9 @@ def _runner(scripts, owner: str):
 def _service(owner: str, *, scripts=(), admission=None,
              versioned_constraints: bool = False) -> PlanAdjustmentService:
     database = get_database()
-    repository = SQLitePlanAdjustmentRepository(database, clock=lambda: NOW)
+    repository = PostgresPlanAdjustmentRepository(database, clock=lambda: NOW)
     plans = _seed(owner)
-    profiles = SQLiteProfileTargetRepository(database)
+    profiles = PostgresProfileTargetRepository(database)
     if versioned_constraints:
         # The production source: only what the versioned store can name. A task
         # built on it must ask about the rest instead of assuming it is empty.
@@ -203,7 +203,7 @@ def _service(owner: str, *, scripts=(), admission=None,
         constraints_source=source,
         head_revision=lambda user: plans.current_head(user).revision,
         runner=_runner(scripts, owner),
-        budgets=SQLiteTaskBudgetRepository(database),
+        budgets=PostgresTaskBudgetRepository(database),
         activations=plans,
         admission=admission,
     )
@@ -294,7 +294,7 @@ def test_start_scope_execute_candidate_confirm(api):
     assert body["replayed"] is False
 
     # The old plan is history, not a row that was overwritten.
-    plans = SQLitePlanRepository(get_database())
+    plans = PostgresPlanRepository(get_database())
     assert len(plans.list(session["user"]["user_id"])) == 2
     assert plans.current_head(session["user"]["user_id"]).revision == 2
 
@@ -321,7 +321,7 @@ def test_confirming_twice_with_the_same_key_replays(api):
     assert (second.json()["data"]["plan"]["head_revision"]
             == first.json()["data"]["plan"]["head_revision"])
     # A retry must not spend a second revision.
-    assert SQLitePlanRepository(get_database()).current_head(
+    assert PostgresPlanRepository(get_database()).current_head(
         session["user"]["user_id"]).revision == 2
 
 
@@ -580,7 +580,7 @@ def test_the_default_wiring_reads_constraints_from_the_versioned_store(api):
     assert snapshot["daily_calorie_target"] == 2000
     assert snapshot["allergies_or_restrictions"] == ["花生"]
     # The allergy list has a version, which is what a confirmation re-reads.
-    assert SQLiteProfileTargetRepository(
+    assert PostgresProfileTargetRepository(
         get_database()).get_latest_safety(owner) is not None
 
 

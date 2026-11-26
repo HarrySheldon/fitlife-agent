@@ -2,17 +2,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
-from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
+from backend.infrastructure.repositories.postgres_task_budget_repository import PostgresTaskBudgetRepository
 from backend.application.ports.task_budget_repository import TaskBudgetConflict
 
 
-def test_last_slot_is_atomic_and_duplicate_operations_are_free(tmp_path):
-    database = SQLiteDatabase(tmp_path / 'budget.sqlite')
-    run_migrations(database, RECORDS_MIGRATIONS)
-    repository = SQLiteTaskBudgetRepository(database)
+def test_last_slot_is_atomic_and_duplicate_operations_are_free(pg_db):
+    repository = PostgresTaskBudgetRepository(pg_db)
     repository.initialize('alice', 'task', 1, 10)
     def reserve(operation):
         try:
@@ -33,13 +28,11 @@ def test_last_slot_is_atomic_and_duplicate_operations_are_free(tmp_path):
         repository.get_snapshot('bob', 'task')
 
 
-def test_crash_unknown_usage_and_conflicts_preserve_charge(tmp_path):
-    database = SQLiteDatabase(tmp_path / 'unknown.sqlite')
-    run_migrations(database, RECORDS_MIGRATIONS)
-    repository = SQLiteTaskBudgetRepository(database)
+def test_crash_unknown_usage_and_conflicts_preserve_charge(pg_db):
+    repository = PostgresTaskBudgetRepository(pg_db)
     repository.initialize('alice', 'task', 3, 30)
     repository.reserve('alice', 'task', 'crashed', 1, 10)
-    repository = SQLiteTaskBudgetRepository(database)
+    repository = PostgresTaskBudgetRepository(pg_db)
     assert repository.get_snapshot('alice', 'task').reserved_tokens == 10
     repository.reserve('alice', 'task', 'unknown', 1, 10)
     repository.settle('alice', 'task', 'unknown', 0, 0, False)
@@ -65,15 +58,13 @@ def test_crash_unknown_usage_and_conflicts_preserve_charge(tmp_path):
         repository.reserve('alice', 'task', 'after-overrun', 1, 0)
 
 
-def test_account_delete_removes_only_owned_budget(tmp_path):
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import SQLiteProfileTargetRepository
-    database = SQLiteDatabase(tmp_path / 'delete.sqlite')
-    run_migrations(database, RECORDS_MIGRATIONS)
-    repository = SQLiteTaskBudgetRepository(database)
+def test_account_delete_removes_only_owned_budget(pg_db):
+    from backend.infrastructure.repositories.postgres_profile_target_repository import PostgresProfileTargetRepository
+    repository = PostgresTaskBudgetRepository(pg_db)
     for owner in ('alice', 'bob'):
         repository.initialize(owner, 'task', 2, 20)
         repository.reserve(owner, 'task', 'one', 1, 10)
-    SQLiteProfileTargetRepository(database).delete_user_data('alice')
+    PostgresProfileTargetRepository(pg_db).delete_user_data('alice')
     with pytest.raises(KeyError):
         repository.get_snapshot('alice', 'task')
     assert repository.get_snapshot('bob', 'task').reserved_calls == 1

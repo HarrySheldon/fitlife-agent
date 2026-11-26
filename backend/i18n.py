@@ -7,10 +7,10 @@ from fastapi import Request
 
 from backend.config import get_settings
 from backend.domain.user_preferences import AppLanguage
-from backend.infrastructure.settings.sqlite_user_preferences_repository import (
-    SQLiteUserPreferencesRepository,
+from backend.infrastructure.settings.postgres_user_preferences_repository import (
+    PostgresUserPreferencesRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 from backend.tools.auth_store import user_from_token
 
@@ -476,7 +476,7 @@ def language_for_request(
         return captured
     authenticated = user or _user_from_request(request)
     if authenticated is not None:
-        repository = SQLiteUserPreferencesRepository(get_database(), get_settings().data_dir)
+        repository = PostgresUserPreferencesRepository(get_database(), get_settings().data_dir)
         preferences = repository.get(authenticated.user_id)
         return preferences.language if preferences is not None else DEFAULT_LANGUAGE
     return language_from_accept_language(request.headers.get("accept-language"))

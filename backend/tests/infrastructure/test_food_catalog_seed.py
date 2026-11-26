@@ -10,13 +10,11 @@ import pytest
 from backend.application.ports.meal_repository import MealDraftInput, MealDraftItemInput
 from backend.infrastructure.catalog.import_ledger import CatalogImportError
 from backend.infrastructure.catalog.seed_foods import seed_bundled_foods
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-    SQLiteFoodCatalogRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    PostgresFoodCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_meal_repository import SQLiteMealRepository
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.repositories.postgres_meal_repository import PostgresMealRepository
 
 
 SEED_PATH = Path(__file__).parents[2] / "data" / "catalog" / "foods.zh-CN.v1.json"
@@ -30,12 +28,6 @@ REPRESENTATIVE_FOODS = {
     "E5800402": (33, 6.5, 3.4, 0.4, "Broccoli"),
     "I0402402": (117, 0.6, 23.3, 1.9, "去皮清肉(肉鸡)"),
 }
-
-
-def _database(tmp_path: Path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "food-seed.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
 
 
 def test_seed_snapshot_is_complete_and_auditable() -> None:
@@ -62,8 +54,8 @@ def test_seed_snapshot_is_complete_and_auditable() -> None:
         )
 
 
-def test_seed_is_idempotent_and_multilingual_searchable(tmp_path: Path) -> None:
-    database = _database(tmp_path)
+def test_seed_is_idempotent_and_multilingual_searchable(pg_db) -> None:
+    database = pg_db
 
     first = seed_bundled_foods(database, SEED_PATH)
     second = seed_bundled_foods(database, SEED_PATH)
@@ -71,7 +63,7 @@ def test_seed_is_idempotent_and_multilingual_searchable(tmp_path: Path) -> None:
     assert first.inserted_count == EXPECTED_COUNT
     assert second.unchanged_count == EXPECTED_COUNT
     assert second.skipped is True
-    repository = SQLiteFoodCatalogRepository(database)
+    repository = PostgresFoodCatalogRepository(database)
     for source_id, expected in REPRESENTATIVE_FOODS.items():
         results = repository.search("user-a", expected[4], limit=50)
         match = next(item for item in results if item.source_record_id == source_id)
@@ -81,7 +73,7 @@ def test_seed_is_idempotent_and_multilingual_searchable(tmp_path: Path) -> None:
         assert len(match.content_hash or "") == 64
 
 
-def test_seed_preserves_explicit_legacy_food_search_terms(tmp_path: Path) -> None:
+def test_seed_preserves_explicit_legacy_food_search_terms(pg_db) -> None:
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     legacy = json.loads(LEGACY_SEARCH_TERMS_PATH.read_text(encoding="utf-8"))["foods"]
     records = {record["source_record_id"]: record for record in payload["foods"]}
@@ -96,7 +88,7 @@ def test_seed_preserves_explicit_legacy_food_search_terms(tmp_path: Path) -> Non
             unicodedata.normalize("NFKC", term).casefold() for term in terms
         } <= available
 
-    database = _database(tmp_path)
+    database = pg_db
     seed_bundled_foods(database, SEED_PATH)
     with database.connection() as connection:
         seeded = {
@@ -119,6 +111,7 @@ def test_seed_preserves_explicit_legacy_food_search_terms(tmp_path: Path) -> Non
 
 def test_localized_reimport_preserves_ids_and_historical_meal_names(
     tmp_path: Path,
+    pg_db,
 ) -> None:
     localized = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     legacy = json.loads(json.dumps(localized, ensure_ascii=False))
@@ -145,16 +138,16 @@ def test_localized_reimport_preserves_ids_and_historical_meal_names(
         encoding="utf-8",
     )
 
-    database = _database(tmp_path)
+    database = pg_db
     seed_bundled_foods(database, legacy_path)
-    catalog = SQLiteFoodCatalogRepository(database)
+    catalog = PostgresFoodCatalogRepository(database)
     old_rice = next(
         item
         for item in catalog.search("user-a", "白饭", limit=20)
         if item.source_record_id == "A0550601"
     )
     old_ids = _public_catalog_ids(database, "food_catalog")
-    meals = SQLiteMealRepository(
+    meals = PostgresMealRepository(
         database,
         clock=lambda: datetime(2026, 8, 15, tzinfo=timezone.utc),
     )
@@ -205,7 +198,7 @@ def test_localized_reimport_preserves_ids_and_historical_meal_names(
     assert meals.list_meals("user-a", "2026-08-15")[0].items[0].food_name == "白饭"
 
 
-def _public_catalog_ids(database: SQLiteDatabase, table: str) -> dict[str, str]:
+def _public_catalog_ids(database: PostgresDatabase, table: str) -> dict[str, str]:
     with database.connection() as connection:
         rows = connection.execute(
             f"SELECT source_record_id, id FROM {table} WHERE owner_user_id IS NULL"
@@ -213,8 +206,8 @@ def _public_catalog_ids(database: SQLiteDatabase, table: str) -> dict[str, str]:
     return {row["source_record_id"]: row["id"] for row in rows}
 
 
-def test_new_version_upserts_and_rebuilds_search_without_touching_unrelated_rows(tmp_path: Path) -> None:
-    database = _database(tmp_path)
+def test_new_version_upserts_and_rebuilds_search_without_touching_unrelated_rows(tmp_path: Path, pg_db) -> None:
+    database = pg_db
     seed_bundled_foods(database, SEED_PATH)
     with database.transaction() as connection:
         connection.execute(
@@ -224,8 +217,8 @@ def test_new_version_upserts_and_rebuilds_search_without_touching_unrelated_rows
             """
         )
         before = connection.execute(
-            "SELECT rowid FROM catalog_search WHERE catalog_id = 'unrelated-food'"
-        ).fetchone()["rowid"]
+            "SELECT ctid::text AS row_tid FROM catalog_search WHERE catalog_id = 'unrelated-food'"
+        ).fetchone()["row_tid"]
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     payload["dataset_version"] = "2025-12-23"
     for food in payload["foods"]:
@@ -237,19 +230,19 @@ def test_new_version_upserts_and_rebuilds_search_without_touching_unrelated_rows
     result = seed_bundled_foods(database, changed_path)
 
     assert result.updated_count == EXPECTED_COUNT
-    changed = SQLiteFoodCatalogRepository(database).search(
+    changed = PostgresFoodCatalogRepository(database).search(
         "user-a", "receiver-updated-food", limit=20
     )
     assert len(changed) == 1
     with database.connection() as connection:
         after = connection.execute(
-            "SELECT rowid FROM catalog_search WHERE catalog_id = 'unrelated-food'"
-        ).fetchone()["rowid"]
+            "SELECT ctid::text AS row_tid FROM catalog_search WHERE catalog_id = 'unrelated-food'"
+        ).fetchone()["row_tid"]
     assert after == before
 
 
-def test_removed_seed_records_are_deactivated(tmp_path: Path) -> None:
-    database = _database(tmp_path)
+def test_removed_seed_records_are_deactivated(tmp_path: Path, pg_db) -> None:
+    database = pg_db
     seed_bundled_foods(database, SEED_PATH)
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     payload["dataset_version"] = "2025-12-23"
@@ -260,11 +253,11 @@ def test_removed_seed_records_are_deactivated(tmp_path: Path) -> None:
     result = seed_bundled_foods(database, removed_path)
 
     assert result.deactivated_count == EXPECTED_COUNT
-    assert SQLiteFoodCatalogRepository(database).search("user-a", "白飯", limit=20) == ()
+    assert PostgresFoodCatalogRepository(database).search("user-a", "白飯", limit=20) == ()
 
 
-def test_seed_rejects_checksum_drift_for_completed_version(tmp_path: Path) -> None:
-    database = _database(tmp_path)
+def test_seed_rejects_checksum_drift_for_completed_version(tmp_path: Path, pg_db) -> None:
+    database = pg_db
     seed_bundled_foods(database, SEED_PATH)
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     payload["foods"][0]["calories"] += 1
@@ -284,8 +277,8 @@ def test_seed_rejects_checksum_drift_for_completed_version(tmp_path: Path) -> No
         (lambda payload: payload["foods"].append(dict(payload["foods"][0])), "FOOD_SEED_SOURCE_ID_DUPLICATE"),
     ],
 )
-def test_seed_rejects_invalid_snapshot(tmp_path: Path, mutation, code: str) -> None:
-    database = _database(tmp_path)
+def test_seed_rejects_invalid_snapshot(tmp_path: Path, pg_db, mutation, code: str) -> None:
+    database = pg_db
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     mutation(payload)
     invalid = tmp_path / "invalid-foods.json"

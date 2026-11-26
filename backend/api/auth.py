@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
-
 from fastapi import APIRouter, Depends, Request
 
 from backend.api.dependencies import require_current_user
@@ -19,7 +17,8 @@ from backend.tools.auth_store import (
 from backend.tools.data_access import ensure_user_data
 from backend.config import get_settings
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.errors import DatabaseError
+from backend.infrastructure.postgres.runtime import get_database
 
 
 router = APIRouter(prefix="/auth")
@@ -87,6 +86,6 @@ def _cutover_new_user(user_id: str) -> None:
         LegacyCsvMigrator(
             get_database(), get_settings().data_dir
         ).migrate_user(user_id)
-    except (OSError, ValueError, sqlite3.Error):
+    except (OSError, ValueError, DatabaseError):
         # Startup owns retries; registration remains usable on the file adapter.
         return

@@ -6,17 +6,16 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.catalog_receiver.models import ReceiverError
 from backend.catalog_receiver.service import CatalogReceiver
-from backend.catalog_receiver.sinks import SQLiteCatalogSink
+from backend.catalog_receiver.sinks import PostgresCatalogSink
 from backend.config import get_settings
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.runtime import ensure_database_ready
 
 
 MAPPING_ROOT = PROJECT_ROOT / "backend" / "data" / "catalog" / "mappings"
@@ -31,7 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exercises", type=Path, required=True)
     parser.add_argument("--exercise-localization", type=Path, required=True)
     parser.add_argument("--exercise-taxonomy", type=Path, required=True)
-    parser.add_argument("--database", type=Path, default=None)
+    parser.add_argument("--database", type=str, default=None)
+    parser.add_argument("--schema", type=str, default=None)
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / ".tmp" / "catalog-import")
     return parser
 
@@ -63,10 +63,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(validation_summary, ensure_ascii=False, indent=2, sort_keys=True))
             return 4
 
-        database_path = args.database or get_settings().database_path
-        database = SQLiteDatabase(database_path)
-        run_migrations(database, RECORDS_MIGRATIONS)
-        importer = CatalogReceiver(SQLiteCatalogSink(database))
+        settings = get_settings()
+        database = PostgresDatabase(
+            args.database or settings.database_url,
+            schema=args.schema or settings.database_schema,
+        )
+        ensure_database_ready(database)
+        importer = CatalogReceiver(PostgresCatalogSink(database))
         food_import = importer.import_catalog(
             args.foods,
             mapping=food_mapping,
@@ -83,7 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             json.dumps(
                 {
-                    "database": str(database_path),
+                    "schema": database.target_schema,
                     "foods": food_import.report.transaction,
                     "exercises": exercise_import.report.transaction,
                 },

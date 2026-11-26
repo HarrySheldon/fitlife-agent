@@ -102,12 +102,11 @@ def test_exception_metrics_preserve_known_provenance_and_processing(tmp_path):
     assert metrics["treatment_config_fingerprint"]
 
 
-def test_invalid_plan_file_is_not_observed_as_valid_plan(tmp_path):
-    import sqlite3
+def test_invalid_plan_file_is_not_observed_as_valid_plan(tmp_path, make_isolated_pg_db):
     from backend.task_evaluation.observation import observe_database
-    database = tmp_path / "fitlife.sqlite3"
-    with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE meals(user_id)")
+    database = make_isolated_pg_db(initialize=False)
+    with database.transaction() as connection:
+        connection.execute("CREATE TABLE meals(user_id TEXT)")
     plans = tmp_path / "users" / "synthetic" / "plans"
     plans.mkdir(parents=True)
     (plans / "plan-12345678.json").write_text('{"invalid":true}', encoding="utf-8")

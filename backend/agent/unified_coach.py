@@ -1,7 +1,9 @@
 """One bounded decision maker. Domain operations live behind deterministic tools."""
+from copy import deepcopy
 from dataclasses import replace
 import json
 from pydantic import ValidationError
+from backend.agent.checkpoints import restore_workflow_checkpoint
 from backend.agent.context_builder import build_context, serialized
 from backend.agent.context_policy import ContextPolicyConfig, organize_rear
 from backend.agent.coach_delivery import review_delivery, answer_contract
@@ -20,7 +22,7 @@ from backend.domain.coach_answer import limits_for_or_default, output_token_limi
 
 class UnifiedCoachWorkflow:
     def __init__(self, gateway, executor, *, review_gateway=None, review_mode='off', session=None,
-                 context_policy=None):
+                 context_policy=None, dependency_version_provider=None):
         self.gateway, self.executor = gateway, executor
         self.review_gateway, self.review_mode = review_gateway, review_mode
         # Plain advice is the default: no task, no rounds, no receipt.
@@ -28,6 +30,15 @@ class UnifiedCoachWorkflow:
         # Reference is the default: it is the baseline the optimisation is
         # measured against, so a caller has to choose the other side explicitly.
         self.context_policy = context_policy or ContextPolicyConfig()
+        self.dependency_version_provider = dependency_version_provider
+
+    def _dependency_versions(self, domains) -> dict[str, str]:
+        if self.dependency_version_provider is None:
+            return {}
+        return {
+            str(domain): str(self.dependency_version_provider(domain))
+            for domain in sorted(domains)
+        }
 
     async def _prefetch(self, principal, plan, request, context):
         """Attach published resources the trusted action is known to need.
@@ -71,7 +82,59 @@ class UnifiedCoachWorkflow:
         failures = protocol_failures = 0
         citation_repairs = 0
         read_access_request = []
-        for decision_index in range(1, 13):
+        recorded_tool_calls: list[dict] = []
+        start_decision_index = 1
+
+        raw_checkpoint = getattr(context, 'initial_checkpoint', None)
+        if isinstance(raw_checkpoint, dict) and raw_checkpoint.get('schema_version') == 2:
+            ckpt = restore_workflow_checkpoint(raw_checkpoint)
+            if ckpt.principal_owner_id != principal.owner_id:
+                raise PermissionError('CHECKPOINT_SCOPE_MISMATCH')
+            if not set(ckpt.authorized_domains) <= set(principal.authorized_domains):
+                raise PermissionError('CHECKPOINT_SCOPE_MISMATCH')
+            if ckpt.policy_version != policy.version:
+                raise PermissionError('CHECKPOINT_POLICY_MISMATCH')
+
+            live_versions = self._dependency_versions(principal.authorized_domains)
+            invalidated_domains = {
+                domain
+                for domain, saved_ver in ckpt.dependency_versions.items()
+                if domain in live_versions and live_versions[domain] != saved_ver
+            }
+            for rev_idx, entry in enumerate(ckpt.cached_tool_calls, start=1):
+                call = ToolCall(call_id=entry.call_id, tool=entry.tool, arguments=entry.arguments)
+                if set(entry.required_domains) & invalidated_domains:
+                    observation = await self.executor.execute(principal, call, context)
+                    after_tool = getattr(self.session, 'after_tool', None)
+                    if after_tool is not None:
+                        await after_tool(context, observation)
+                else:
+                    observation = deepcopy(entry.observation)
+                    self.executor.observations[entry.call_id] = deepcopy(observation)
+                if not observation.get('public'):
+                    payload, _ = await context.step('context_guard', lambda obs=observation: sanitize_context(
+                        obs, default_pack(), scan_all=True))
+                else:
+                    payload = observation
+                    await context.step('context_guard', lambda: None)
+                request = replace(request, messages=(*request.messages,
+                    {'role': 'assistant', 'content': call.model_dump_json(), 'source': 'agent_action'},
+                    {'role': 'user', 'content': serialized(payload), 'source': 'tool_data',
+                     'revision': rev_idx, 'call_id': call.call_id,
+                     'tool': call.tool, 'status': observation.get('status', 'ok'),
+                     'source_version': observation.get('source_version'),
+                     'required_domains': list(observation.get('required_domains') or [])}))
+                recorded_tool_calls.append({
+                    'call_id': call.call_id,
+                    'tool': call.tool,
+                    'arguments': dict(call.arguments),
+                    'observation': deepcopy(observation),
+                    'required_domains': [d for d in (observation.get('required_domains') or []) if d in {'profile', 'training', 'diet'}],
+                    'source_version': str(observation.get('source_version')) if observation.get('source_version') is not None else None,
+                })
+            start_decision_index = min(12, ckpt.step_index + 1)
+
+        for decision_index in range(start_decision_index, 13):
             context.raise_if_cancelled()
             self.executor.check_access()
             frame = self.session.before_decision()
@@ -165,6 +228,32 @@ class UnifiedCoachWorkflow:
                         question = f'This analysis needs your {names} records. To allow this turn to read them, select the records above the input and send again, or ask for general advice without records.'
                     decision = AskDecision(question=question)
                 else:
+                    if observation.get('status') == 'ok':
+                        recorded_tool_calls.append({
+                            'call_id': decision.call_id,
+                            'tool': decision.tool,
+                            'arguments': dict(decision.arguments),
+                            'observation': deepcopy(observation),
+                            'required_domains': [d for d in (observation.get('required_domains') or []) if d in {'profile', 'training', 'diet'}],
+                            'source_version': str(observation.get('source_version')) if observation.get('source_version') is not None else None,
+                        })
+                        if getattr(context, 'checkpoint_store', None) is not None and getattr(context, 'save_checkpoint', None) is not None:
+                            context.save_checkpoint(
+                                f'round_{decision_index}',
+                                {
+                                    'schema_version': 2,
+                                    'stage': 'tool_round',
+                                    'step_index': decision_index,
+                                    'principal_owner_id': principal.owner_id,
+                                    'authorized_domains': sorted(principal.authorized_domains),
+                                    'policy_version': policy.version,
+                                    'completed_steps': list(context.completed_steps),
+                                    'dependency_versions': self._dependency_versions(principal.authorized_domains),
+                                    'cached_tool_calls': deepcopy(recorded_tool_calls),
+                                },
+                                step_index=decision_index,
+                                checkpoint_kind='step',
+                            )
                     continue
             await context.step('context_guard', lambda: None)
             try:

@@ -8,8 +8,8 @@ from backend.application.use_cases.account_security import ChangePassword, Revok
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
 from backend.infrastructure.auth.file_identity_repository import FileIdentityRepository
-from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.auth.postgres_identity_repository import PostgresIdentityRepository
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthSession, AuthenticatedPrincipal
 from backend.tools.auth_store import create_access_token, user_from_token
 
@@ -100,11 +100,12 @@ def test_new_password_must_differ_from_current_password():
 
 def test_successful_password_change_rotates_credentials_and_returns_valid_replacement_session(
     monkeypatch,
+    pg_db,
 ):
     data_dir = make_data_dir()
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     get_settings.cache_clear()
-    repository = SQLiteIdentityRepository(get_database(), data_dir)
+    repository = PostgresIdentityRepository(pg_db, data_dir)
     user = repository.register("changed-user", None, None, "password123", "Changed User")
     old_token = create_access_token(user)
 
@@ -124,12 +125,13 @@ def test_successful_password_change_rotates_credentials_and_returns_valid_replac
 
 def test_revoke_other_sessions_rotates_only_current_users_version_and_keeps_password(
     monkeypatch,
+    pg_db,
 ):
     data_dir = make_data_dir()
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     get_settings.cache_clear()
     db = get_database()
-    repository = SQLiteIdentityRepository(db, data_dir)
+    repository = PostgresIdentityRepository(db, data_dir)
     user = repository.register("revoked-user", None, None, "password123", "Revoked User")
     other = repository.register("other-user", None, None, "password456", "Other User")
     old_token = create_access_token(user)

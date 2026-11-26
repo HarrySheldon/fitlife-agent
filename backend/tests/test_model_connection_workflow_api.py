@@ -11,7 +11,6 @@ from backend.main import create_app
 @pytest.fixture
 def workflow_client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(tmp_path / "fitlife.sqlite3"))
     monkeypatch.setenv("SETTINGS_ENCRYPTION_KEY", Fernet.generate_key().decode())
     monkeypatch.setenv("LLM_ENABLED", "false")
     get_settings.cache_clear()

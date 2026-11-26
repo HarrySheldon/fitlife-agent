@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,13 +9,13 @@ from fastapi.testclient import TestClient
 from backend.api import health
 from backend.config import get_settings
 from backend.infrastructure import startup
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.errors import DatabaseOperationalError
 from backend.main import create_app
 
 
-def test_startup_orders_schema_catalogs_then_per_user_cutover(tmp_path, monkeypatch, caplog):
+def test_startup_orders_schema_catalogs_then_per_user_cutover(
+    tmp_path, monkeypatch, caplog, make_isolated_pg_db
+):
     events = []
     real_run_migrations = startup.run_migrations
 
@@ -59,9 +58,10 @@ def test_startup_orders_schema_catalogs_then_per_user_cutover(tmp_path, monkeypa
                 workout_rows=1, backup_checksum="b" * 64,
             )
 
+    database = make_isolated_pg_db(initialize=False)
     monkeypatch.setattr(startup, "LegacyCsvMigrator", Migrator)
     with caplog.at_level("INFO", logger="fitlife.startup"):
-        summary = startup.run_startup(SQLiteDatabase(tmp_path / "unused.db"), tmp_path)
+        summary = startup.run_startup(database, tmp_path)
 
     assert events == ["schema", "foods", "retirement", "exercises", "legacy:user-a"]
     assert summary.status == "ready"
@@ -78,9 +78,11 @@ def test_startup_orders_schema_catalogs_then_per_user_cutover(tmp_path, monkeypa
     assert "api_key" not in serialized.casefold()
 
 
-def test_recoverable_legacy_failure_serves_degraded_readiness(tmp_path, monkeypatch):
+def test_recoverable_legacy_failure_serves_degraded_readiness(
+    tmp_path, monkeypatch, make_isolated_pg_db
+):
     data_dir = tmp_path / "data"
-    database_path = data_dir / "fitlife.sqlite3"
+    database = make_isolated_pg_db(initialize=False)
     data_dir.mkdir(parents=True)
     (data_dir / "users.json").write_text(
         json.dumps([{"user_id": "c" * 32}]), encoding="utf-8"
@@ -93,7 +95,8 @@ def test_recoverable_legacy_failure_serves_degraded_readiness(tmp_path, monkeypa
         encoding="utf-8",
     )
     monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(database_path))
+    monkeypatch.setenv("DATABASE_URL", database.dsn)
+    monkeypatch.setenv("DATABASE_SCHEMA", database.target_schema)
     get_settings.cache_clear()
     try:
         with TestClient(create_app()) as client:
@@ -108,7 +111,7 @@ def test_recoverable_legacy_failure_serves_degraded_readiness(tmp_path, monkeypa
 def test_readiness_returns_503_when_database_is_unavailable(monkeypatch):
     class BrokenDatabase:
         def connection(self):
-            raise sqlite3.OperationalError("private database path")
+            raise DatabaseOperationalError("private database path")
 
     monkeypatch.setattr(health, "get_database", lambda: BrokenDatabase())
     client = TestClient(create_app())

@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import sqlite3
 import stat
 from pathlib import Path
 from uuid import uuid4
@@ -14,6 +13,7 @@ from backend.application.ports.coach_conversation_repository import (
 from backend.application.ports.identity_repository import IdentityRepository
 from backend.application.ports.profile_target_repository import ProfileTargetRepository
 from backend.domain.errors import ApplicationError, account_delete_failed_error
+from backend.infrastructure.postgres.errors import DatabaseError
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedPrincipal
 
@@ -78,7 +78,7 @@ class DeleteAccount:
                 )
                 if result == "deleted":
                     lifecycle.mark_deleted()
-        except (OSError, ValueError, sqlite3.Error):
+        except (OSError, ValueError, DatabaseError):
             raise account_delete_failed_error() from None
         if result == "token_invalid":
             raise ApplicationError(
@@ -144,7 +144,7 @@ class DeleteAccount:
                     self.user_preferences.delete_user_data(user_id)
                 if self.model_connections is not None:
                     self.model_connections.delete_user_data(user_id)
-            except (OSError, ValueError, sqlite3.Error):
+            except (OSError, ValueError, DatabaseError):
                 if staged_quarantine is not None:
                     _restore_quarantine(
                         staged_quarantine,
@@ -155,7 +155,7 @@ class DeleteAccount:
 
             for quarantine in quarantines:
                 _cleanup_quarantine(quarantine, resolved_users_root)
-        except (OSError, ValueError, sqlite3.Error):
+        except (OSError, ValueError, DatabaseError):
             raise account_delete_failed_error() from None
 
 

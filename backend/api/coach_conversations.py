@@ -50,10 +50,10 @@ from backend.domain.user_preferences import AppLanguage
 from backend.infrastructure.agent_runtime.coach_answer_adapter import (
     RuntimeCoachAnswerAdapter,
 )
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser, CoachSurface
 
 
@@ -131,10 +131,10 @@ _SERVICES: dict[str, CoachTurnService] = {}
 
 def _service_for_settings() -> CoachTurnService:
     settings = get_settings()
-    key = str(settings.database_path)
+    key = f"{settings.database_url}|{settings.database_schema or 'public'}"
     service = _SERVICES.get(key)
     if service is None:
-        repository = SQLiteCoachConversationRepository(get_database())
+        repository = PostgresCoachConversationRepository(get_database())
         service = CoachTurnService(
             repository,
             RuntimeCoachAnswerAdapter(conversations=repository),

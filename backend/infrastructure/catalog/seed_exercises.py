@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
@@ -11,10 +12,12 @@ from backend.infrastructure.catalog.import_ledger import (
     CatalogMutationResult,
 )
 from backend.infrastructure.catalog.release import catalog_import_version
-from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
-    _replace_search,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    _source_tokens,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
+
+_UTC_NOW = "to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')"
 
 
 DEFAULT_SEED_PATH = (
@@ -35,7 +38,7 @@ class ExerciseSeedResult:
 
 
 def seed_bundled_exercises(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     path: Path = DEFAULT_SEED_PATH,
 ) -> ExerciseSeedResult:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -43,7 +46,7 @@ def seed_bundled_exercises(
 
 
 def seed_exercise_payload(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     payload: dict[str, object],
 ) -> ExerciseSeedResult:
     if payload.get("schema_version") != 1:
@@ -108,16 +111,25 @@ def _import_partition(
     records: tuple[dict[str, object], ...],
     identities: set[str],
 ) -> CatalogMutationResult:
+    existing_rows = connection.execute(
+        """
+        SELECT id, source_record_id, content_hash, active
+        FROM exercise_catalog
+        WHERE owner_user_id IS NULL AND source_name = ?
+        """,
+        (source_name,),
+    ).fetchall()
+    existing_by_source_id = {row["source_record_id"]: row for row in existing_rows}
+
     inserted = updated = unchanged = deactivated = 0
+    to_insert_exercises: list[tuple[object, ...]] = []
+    to_update_exercises: list[tuple[object, ...]] = []
+    updated_exercise_ids: list[str] = []
+    alias_rows: list[tuple[object, ...]] = []
+    search_rows: list[tuple[object, ...]] = []
+
     for record in records:
-        existing = connection.execute(
-            """
-            SELECT id, content_hash, active FROM exercise_catalog
-            WHERE owner_user_id IS NULL
-              AND source_name = ? AND source_record_id = ?
-            """,
-            (record["source_name"], record["source_record_id"]),
-        ).fetchone()
+        existing = existing_by_source_id.get(record["source_record_id"])
         if (
             existing is not None
             and existing["content_hash"] == record["content_hash"]
@@ -135,32 +147,10 @@ def _import_partition(
             ).hex
         )
         if existing is None:
-            connection.execute(
-                """
-                INSERT INTO exercise_catalog (
-                    id, owner_user_id, source, source_name,
-                    source_record_id, dataset_version, name,
-                    exercise_type, primary_muscle,
-                    secondary_muscles_json, met, license, attribution,
-                    provenance_json, content_hash, active
-                ) VALUES (
-                    ?, NULL, 'public', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1
-                )
-                """,
-                _parameters(exercise_id, record),
-            )
+            to_insert_exercises.append(_parameters(exercise_id, record))
             inserted += 1
         else:
-            connection.execute(
-                """
-                UPDATE exercise_catalog
-                SET dataset_version = ?, name = ?, exercise_type = ?,
-                    primary_muscle = ?, secondary_muscles_json = ?,
-                    met = ?, license = ?, attribution = ?,
-                    provenance_json = ?, content_hash = ?, active = 1,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
+            to_update_exercises.append(
                 (
                     record["dataset_version"], record["name"],
                     record["exercise_type"], record["primary_muscle"],
@@ -168,46 +158,111 @@ def _import_partition(
                     record["met"], record["license"], record["attribution"],
                     json.dumps(record["provenance"], ensure_ascii=False, sort_keys=True, separators=(",", ":")),
                     record["content_hash"], exercise_id,
-                ),
+                )
             )
+            updated_exercise_ids.append(exercise_id)
             updated += 1
-        _replace_search(
-            connection,
-            exercise_id=exercise_id,
-            name=str(record["name"]),
-            aliases=tuple(record["aliases"]),
-            source_tokens=f"{record['source_name']} {record['source_record_id']}",
-            id_factory=_seed_id_factory(exercise_id),
+
+        aliases = tuple(record["aliases"])
+        source_tokens = f"{record['source_name']} {record['source_record_id']}"
+        id_factory = _seed_id_factory(exercise_id)
+        for alias in aliases:
+            alias_rows.append(
+                (
+                    id_factory(),
+                    exercise_id,
+                    alias,
+                    alias.casefold(),
+                    "zh" if re.search(r"[\u3400-\u9fff]", alias) else "alias",
+                )
+            )
+        search_rows.append(
+            (
+                exercise_id,
+                str(record["name"]),
+                " ".join(aliases),
+                _source_tokens(str(record["name"]), aliases, source_tokens),
+            )
         )
 
-    rows = connection.execute(
-        """
-        SELECT id, source_name, source_record_id
-        FROM exercise_catalog
-        WHERE owner_user_id IS NULL AND active = 1
-          AND source_name = ?
-        """,
-        (source_name,),
-    ).fetchall()
-    for row in rows:
-        if row["source_record_id"] in identities:
-            continue
-        connection.execute(
+    if to_insert_exercises:
+        connection.executemany(
             """
+            INSERT INTO exercise_catalog (
+                id, owner_user_id, source, source_name,
+                source_record_id, dataset_version, name,
+                exercise_type, primary_muscle,
+                secondary_muscles_json, met, license, attribution,
+                provenance_json, content_hash, active
+            ) VALUES (
+                ?, NULL, 'public', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1
+            )
+            """,
+            to_insert_exercises,
+        )
+    if to_update_exercises:
+        connection.executemany(
+            f"""
             UPDATE exercise_catalog
-            SET active = 0, updated_at = CURRENT_TIMESTAMP
+            SET dataset_version = ?, name = ?, exercise_type = ?,
+                primary_muscle = ?, secondary_muscles_json = ?,
+                met = ?, license = ?, attribution = ?,
+                provenance_json = ?, content_hash = ?, active = 1,
+                updated_at = ({_UTC_NOW})
             WHERE id = ?
             """,
-            (row["id"],),
+            to_update_exercises,
+        )
+    if updated_exercise_ids:
+        connection.execute(
+            "DELETE FROM catalog_aliases WHERE exercise_id = ANY(?)",
+            (updated_exercise_ids,),
+        )
+        connection.execute(
+            "DELETE FROM catalog_search WHERE catalog_kind = 'exercise' AND catalog_id = ANY(?)",
+            (updated_exercise_ids,),
+        )
+    if alias_rows:
+        connection.executemany(
+            """
+            INSERT INTO catalog_aliases (
+                id, exercise_id, alias, normalized_alias, alias_kind
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            alias_rows,
+        )
+    if search_rows:
+        connection.executemany(
+            """
+            INSERT INTO catalog_search (
+                catalog_kind, catalog_id, name, aliases, pinyin, source_tokens
+            ) VALUES ('exercise', ?, ?, ?, '', ?)
+            """,
+            search_rows,
+        )
+
+    deactivated_ids = [
+        row["id"]
+        for row in existing_by_source_id.values()
+        if row["active"] == 1 and row["source_record_id"] not in identities
+    ]
+    if deactivated_ids:
+        connection.execute(
+            f"""
+            UPDATE exercise_catalog
+            SET active = 0, updated_at = ({_UTC_NOW})
+            WHERE id = ANY(?)
+            """,
+            (deactivated_ids,),
         )
         connection.execute(
             """
             DELETE FROM catalog_search
-            WHERE catalog_kind = 'exercise' AND catalog_id = ?
+            WHERE catalog_kind = 'exercise' AND catalog_id = ANY(?)
             """,
-            (row["id"],),
+            (deactivated_ids,),
         )
-        deactivated += 1
+        deactivated = len(deactivated_ids)
     return CatalogMutationResult(inserted, updated, unchanged, deactivated)
 
 

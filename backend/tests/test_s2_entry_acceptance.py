@@ -23,7 +23,7 @@ def test_partial_save_reconnect_manual_completion_trace(tmp_path, monkeypatch, c
     trace = []
 
     def facts(label, draft):
-        stored = observe_database(settings.database_path, actors=actors.user_ids)
+        stored = observe_database(actors=actors.user_ids)
         entry = {'step': label, 'version': draft['version'],
                  'rounds': draft['payload']['interaction']['clarification_rounds'],
                  'formal_count': stored['confirmed_meals']}
@@ -88,7 +88,7 @@ def test_partial_save_reconnect_manual_completion_trace(tmp_path, monkeypatch, c
     assert [entry['version'] for entry in trace] == [1, 2, 3, 4, 4, 5, 6]
     assert [entry['rounds'] for entry in trace] == [0, 1, 2, 2, 2, 2, 2]
     assert [entry['formal_count'] for entry in trace] == [0, 0, 0, 1, 1, 1, 2]
-    assert observe_database(settings.database_path, actors=actors.user_ids)['item_commit_count'] == 2
+    assert observe_database(actors=actors.user_ids)['item_commit_count'] == 2
     client.app.dependency_overrides.clear()
     with capsys.disabled():
         print('S2_ACCEPTANCE_TRACE=' + json.dumps(trace, separators=(',', ':')))

@@ -12,16 +12,16 @@ from backend.api.utils import ok
 from backend.domain.account_clock import local_today
 from backend.domain.body_measurements import compute_body_summary
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
-from backend.infrastructure.repositories.sqlite_body_measurement_repository import (
-    SQLiteBodyMeasurementRepository,
+from backend.infrastructure.repositories.postgres_body_measurement_repository import (
+    PostgresBodyMeasurementRepository,
 )
-from backend.infrastructure.repositories.sqlite_exercise_progress_repository import (
-    SQLiteExerciseProgressRepository,
+from backend.infrastructure.repositories.postgres_exercise_progress_repository import (
+    PostgresExerciseProgressRepository,
 )
-from backend.infrastructure.repositories.sqlite_training_context_repository import (
-    SQLiteTrainingContextRepository,
+from backend.infrastructure.repositories.postgres_training_context_repository import (
+    PostgresTrainingContextRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 from backend.tools.meal_analyzer import analyze_meals
 from backend.tools.workout_analyzer import analyze_workouts
@@ -36,7 +36,7 @@ def exercise_progress(
 ):
     prefs = preferences_for(user)
     today = local_today(prefs.timezone).isoformat()
-    repo = SQLiteExerciseProgressRepository(get_database())
+    repo = PostgresExerciseProgressRepository(get_database())
     items = repo.list_progress(user.user_id, days=days, end_date=today)
     return ok(
         {
@@ -71,14 +71,14 @@ def progress_overview(
     workout_result = analyze_workouts(workouts)
     daily_meals = meal_result["daily_totals"]
 
-    body_repo = SQLiteBodyMeasurementRepository(db)
+    body_repo = PostgresBodyMeasurementRepository(db)
     measurements = body_repo.list_for_user(user.user_id, days=days, end_date=today_str)
     body_summary = compute_body_summary(measurements, target_weight_kg=target_weight)
 
-    exercise_repo = SQLiteExerciseProgressRepository(db)
+    exercise_repo = PostgresExerciseProgressRepository(db)
     exercises = exercise_repo.list_progress(user.user_id, days=max(days, 90), end_date=today_str)
 
-    training_ctx = SQLiteTrainingContextRepository(db).get(user.user_id)
+    training_ctx = PostgresTrainingContextRepository(db).get(user.user_id)
 
     # Last 7 days adherence & nutrition hit counts
     last7_dates = {(today_date - timedelta(days=offset)).isoformat() for offset in range(7)}
@@ -100,7 +100,7 @@ def progress_overview(
     # Workout adherence over last 7 days (M3 overrides with active plan_cycle adherence when present)
     weekly_target_sessions = (
         training_ctx.weekly_available_days
-        if (training_ctx.configured or ctx.has_sqlite_setup or ctx.is_synthetic_default)
+        if (training_ctx.configured or ctx.has_db_setup or ctx.is_synthetic_default)
         else int(profile.weekly_training_frequency or training_ctx.weekly_available_days or 3)
     )
     recent_workout_days = _count_workout_days(workouts, last7_dates)
@@ -179,12 +179,12 @@ def _count_workout_days(workouts, date_set: set[str]) -> int:
 
 def _active_cycle_adherence_if_available(db, user_id: str, today_str: str) -> dict[str, int] | None:
     try:
-        from backend.infrastructure.repositories.sqlite_plan_cycle_repository import (
-            SQLitePlanCycleRepository,
+        from backend.infrastructure.repositories.postgres_plan_cycle_repository import (
+            PostgresPlanCycleRepository,
         )
     except ImportError:
         return None
-    repo = SQLitePlanCycleRepository(db)
+    repo = PostgresPlanCycleRepository(db)
     summary = repo.week_adherence_summary(user_id, today_str)
     if summary is None or summary["planned"] <= 0:
         return None

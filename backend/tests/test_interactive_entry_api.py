@@ -89,7 +89,7 @@ def test_ttl_snapshot_expired_read_and_foreign_privacy(client, monkeypatch):
     from backend.config import get_settings
     get_settings.cache_clear()
     assert client.get(f"{BASE}/{draft['id']}", headers=headers).json()['data']['expires_at'] == draft['expires_at']
-    from backend.infrastructure.sqlite.runtime import get_database
+    from backend.infrastructure.postgres.runtime import get_database
     with get_database().transaction() as connection:
         connection.execute("UPDATE record_drafts SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", (draft['id'],))
     assert client.get(f"{BASE}/{draft['id']}", headers=headers).status_code == 410

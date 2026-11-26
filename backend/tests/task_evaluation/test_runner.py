@@ -42,11 +42,13 @@ def test_structured_refs_preserve_types_and_reject_unknown():
         _resolve({"$ref": "unknown"}, {})
 
 
-def _build_client(tmp_path: Path, monkeypatch) -> TestClient:
+def _build_client(tmp_path: Path, monkeypatch, *, database=None) -> TestClient:
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(data_dir / "fitlife.sqlite3"))
+    if database is not None:
+        monkeypatch.setenv("DATABASE_URL", database.dsn)
+        monkeypatch.setenv("DATABASE_SCHEMA", database.target_schema)
     get_settings.cache_clear()
     # Enter the context so the lifespan hook runs migrations and catalog seeding.
     client = TestClient(create_app())
@@ -82,7 +84,7 @@ def _seed_profile(client: TestClient, headers: dict[str, str]) -> None:
     assert response.status_code == 200
 
 
-def test_two_isolated_environments_do_not_share_records(tmp_path, monkeypatch):
+def test_two_isolated_environments_do_not_share_records(tmp_path, monkeypatch, make_isolated_pg_db):
     """The core isolation property: environment B starts empty no matter what A did."""
     scenario = Scenario.model_validate({
         "id": "entry-confirm", "version": 1,
@@ -106,18 +108,20 @@ def test_two_isolated_environments_do_not_share_records(tmp_path, monkeypatch):
 
     env_a = tmp_path / "a"
     env_a.mkdir()
-    client_a = _build_client(env_a, monkeypatch)
+    db_a = make_isolated_pg_db(initialize=False)
+    client_a = _build_client(env_a, monkeypatch, database=db_a)
     headers_a = _register(client_a, "user-a")
     _seed_profile(client_a, headers_a)
     result_a = execute_scenario(
         scenario, client_a, headers_factory=lambda: headers_a,
-        observer=lambda: observe_database(env_a / "data" / "fitlife.sqlite3")
+        observer=lambda: observe_database(db_a)
     )
     assert result_a.status == "passed", result_a.failures
 
     env_b = tmp_path / "b"
     env_b.mkdir()
-    client_b = _build_client(env_b, monkeypatch)
+    db_b = make_isolated_pg_db(initialize=False)
+    client_b = _build_client(env_b, monkeypatch, database=db_b)
     headers_b = _register(client_b, "user-b")
     _seed_profile(client_b, headers_b)
     today = client_b.get("/today", params={"date": "2026-07-26"}, headers=headers_b)
@@ -242,7 +246,6 @@ def test_spawned_duplicate_scenarios_and_production_env_trap(tmp_path, monkeypat
     marker = production / "sentinel.txt"
     marker.write_text("unchanged", encoding="utf-8")
     monkeypatch.setenv("DATA_DIR", str(production))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(production / "must-not-exist.sqlite3"))
     scenario = Scenario.model_validate({"id": "duplicate", "version": 1, "expected": {"confirmed_meals": 0}})
     budget = BatchBudget(200, 200000)
     deadline = time.monotonic() + 30

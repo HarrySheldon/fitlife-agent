@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError
 from backend.i18n import language_from_accept_language, translate_public_message
-from backend.infrastructure.settings.sqlite_user_preferences_repository import (
-    SQLiteUserPreferencesRepository,
+from backend.infrastructure.settings.postgres_user_preferences_repository import (
+    PostgresUserPreferencesRepository,
 )
 from backend.main import create_app
 
@@ -219,7 +219,7 @@ def test_application_error_survives_preferences_read_failure(
     def fail_preferences_read(_repository, _user_id):
         raise OSError("preferences unavailable")
 
-    monkeypatch.setattr(SQLiteUserPreferencesRepository, "get", fail_preferences_read)
+    monkeypatch.setattr(PostgresUserPreferencesRepository, "get", fail_preferences_read)
     if accept_language is not None:
         headers["Accept-Language"] = accept_language
 
@@ -249,7 +249,7 @@ def test_validation_error_survives_preferences_read_failure(
     def fail_preferences_read(_repository, _user_id):
         raise OSError("preferences unavailable")
 
-    monkeypatch.setattr(SQLiteUserPreferencesRepository, "get", fail_preferences_read)
+    monkeypatch.setattr(PostgresUserPreferencesRepository, "get", fail_preferences_read)
     if accept_language is not None:
         headers["Accept-Language"] = accept_language
 

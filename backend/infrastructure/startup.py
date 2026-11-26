@@ -23,13 +23,13 @@ from backend.infrastructure.migration.legacy_account_state import (
     LegacyAccountStateMigrator,
 )
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.migrations import run_migrations
+from backend.infrastructure.postgres.runtime import get_database
+from backend.infrastructure.postgres.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.runtime import get_database
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 from backend.rag.retriever import build_knowledge_index
 from backend.rag.vector_store import HashingEmbeddingProvider
 from backend.safety.gate import default_pack as load_safety_packs
@@ -57,7 +57,7 @@ _last_summary: StartupSummary | None = None
 
 
 def run_startup(
-    database: SQLiteDatabase | None = None,
+    database: PostgresDatabase | None = None,
     data_dir: Path | None = None,
 ) -> StartupSummary:
     global _last_summary
@@ -110,7 +110,7 @@ def run_startup(
     # belongs to a process that is gone. Saying "interrupted" is the only honest
     # state: this process cannot resume that inference, and resending it would
     # bill the account twice for one question.
-    interrupted = SQLiteCoachConversationRepository(database).interrupt_stale_turns(
+    interrupted = PostgresCoachConversationRepository(database).interrupt_stale_turns(
         (), at=datetime.now(timezone.utc)
     )
 
@@ -177,7 +177,7 @@ def run_startup(
     legacy_completed = legacy_skipped = legacy_failed = 0
     migrator = LegacyCsvMigrator(database, data_dir)
     all_user_ids = tuple(
-        dict.fromkeys((*_registered_user_ids(data_dir), *_sqlite_user_ids(database)))
+        dict.fromkeys((*_registered_user_ids(data_dir), *_postgres_user_ids(database)))
     )
     for user_id in all_user_ids:
         phase_started = time.monotonic()
@@ -217,7 +217,7 @@ def run_startup(
     try:
         release_id = build_knowledge_index(
             provider=HashingEmbeddingProvider(),
-            index_path=data_dir / "vector_index.json",
+            database=database,
         )
         _event(
             operation="rag_index_build",
@@ -288,11 +288,15 @@ def _registered_user_ids(data_dir: Path) -> tuple[str, ...]:
     )
 
 
-def _sqlite_user_ids(database: SQLiteDatabase) -> tuple[str, ...]:
+def _postgres_user_ids(database: PostgresDatabase) -> tuple[str, ...]:
     with database.connection() as connection:
         has_table = (
             connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+                """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = current_schema() AND table_name = 'users'
+                """
             ).fetchone()
             is not None
         )

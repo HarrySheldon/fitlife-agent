@@ -14,17 +14,15 @@ import pytest
 
 from backend.application.ports.plan_repository import StoredPlan
 from backend.domain.errors import ApplicationError
-from backend.infrastructure.repositories.sqlite_plan_repository import (
-    SQLitePlanRepository,
-)
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.import_legacy_plans import (
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.import_legacy_plans import (
     apply,
     inventory,
     main,
 )
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.repositories.postgres_plan_repository import (
+    PostgresPlanRepository,
+)
 
 NOW = datetime(2026, 10, 25, 9, 0, tzinfo=timezone.utc)
 
@@ -61,12 +59,6 @@ def _draft_file(directory, draft_id, *, when=NOW):
 
 def _data_dir(tmp_path):
     return tmp_path / "data"
-
-
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
 
 
 def _seeded(tmp_path):
@@ -159,14 +151,14 @@ def test_a_stray_note_is_ignored_rather_than_refused(tmp_path):
 # --------------------------------------------------------------------- the apply
 
 
-def test_apply_copies_history_and_records_the_import(tmp_path):
+def test_apply_copies_history_and_records_the_import(tmp_path, pg_db):
     data_dir = _seeded(tmp_path)
-    database = _database(tmp_path)
+    database = pg_db
 
     imported = apply(data_dir, database)
 
     assert imported == {"owners": 1, "plans": 2, "drafts": 1, "safety": 0}
-    repository = SQLitePlanRepository(database)
+    repository = PostgresPlanRepository(database)
     assert [plan.plan_id for plan in repository.list("alice")] == [
         "plan-bbbbbbbb", "plan-aaaaaaaa"]
     assert repository.get("alice", "plan-aaaaaaaa").plan.diet_plan == DOCUMENT["diet_plan"]
@@ -177,19 +169,19 @@ def test_apply_copies_history_and_records_the_import(tmp_path):
     assert state["plan_count"] == 2 and state["owner_count"] == 1
 
 
-def test_apply_keeps_the_files(tmp_path):
+def test_apply_keeps_the_files(tmp_path, pg_db):
     data_dir = _seeded(tmp_path)
     before = sorted(path.name for path in (data_dir / "users" / "alice" / "plans").iterdir())
 
-    apply(data_dir, _database(tmp_path))
+    apply(data_dir, pg_db)
 
     assert sorted(path.name for path in
                   (data_dir / "users" / "alice" / "plans").iterdir()) == before
 
 
-def test_applying_twice_does_not_duplicate_history(tmp_path):
+def test_applying_twice_does_not_duplicate_history(tmp_path, pg_db):
     data_dir = _seeded(tmp_path)
-    database = _database(tmp_path)
+    database = pg_db
 
     first = apply(data_dir, database)
     second = apply(data_dir, database)
@@ -197,14 +189,14 @@ def test_applying_twice_does_not_duplicate_history(tmp_path):
     assert first["plans"] == 2
     # The second run copies nothing new: identical rows are no-ops.
     assert second == {"owners": 1, "plans": 0, "drafts": 0, "safety": 0}
-    assert len(SQLitePlanRepository(database).list("alice")) == 2
-    assert SQLitePlanRepository(database).current_head("alice").revision == 2
+    assert len(PostgresPlanRepository(database).list("alice")) == 2
+    assert PostgresPlanRepository(database).current_head("alice").revision == 2
 
 
-def test_a_different_document_under_the_same_id_is_a_conflict(tmp_path):
+def test_a_different_document_under_the_same_id_is_a_conflict(tmp_path, pg_db):
     data_dir = _seeded(tmp_path)
-    database = _database(tmp_path)
-    repository = SQLitePlanRepository(database)
+    database = pg_db
+    repository = PostgresPlanRepository(database)
     repository.save("alice", StoredPlan(
         plan_id="plan-aaaaaaaa", activated_at=NOW, kind="deterministic",
         plan={**DOCUMENT, "trace": {"different": True}}))
@@ -215,23 +207,23 @@ def test_a_different_document_under_the_same_id_is_a_conflict(tmp_path):
     assert raised.value.code == "PLAN_HISTORY_CONFLICT"
 
 
-def test_a_refused_file_aborts_the_import_before_anything_is_written(tmp_path):
+def test_a_refused_file_aborts_the_import_before_anything_is_written(tmp_path, pg_db):
     data_dir = _seeded(tmp_path)
     (data_dir / "users" / "alice" / "plans" / "plan-zzz.json").write_text(
         "{}", encoding="utf-8")
-    database = _database(tmp_path)
+    database = pg_db
 
     with pytest.raises(SystemExit):
         apply(data_dir, database)
 
-    assert SQLitePlanRepository(database).list("alice") == []
+    assert PostgresPlanRepository(database).list("alice") == []
 
 
-def test_the_head_never_moves_backwards(tmp_path):
+def test_the_head_never_moves_backwards(tmp_path, pg_db):
     data_dir = _seeded(tmp_path)
-    database = _database(tmp_path)
+    database = pg_db
     apply(data_dir, database)
-    repository = SQLitePlanRepository(database)
+    repository = PostgresPlanRepository(database)
     repository.save("alice", StoredPlan(
         plan_id="plan-dddddddd", activated_at=NOW + timedelta(days=1),
         kind="agent_adjusted", based_on_plan_id="plan-bbbbbbbb", plan=DOCUMENT))
@@ -247,15 +239,31 @@ def test_the_head_never_moves_backwards(tmp_path):
 # ------------------------------------------------------------------ the command
 
 
-def test_dry_run_prints_a_report_and_writes_nothing(tmp_path, capsys):
+def test_dry_run_prints_a_report_and_writes_nothing(tmp_path, make_isolated_pg_db, capsys):
     data_dir = _seeded(tmp_path)
+    database = make_isolated_pg_db(initialize=False)
 
-    exit_code = main(["--data-dir", str(data_dir), "--dry-run"])
+    exit_code = main(
+        [
+            "--data-dir",
+            str(data_dir),
+            "--database-url",
+            database.dsn,
+            "--schema",
+            database.target_schema,
+            "--dry-run",
+        ]
+    )
 
     report = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert report["plans"] == 2 and report["owners"] == 1
-    assert not (data_dir / "fitlife.sqlite3").exists()
+    with PostgresDatabase(database.dsn).connection() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ?",
+            (database.target_schema,),
+        ).fetchone()
+        assert row[0] == 0
 
 
 def test_dry_run_exits_non_zero_when_a_file_is_refused(tmp_path, capsys):
@@ -268,25 +276,35 @@ def test_dry_run_exits_non_zero_when_a_file_is_refused(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["refused"]
 
 
-def test_apply_runs_the_migrations_it_needs(tmp_path, capsys):
+def test_apply_runs_the_migrations_it_needs(tmp_path, make_isolated_pg_db, capsys):
     data_dir = _seeded(tmp_path)
+    database = make_isolated_pg_db(initialize=False)
 
-    exit_code = main(["--data-dir", str(data_dir), "--apply"])
+    exit_code = main(
+        [
+            "--data-dir",
+            str(data_dir),
+            "--database-url",
+            database.dsn,
+            "--schema",
+            database.target_schema,
+            "--apply",
+        ]
+    )
 
     assert exit_code == 0
-    database = SQLiteDatabase(data_dir / "fitlife.sqlite3")
-    assert len(SQLitePlanRepository(database).list("alice")) == 2
+    assert len(PostgresPlanRepository(database).list("alice")) == 2
 
 
-def test_apply_versions_the_allergy_list_from_the_profile(tmp_path):
+def test_apply_versions_the_allergy_list_from_the_profile(tmp_path, pg_db):
     """The restrictions move with the plans, in the same authorized command.
 
     A confirmation cannot approve a candidate reviewed against a value whose
     version it cannot name, so an import that moved only the plans would leave
     every migrated account unable to confirm anything.
     """
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
     from backend.tools.data_access import DEFAULT_PROFILE
 
@@ -294,28 +312,28 @@ def test_apply_versions_the_allergy_list_from_the_profile(tmp_path):
     profile = DEFAULT_PROFILE.model_copy(update={"allergies_or_restrictions": ["花生"]})
     (data_dir / "users" / "alice" / "user_profile.json").write_text(
         json.dumps(profile.model_dump(), ensure_ascii=False), encoding="utf-8")
-    database = _database(tmp_path)
+    database = pg_db
 
     imported = apply(data_dir, database)
 
     assert imported["safety"] == 1
-    safety = SQLiteProfileTargetRepository(database).get_latest_safety("alice")
+    safety = PostgresProfileTargetRepository(database).get_latest_safety("alice")
     assert safety.allergies_or_restrictions == ("花生",)
     # A second run is not a second decision.
     assert apply(data_dir, database)["safety"] == 0
 
 
-def test_a_missing_profile_leaves_the_restrictions_unknown(tmp_path):
+def test_a_missing_profile_leaves_the_restrictions_unknown(tmp_path, pg_db):
     # Plans without a profile means the restrictions are unknown, not empty.
     # Writing an empty list would claim "verified to have no allergies".
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
     data_dir = _seeded(tmp_path)
-    database = _database(tmp_path)
+    database = pg_db
 
     imported = apply(data_dir, database)
 
     assert imported["safety"] == 0
-    assert SQLiteProfileTargetRepository(database).get_latest_safety("alice") is None
+    assert PostgresProfileTargetRepository(database).get_latest_safety("alice") is None

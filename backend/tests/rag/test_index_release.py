@@ -152,18 +152,18 @@ def _chunks():
     return [chunk for document in _documents() for chunk in chunk_markdown(document)]
 
 
-def test_an_index_with_missing_vectors_is_refused(tmp_path):
+def test_an_index_with_missing_vectors_is_refused(pg_db):
     from backend.rag.index_release import publish_release
 
     provider = _provider()
     chunks = _chunks()
     with pytest.raises(ValueError, match="vector"):
         publish_release(chunks=chunks, provider=provider,
-                        embedding_lookup=lambda _text: [], root=tmp_path,
+                        embedding_lookup=lambda _text: [], database=pg_db,
                         release_id="release-0001", documents=_documents())
 
 
-def test_an_index_with_a_non_finite_vector_is_refused(tmp_path):
+def test_an_index_with_a_non_finite_vector_is_refused(pg_db):
     from backend.rag.index_release import publish_release
 
     provider = _provider()
@@ -178,11 +178,11 @@ def test_an_index_with_a_non_finite_vector_is_refused(tmp_path):
 
     with pytest.raises(ValueError, match="finite"):
         publish_release(chunks=chunks, provider=provider,
-                        embedding_lookup=lookup, root=tmp_path,
+                        embedding_lookup=lookup, database=pg_db,
                         release_id="release-0001", documents=_documents())
 
 
-def test_an_index_with_a_ragged_dimension_is_refused(tmp_path):
+def test_an_index_with_a_ragged_dimension_is_refused(pg_db):
     from backend.rag.index_release import publish_release
 
     provider = _provider()
@@ -196,11 +196,11 @@ def test_an_index_with_a_ragged_dimension_is_refused(tmp_path):
 
     with pytest.raises(ValueError, match="dimension"):
         publish_release(chunks=chunks, provider=provider,
-                        embedding_lookup=lookup, root=tmp_path,
+                        embedding_lookup=lookup, database=pg_db,
                         release_id="release-0001", documents=_documents())
 
 
-def test_duplicate_chunk_ids_are_refused(tmp_path):
+def test_duplicate_chunk_ids_are_refused(pg_db):
     """Two chunks claiming one id would make a citation ambiguous."""
     from backend.rag.index_release import publish_release
 
@@ -211,7 +211,7 @@ def test_duplicate_chunk_ids_are_refused(tmp_path):
 
     with pytest.raises(ValueError, match="unique"):
         publish_release(chunks=chunks, provider=provider,
-                        embedding_lookup=lookup, root=tmp_path,
+                        embedding_lookup=lookup, database=pg_db,
                         release_id="release-0001", documents=_documents())
 
 
@@ -219,7 +219,7 @@ def test_duplicate_chunk_ids_are_refused(tmp_path):
 # publishing is atomic and an interrupted build keeps the previous release
 # --------------------------------------------------------------------------
 
-def test_publishing_creates_a_release_with_a_readable_manifest(tmp_path):
+def test_publishing_creates_a_release_with_a_readable_manifest(pg_db):
     from backend.rag.index_release import publish_release, read_manifest
 
     provider = _provider()
@@ -227,25 +227,25 @@ def test_publishing_creates_a_release_with_a_readable_manifest(tmp_path):
     lookup = lambda _text: [0.1] * provider.dimensions  # noqa: E731
 
     release = publish_release(chunks=chunks, provider=provider,
-                              embedding_lookup=lookup, root=tmp_path,
+                              embedding_lookup=lookup, database=pg_db,
                               release_id="release-0001",
                               documents=_documents())
 
-    manifest = read_manifest(tmp_path)
+    manifest = read_manifest(pg_db)
     assert manifest is not None
     assert manifest.release_id == "release-0001"
     assert manifest.chunk_count == len(chunks)
     assert release == "release-0001"
 
 
-def test_a_failed_build_leaves_the_previous_release_active(tmp_path):
+def test_a_failed_build_leaves_the_previous_release_active(pg_db):
     from backend.rag.index_release import publish_release, read_manifest
 
     provider = _provider()
     chunks = _chunks()
     good = lambda _text: [0.1] * provider.dimensions  # noqa: E731
     publish_release(chunks=chunks, provider=provider, embedding_lookup=good,
-                    root=tmp_path, release_id="release-0001",
+                    database=pg_db, release_id="release-0001",
                     documents=_documents())
 
     def broken(_text):
@@ -258,15 +258,15 @@ def test_a_failed_build_leaves_the_previous_release_active(tmp_path):
 
     with pytest.raises(RuntimeError):
         publish_release(chunks=changed_chunks, provider=provider,
-                        embedding_lookup=broken, root=tmp_path,
+                        embedding_lookup=broken, database=pg_db,
                         release_id="release-0002", documents=changed)
 
-    manifest = read_manifest(tmp_path)
+    manifest = read_manifest(pg_db)
     assert manifest is not None
     assert manifest.release_id == "release-0001"
 
 
-def test_a_rejected_build_leaves_the_previous_release_active(tmp_path):
+def test_a_rejected_build_leaves_the_previous_release_active(pg_db):
     """A NaN vector is caught before the manifest switches, not after."""
     from backend.rag.index_release import publish_release, read_manifest
 
@@ -274,7 +274,7 @@ def test_a_rejected_build_leaves_the_previous_release_active(tmp_path):
     chunks = _chunks()
     good = lambda _text: [0.1] * provider.dimensions  # noqa: E731
     publish_release(chunks=chunks, provider=provider, embedding_lookup=good,
-                    root=tmp_path, release_id="release-0001",
+                    database=pg_db, release_id="release-0001",
                     documents=_documents())
 
     # A different corpus forces re-embedding, so the bad vector is actually produced
@@ -287,37 +287,42 @@ def test_a_rejected_build_leaves_the_previous_release_active(tmp_path):
     with pytest.raises(ValueError, match="finite"):
         publish_release(chunks=changed_chunks, provider=provider,
                         embedding_lookup=lambda _t: [float("inf")] * provider.dimensions,
-                        root=tmp_path, release_id="release-0002",
+                        database=pg_db, release_id="release-0002",
                         documents=changed)
 
-    assert read_manifest(tmp_path).release_id == "release-0001"
+    assert read_manifest(pg_db).release_id == "release-0001"
 
 
-def test_a_release_directory_is_not_overwritten_in_place(tmp_path):
-    """Each release gets its own directory; the active pointer moves, files do not."""
+def test_a_release_is_not_overwritten_in_place(pg_db):
+    """Each release gets its own rows; the active pointer moves, prior release data stays intact."""
     from backend.rag.index_release import publish_release
+    from backend.rag.pgvector_store import PgVectorReleaseStore
 
     provider = _provider()
     chunks = _chunks()
     lookup = lambda _text: [0.1] * provider.dimensions  # noqa: E731
+    store = PgVectorReleaseStore(pg_db)
 
     publish_release(chunks=chunks, provider=provider, embedding_lookup=lookup,
-                    root=tmp_path, release_id="release-0001", documents=_documents())
-    first = (tmp_path / "release-0001").stat().st_mtime_ns
+                    database=pg_db, release_id="release-0001", documents=_documents())
+    first_chunks = store.load_chunks("release-0001")
 
     publish_release(chunks=chunks, provider=provider, embedding_lookup=lookup,
-                    root=tmp_path, release_id="release-0002", documents=_documents())
+                    database=pg_db, release_id="release-0002", documents=_documents())
 
-    assert (tmp_path / "release-0001").exists()
-    assert (tmp_path / "release-0002").exists()
-    assert (tmp_path / "release-0001").stat().st_mtime_ns == first
+    assert store.pointer_state() == {
+        "active_release_id": "release-0002",
+        "previous_release_id": "release-0001",
+    }
+    assert store.load_chunks("release-0001") == first_chunks
+    assert len(store.load_chunks("release-0002")) == len(chunks)
 
 
 # --------------------------------------------------------------------------
 # incremental reuse
 # --------------------------------------------------------------------------
 
-def test_only_changed_chunks_are_re_embedded(tmp_path):
+def test_only_changed_chunks_are_re_embedded(pg_db):
     from backend.rag.index_release import publish_release
 
     provider = _provider()
@@ -329,7 +334,7 @@ def test_only_changed_chunks_are_re_embedded(tmp_path):
         return [0.1] * provider.dimensions
 
     publish_release(chunks=before, provider=provider, embedding_lookup=counting,
-                    root=tmp_path, release_id="release-0001",
+                    database=pg_db, release_id="release-0001",
                     documents=_documents())
     first_round = len(embedded)
 
@@ -340,15 +345,15 @@ def test_only_changed_chunks_are_re_embedded(tmp_path):
     after = [chunk for document in after_documents for chunk in chunk_markdown(document)]
     embedded.clear()
     publish_release(chunks=after, provider=provider, embedding_lookup=counting,
-                    root=tmp_path, release_id="release-0002",
-                    previous_root=tmp_path / "release-0001",
+                    database=pg_db, release_id="release-0002",
+                    previous_release_id="release-0001",
                     documents=after_documents)
 
     assert first_round == len(before)
     assert 0 < len(embedded) < first_round
 
 
-def test_a_provider_change_forces_a_full_rebuild(tmp_path):
+def test_a_provider_change_forces_a_full_rebuild(pg_db):
     from backend.rag.index_release import publish_release
 
     provider = _provider()
@@ -357,7 +362,7 @@ def test_a_provider_change_forces_a_full_rebuild(tmp_path):
     counting = lambda text: (embedded.append(text), [0.1] * provider.dimensions)[1]  # noqa: E731
 
     publish_release(chunks=chunks, provider=provider, embedding_lookup=counting,
-                    root=tmp_path, release_id="release-0001", documents=_documents())
+                    database=pg_db, release_id="release-0001", documents=_documents())
     embedded.clear()
 
     class OtherProvider:
@@ -366,7 +371,7 @@ def test_a_provider_change_forces_a_full_rebuild(tmp_path):
         dimensions = provider.dimensions
 
     publish_release(chunks=chunks, provider=OtherProvider(), embedding_lookup=counting,
-                    root=tmp_path, release_id="release-0002",
-                    previous_root=tmp_path / "release-0001", documents=_documents())
+                    database=pg_db, release_id="release-0002",
+                    previous_release_id="release-0001", documents=_documents())
 
     assert len(embedded) == len(chunks)

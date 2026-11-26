@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient
 
 from backend.api.dependencies import require_current_principal
 from backend.config import get_settings
-from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.auth.postgres_identity_repository import PostgresIdentityRepository
+from backend.infrastructure.postgres.runtime import get_database
 from backend.main import create_app
 from backend.tools.auth_store import principal_from_token
 
@@ -24,9 +24,9 @@ def build_client(monkeypatch) -> TestClient:
     get_settings.cache_clear()
     # These endpoints now stop account-owned Coach work. Like the production
     # lifespan, this no-lifespan fixture must initialize all records tables.
-    from backend.infrastructure.sqlite.runtime import get_database
-    from backend.infrastructure.sqlite.migrations import run_migrations
-    from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+    from backend.infrastructure.postgres.runtime import get_database
+    from backend.infrastructure.postgres.migrations import run_migrations
+    from backend.infrastructure.postgres.schema import RECORDS_MIGRATIONS
     run_migrations(get_database(), RECORDS_MIGRATIONS)
     return TestClient(create_app())
 
@@ -278,7 +278,7 @@ def test_stale_password_principal_is_rejected_without_resurrecting_request(monke
     session = register(client, "stale-password-api")
     stale_principal = principal_from_token(session["access_token"])
     assert stale_principal is not None
-    repository = SQLiteIdentityRepository(get_database(), get_settings().data_dir)
+    repository = PostgresIdentityRepository(get_database(), get_settings().data_dir)
     assert repository.rotate_token_version(stale_principal.user.user_id) == 1
     client.app.dependency_overrides[require_current_principal] = lambda: stale_principal
 
@@ -301,7 +301,7 @@ def test_stale_revoke_principal_is_rejected_without_second_rotation(monkeypatch)
     session = register(client, "stale-revoke-api")
     stale_principal = principal_from_token(session["access_token"])
     assert stale_principal is not None
-    repository = SQLiteIdentityRepository(get_database(), get_settings().data_dir)
+    repository = PostgresIdentityRepository(get_database(), get_settings().data_dir)
     assert repository.rotate_token_version(stale_principal.user.user_id) == 1
     client.app.dependency_overrides[require_current_principal] = lambda: stale_principal
 

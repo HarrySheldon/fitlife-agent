@@ -1,205 +1,93 @@
-import sqlite3
-from pathlib import Path
-
 import pytest
 
-from backend.infrastructure.sqlite import SQLiteDatabase
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import (
+    DatabaseIntegrityError,
+    DatabaseOperationalError,
+)
 
 
-def test_file_connection_enables_sqlite_safety_pragmas(tmp_path):
-    database = SQLiteDatabase(tmp_path / "nested" / "app.db")
+def test_connection_targets_isolated_schema_and_pings(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
 
+    assert database.ping() is True
     with database.connection() as connection:
-        foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
-        journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
-        busy_timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
-
-    assert foreign_keys == 1
-    assert journal_mode == "wal"
-    assert busy_timeout == 5000
+        row = connection.execute("SELECT current_schema() AS schema_name").fetchone()
+        assert row["schema_name"] == database.target_schema
+        assert row[0] == database.target_schema
 
 
-def test_connection_closes_after_context_exit(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
-
-    with database.connection() as connection:
-        connection.execute("SELECT 1")
-
-    with pytest.raises(sqlite3.ProgrammingError):
-        connection.execute("SELECT 1")
-
-
-def test_connection_closes_when_pragma_setup_fails(tmp_path, monkeypatch):
-    setup_error = RuntimeError("pragma setup failed")
-
-    class TrackingConnection:
-        def __init__(self):
-            self.closed = False
-            self.row_factory = None
-
-        def execute(self, statement):
-            raise setup_error
-
-        def close(self):
-            self.closed = True
-
-    tracking_connection = TrackingConnection()
-    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
-    database = SQLiteDatabase(tmp_path / "app.db")
-
-    with pytest.raises(RuntimeError) as raised:
-        with database.connection():
-            pass
-
-    assert raised.value is setup_error
-    assert tracking_connection.closed is True
-
-
-class _Probe:
-    """What ``PRAGMA journal_mode`` returns before the mode is switched."""
-
-    def __init__(self, mode: str) -> None:
-        self._mode = mode
-
-    def fetchone(self):
-        return (self._mode,)
-
-
-def test_locked_wal_setup_retries_after_setting_busy_timeout(monkeypatch):
-    class TrackingConnection:
-        def __init__(self):
-            self.calls = []
-            self.closed = False
-            self.row_factory = None
-            self.wal_attempts = 0
-
-        def execute(self, statement):
-            self.calls.append(statement)
-            if statement == "PRAGMA journal_mode":
-                return _Probe("delete")
-            if statement == "PRAGMA journal_mode = WAL":
-                self.wal_attempts += 1
-                if self.wal_attempts == 1:
-                    raise sqlite3.OperationalError("database is locked")
-            return None
-
-        def close(self):
-            self.closed = True
-
-    tracking_connection = TrackingConnection()
-    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
-    database = SQLiteDatabase(Path("unused.db"))
-
-    with database.connection():
-        pass
-
-    assert tracking_connection.calls == [
-        "PRAGMA busy_timeout = 5000",
-        "PRAGMA foreign_keys = ON",
-        "PRAGMA journal_mode",
-        "PRAGMA journal_mode = WAL",
-        # The retry re-reads the mode first: another process may have switched it
-        # while this one was waiting for the lock.
-        "PRAGMA journal_mode",
-        "PRAGMA journal_mode = WAL",
-    ]
-    assert tracking_connection.closed is True
-
-
-def test_a_database_already_in_wal_is_never_written_to_on_connect(monkeypatch):
-    """Asking first is what removed the concurrent-writer failure.
-
-    ``PRAGMA journal_mode = WAL`` needs a lock even when the mode is already WAL,
-    and SQLite reports that contention as "attempt to write a readonly database".
-    """
-
-    class TrackingConnection:
-        def __init__(self):
-            self.calls = []
-            self.closed = False
-            self.row_factory = None
-
-        def execute(self, statement):
-            self.calls.append(statement)
-            if statement == "PRAGMA journal_mode":
-                return _Probe("wal")
-            return None
-
-        def close(self):
-            self.closed = True
-
-    tracking_connection = TrackingConnection()
-    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
-    database = SQLiteDatabase(Path("unused.db"))
-
-    with database.connection():
-        pass
-
-    assert "PRAGMA journal_mode = WAL" not in tracking_connection.calls
-    assert tracking_connection.calls == [
-        "PRAGMA busy_timeout = 5000",
-        "PRAGMA foreign_keys = ON",
-        "PRAGMA journal_mode",
-    ]
-
-
-def test_non_lock_wal_setup_error_does_not_retry_and_closes(monkeypatch):
-    setup_error = sqlite3.OperationalError("disk I/O error")
-
-    class TrackingConnection:
-        def __init__(self):
-            self.closed = False
-            self.row_factory = None
-            self.wal_attempts = 0
-
-        def execute(self, statement):
-            if statement == "PRAGMA journal_mode":
-                return _Probe("delete")
-            if statement == "PRAGMA journal_mode = WAL":
-                self.wal_attempts += 1
-                raise setup_error
-            return None
-
-        def close(self):
-            self.closed = True
-
-    tracking_connection = TrackingConnection()
-    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: tracking_connection)
-    database = SQLiteDatabase(Path("unused.db"))
-
-    with pytest.raises(sqlite3.OperationalError) as raised:
-        with database.connection():
-            pass
-
-    assert raised.value is setup_error
-    assert tracking_connection.wal_attempts == 1
-    assert tracking_connection.closed is True
-
-
-def test_transaction_commits_table_creation_and_inserted_value(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
-
+def test_connection_rolls_back_uncommitted_writes_on_exit(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
     with database.transaction() as connection:
         connection.execute("CREATE TABLE entries (value TEXT NOT NULL)")
-        connection.execute("INSERT INTO entries (value) VALUES (?)", ("saved",))
 
     with database.connection() as connection:
-        row = connection.execute("SELECT value FROM entries").fetchone()
+        connection.execute("BEGIN")
+        connection.execute("INSERT INTO entries (value) VALUES (?)", ("uncommitted",))
 
-    assert row["value"] == "saved"
-
-
-def test_transaction_rolls_back_all_writes_when_a_statement_fails(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
     with database.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM entries").fetchone()[0] == 0
+
+
+def test_transaction_commits_table_creation_and_inserted_value(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
+
+    with database.transaction() as connection:
+        connection.execute("CREATE TABLE entries (id INTEGER PRIMARY KEY, value TEXT)")
+        connection.execute("INSERT INTO entries (id, value) VALUES (?, ?)", (1, "committed"))
+
+    with database.connection() as connection:
+        row = connection.execute("SELECT id, value FROM entries").fetchone()
+        assert tuple(row) == (1, "committed")
+        assert dict(row) == {"id": 1, "value": "committed"}
+
+
+def test_transaction_rolls_back_all_writes_when_a_statement_fails(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
+    with database.transaction() as connection:
         connection.execute("CREATE TABLE entries (value TEXT UNIQUE NOT NULL)")
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute("INSERT INTO entries (value) VALUES (?)", ("duplicate",))
             connection.execute("INSERT INTO entries (value) VALUES (?)", ("duplicate",))
 
     with database.connection() as connection:
-        row = connection.execute("SELECT COUNT(*) AS count FROM entries").fetchone()
+        assert connection.execute("SELECT COUNT(*) FROM entries").fetchone()[0] == 0
 
-    assert row["count"] == 0
+
+def test_savepoint_isolates_failed_statement_within_transaction(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
+    with database.transaction() as connection:
+        connection.execute("CREATE TABLE entries (value TEXT UNIQUE NOT NULL)")
+
+    with database.transaction() as connection:
+        connection.execute("INSERT INTO entries (value) VALUES (?)", ("first",))
+        with pytest.raises(DatabaseIntegrityError):
+            with connection.savepoint():
+                connection.execute("INSERT INTO entries (value) VALUES (?)", ("first",))
+        connection.execute("INSERT INTO entries (value) VALUES (?)", ("second",))
+
+    with database.connection() as connection:
+        values = [row[0] for row in connection.execute("SELECT value FROM entries ORDER BY value").fetchall()]
+        assert values == ["first", "second"]
+
+
+def test_translate_sql_escapes_percent_without_positional_params(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
+    with database.connection() as connection:
+        row = connection.execute("SELECT '100% pure' AS label").fetchone()
+        assert row["label"] == "100% pure"
+
+
+def test_invalid_sql_raises_database_operational_error(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
+    with pytest.raises(DatabaseOperationalError):
+        with database.connection() as connection:
+            connection.execute("SELECT * FROM missing_table_xyz")
+
+
+def test_empty_dsn_is_rejected():
+    with pytest.raises(ValueError, match="PostgreSQL DSN"):
+        PostgresDatabase("")

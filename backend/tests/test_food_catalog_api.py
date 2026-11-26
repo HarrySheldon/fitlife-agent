@@ -94,11 +94,13 @@ def test_catalog_search_custom_food_favorite_and_owner_isolation(client):
     custom_food = custom.json()["data"]
     assert custom_food["source"] == "user_custom"
     assert custom_food["owner_user_id"] is not None
-    assert client.get(
+    other_results = client.get(
         "/api/v1/catalog/foods/search",
         params={"q": "catalog-owner-private-oat-bowl"},
         headers=second,
-    ).json()["data"] == []
+    ).json()["data"]
+    assert all(item["id"] != custom_food["id"] for item in other_results)
+    assert all(item["owner_user_id"] is None for item in other_results)
 
     favorite = client.put(
         f"/api/v1/catalog/foods/{rice['id']}/favorite",

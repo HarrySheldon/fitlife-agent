@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from backend.infrastructure.sqlite.database import SQLiteDatabase
+from backend.infrastructure.postgres.database import PostgresConnection, PostgresDatabase
+
+_UTC_NOW = "to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')"
 
 
 class CatalogImportError(RuntimeError):
@@ -35,11 +36,11 @@ class CatalogImportRun:
     mutation: CatalogMutationResult
 
 
-CatalogImporter = Callable[[sqlite3.Connection], CatalogMutationResult]
+CatalogImporter = Callable[[PostgresConnection], CatalogMutationResult]
 
 
 class CatalogImportLedger:
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(self, database: PostgresDatabase) -> None:
         self.database = database
 
     def run(
@@ -79,19 +80,19 @@ class CatalogImportLedger:
                     )
 
                 connection.execute(
-                    """
+                    f"""
                     INSERT INTO catalog_imports (
                         source_name, dataset_version, checksum, status,
                         imported_count, rejected_count, details_json,
                         started_at, completed_at
-                    ) VALUES (?, ?, ?, 'running', 0, 0, '{}', CURRENT_TIMESTAMP, NULL)
+                    ) VALUES (?, ?, ?, 'running', 0, 0, '{{}}', ({_UTC_NOW}), NULL)
                     ON CONFLICT(source_name, dataset_version) DO UPDATE SET
                         checksum = excluded.checksum,
                         status = 'running',
                         imported_count = 0,
                         rejected_count = 0,
-                        details_json = '{}',
-                        started_at = CURRENT_TIMESTAMP,
+                        details_json = '{{}}',
+                        started_at = ({_UTC_NOW}),
                         completed_at = NULL
                     """,
                     (source, version, digest),
@@ -105,11 +106,11 @@ class CatalogImportLedger:
                     separators=(",", ":"),
                 )
                 connection.execute(
-                    """
+                    f"""
                     UPDATE catalog_imports
                     SET status = 'completed', imported_count = ?,
                         rejected_count = ?, details_json = ?,
-                        completed_at = CURRENT_TIMESTAMP
+                        completed_at = ({_UTC_NOW})
                     WHERE source_name = ? AND dataset_version = ?
                     """,
                     (
@@ -149,19 +150,19 @@ class CatalogImportLedger:
                 if existing is not None and existing["status"] == "completed":
                     return
                 connection.execute(
-                    """
+                    f"""
                     INSERT INTO catalog_imports (
                         source_name, dataset_version, checksum, status,
                         imported_count, rejected_count, details_json,
                         started_at, completed_at
-                    ) VALUES (?, ?, ?, 'failed', 0, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, 'failed', 0, 0, ?, ({_UTC_NOW}), ({_UTC_NOW}))
                     ON CONFLICT(source_name, dataset_version) DO UPDATE SET
                         checksum = excluded.checksum,
                         status = 'failed',
                         imported_count = 0,
                         rejected_count = 0,
                         details_json = excluded.details_json,
-                        completed_at = CURRENT_TIMESTAMP
+                        completed_at = ({_UTC_NOW})
                     """,
                     (source_name, dataset_version, checksum, details),
                 )

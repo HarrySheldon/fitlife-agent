@@ -19,12 +19,9 @@ from backend.application.use_cases.profile_targets import (
 )
 from backend.domain.errors import ApplicationError
 from backend.domain.profile_targets import DailyTargets
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import UserProfile
 
@@ -44,12 +41,10 @@ class RecordingProjection:
 
 
 @pytest.fixture
-def repository(tmp_path):
-    database = SQLiteDatabase(tmp_path / "profile-targets.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+def repository(pg_db):
     sequence = iter(f"version-{index}" for index in range(100))
-    return SQLiteProfileTargetRepository(
-        database,
+    return PostgresProfileTargetRepository(
+        pg_db,
         clock=lambda: NOW,
         id_factory=lambda: next(sequence),
     )

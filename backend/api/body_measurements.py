@@ -14,10 +14,10 @@ from backend.domain.account_clock import local_today
 from backend.domain.body_measurements import compute_body_summary
 from backend.domain.errors import ApplicationError
 from backend.infrastructure.repositories.cutover_fitness_repository import get_fitness_repository
-from backend.infrastructure.repositories.sqlite_body_measurement_repository import (
-    SQLiteBodyMeasurementRepository,
+from backend.infrastructure.repositories.postgres_body_measurement_repository import (
+    PostgresBodyMeasurementRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 
 router = APIRouter(prefix="/api/v1/body-measurements")
@@ -47,15 +47,15 @@ class CreateBodyMeasurementRequest(BaseModel):
         return self
 
 
-def get_body_measurement_repo() -> SQLiteBodyMeasurementRepository:
-    return SQLiteBodyMeasurementRepository(get_database())
+def get_body_measurement_repo() -> PostgresBodyMeasurementRepository:
+    return PostgresBodyMeasurementRepository(get_database())
 
 
 @router.get("")
 def list_body_measurements(
     days: int | None = Query(default=90, ge=7, le=3650),
     user: AuthenticatedUser = Depends(require_current_user),
-    repo: SQLiteBodyMeasurementRepository = Depends(get_body_measurement_repo),
+    repo: PostgresBodyMeasurementRepository = Depends(get_body_measurement_repo),
 ):
     prefs = preferences_for(user)
     today = local_today(prefs.timezone).isoformat()
@@ -75,7 +75,7 @@ def list_body_measurements(
 def create_body_measurement(
     payload: CreateBodyMeasurementRequest,
     user: AuthenticatedUser = Depends(require_current_user),
-    repo: SQLiteBodyMeasurementRepository = Depends(get_body_measurement_repo),
+    repo: PostgresBodyMeasurementRepository = Depends(get_body_measurement_repo),
 ):
     prefs = preferences_for(user)
     measured_date = (payload.measured_date or local_today(prefs.timezone)).isoformat()
@@ -104,7 +104,7 @@ def create_body_measurement(
 def delete_body_measurement(
     measurement_id: str,
     user: AuthenticatedUser = Depends(require_current_user),
-    repo: SQLiteBodyMeasurementRepository = Depends(get_body_measurement_repo),
+    repo: PostgresBodyMeasurementRepository = Depends(get_body_measurement_repo),
 ):
     deleted = repo.delete(user.user_id, measurement_id)
     if not deleted:

@@ -31,26 +31,26 @@ from backend.api.smart_entry_schemas import (
     InteractionConfirmRequest, ConfirmedEntryItemsResponse, InteractiveCapabilitiesResponse,
 )
 from backend.domain.entry_resolution import catalog_signature
-from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
+from backend.infrastructure.repositories.postgres_task_budget_repository import PostgresTaskBudgetRepository
 from backend.config import get_settings
 from backend.domain.smart_entry import CatalogChoice, ResolvedCandidate
 from backend.infrastructure.model_gateway.factory import (
     resolve_user_model_gateway,
 )
-from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
-from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
-    SQLiteExerciseCatalogRepository,
+from backend.infrastructure.settings.postgres_model_connection_repository import PostgresModelConnectionRepository
+from backend.infrastructure.repositories.postgres_exercise_catalog_repository import (
+    PostgresExerciseCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-    SQLiteFoodCatalogRepository,
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    PostgresFoodCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.repositories.sqlite_smart_entry_repository import (
-    SQLiteSmartEntryRepository,
+from backend.infrastructure.repositories.postgres_smart_entry_repository import (
+    PostgresSmartEntryRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import ApiResponse, AuthenticatedUser
 
@@ -61,9 +61,9 @@ router = APIRouter(prefix="/api/v1/smart-entry-drafts")
 def get_smart_entry_service() -> SmartEntryService:
     database = get_database()
     return SmartEntryService(
-        SQLiteSmartEntryRepository(database),
-        SQLiteFoodCatalogRepository(database),
-        SQLiteExerciseCatalogRepository(database),
+        PostgresSmartEntryRepository(database),
+        PostgresFoodCatalogRepository(database),
+        PostgresExerciseCatalogRepository(database),
         mutation_scope=lambda user_id: user_lifecycle_guard(
             get_settings().data_dir,
             user_id,
@@ -78,11 +78,11 @@ def get_interactive_entry_service() -> InteractiveEntryService:
     settings = get_settings()
     def model_available(user):
         # Metadata admission only. Runtime resolves and decrypts after its guards.
-        connection = SQLiteModelConnectionRepository(database, settings.data_dir).get(user)
+        connection = PostgresModelConnectionRepository(database, settings.data_dir).get(user)
         return bool(connection and connection.enabled and connection.encrypted_api_key)
     return InteractiveEntryService(
-        SQLiteSmartEntryRepository(database), SQLiteFoodCatalogRepository(database),
-        SQLiteTaskBudgetRepository(database), enabled=settings.interactive_entry_enabled,
+        PostgresSmartEntryRepository(database), PostgresFoodCatalogRepository(database),
+        PostgresTaskBudgetRepository(database), enabled=settings.interactive_entry_enabled,
         gateway_resolver=resolve_user_model_gateway, model_available=model_available,
         mutation_scope=lambda user: user_lifecycle_guard(settings.data_dir, user),
     )
@@ -312,7 +312,7 @@ def _candidate(value: SmartCandidateModel) -> ResolvedCandidate:
 
 
 def _weight(user_id: str) -> float | None:
-    profile = SQLiteProfileTargetRepository(
+    profile = PostgresProfileTargetRepository(
         get_database()
     ).get_latest_profile(user_id)
     return profile.weight_kg if profile is not None else None

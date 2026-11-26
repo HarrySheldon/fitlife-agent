@@ -1,34 +1,40 @@
-"""CLI entry point to build and publish the local RAG index outside the request path.
+"""CLI entry point to build and publish the PostgreSQL pgvector RAG index.
 
 Usage:
-    python -m backend.rag.build [--index-path <path>]
+    python -m backend.rag.build [--database-url <url>] [--schema <schema>]
 """
 from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from backend.config import get_settings
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.runtime import ensure_database_ready
 from backend.rag.retriever import build_knowledge_index
 from backend.rag.vector_store import build_embedding_provider
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build and publish the FitLife knowledge index")
-    parser.add_argument("--index-path", type=Path, default=None)
+    parser = argparse.ArgumentParser(description="Build and publish the FitLife pgvector knowledge index")
+    parser.add_argument("--database-url", type=str, default=None)
+    parser.add_argument("--schema", type=str, default=None)
     args = parser.parse_args(argv)
     settings = get_settings()
+    database = PostgresDatabase(
+        args.database_url or settings.database_url,
+        schema=args.schema or settings.database_schema,
+    )
+    ensure_database_ready(database)
     provider = build_embedding_provider(settings=settings)
-    index_path = args.index_path or settings.vector_index_path
-    release_id = build_knowledge_index(provider=provider, index_path=index_path)
+    release_id = build_knowledge_index(provider=provider, database=database)
     print(
         json.dumps(
             {
                 "release_id": release_id,
                 "provider": provider.provider_name,
                 "model": provider.model_name,
-                "index_path": str(index_path),
+                "schema": database.target_schema,
             },
             separators=(",", ":"),
         )

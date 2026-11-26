@@ -17,26 +17,21 @@ from backend.agent.tools.handlers import (
 )
 from backend.agent.tools.registry import RECORDED_TOOL_NAMES, SPECS
 from backend.application.use_cases.weekly_automation import WeeklyAutomationService
-from backend.infrastructure.repositories.sqlite_body_measurement_repository import (
-    SQLiteBodyMeasurementRepository,
+from backend.infrastructure.repositories.postgres_body_measurement_repository import (
+    PostgresBodyMeasurementRepository,
 )
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-    SQLiteFoodCatalogRepository,
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    PostgresFoodCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_plan_cycle_repository import (
-    SQLitePlanCycleRepository,
+from backend.infrastructure.repositories.postgres_plan_cycle_repository import (
+    PostgresPlanCycleRepository,
 )
-from backend.infrastructure.sqlite import runtime as sqlite_runtime
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres import runtime as postgres_runtime
 
 
-def _db(tmp_path: Path, monkeypatch) -> SQLiteDatabase:
-    db = SQLiteDatabase(tmp_path / "m4.sqlite3")
-    run_migrations(db, RECORDS_MIGRATIONS)
-    monkeypatch.setattr(sqlite_runtime, "get_database", lambda: db)
-    return db
+def _db(pg_db, monkeypatch):
+    monkeypatch.setattr(postgres_runtime, "get_database", lambda: pg_db)
+    return pg_db
 
 
 def test_new_agent_tools_are_registered_read_only_and_event_allowlisted():
@@ -54,8 +49,8 @@ def test_new_agent_tools_are_registered_read_only_and_event_allowlisted():
     assert SPECS["fitness.progress"].required_domains(ProgressQueryArgs(aspect="training_context")) == frozenset({"profile", "training"})
 
 
-def test_colloquial_chinese_food_search_bm25_fallback_and_public_isolation(tmp_path: Path, monkeypatch):
-    db = _db(tmp_path, monkeypatch)
+def test_colloquial_chinese_food_search_bm25_fallback_and_public_isolation(pg_db, monkeypatch):
+    db = _db(pg_db, monkeypatch)
     with db.transaction() as conn:
         conn.execute(
             """
@@ -78,7 +73,7 @@ def test_colloquial_chinese_food_search_bm25_fallback_and_public_isolation(tmp_p
         )
 
     # Colloquial query "水煮鸡胸肉" fails strict AND ("水煮" missing) -> BM25 OR fallback finds "鸡胸肉"
-    repo = SQLiteFoodCatalogRepository(db)
+    repo = PostgresFoodCatalogRepository(db)
     hits = repo.search("u1", "水煮鸡胸肉", limit=5)
     assert len(hits) == 1
     assert hits[0].id == "f-pub-1"
@@ -88,8 +83,8 @@ def test_colloquial_chinese_food_search_bm25_fallback_and_public_isolation(tmp_p
     assert [item["id"] for item in public_hits] == ["f-pub-1"]
 
 
-def test_public_exercise_search_filters_by_equipment_and_muscle(tmp_path: Path, monkeypatch):
-    db = _db(tmp_path, monkeypatch)
+def test_public_exercise_search_filters_by_equipment_and_muscle(pg_db, monkeypatch):
+    db = _db(pg_db, monkeypatch)
     with db.transaction() as conn:
         conn.execute(
             """
@@ -111,10 +106,10 @@ def test_public_exercise_search_filters_by_equipment_and_muscle(tmp_path: Path, 
     assert {item["id"] for item in barbell_all} == {"e2", "e3"}
 
 
-def test_fitness_progress_tool_enforces_domain_scope_and_reads_owner_data(tmp_path: Path, monkeypatch):
-    db = _db(tmp_path, monkeypatch)
-    SQLiteBodyMeasurementRepository(db).create("u1", measured_date="2026-11-18", weight_kg=71.2)
-    SQLiteBodyMeasurementRepository(db).create("u2", measured_date="2026-11-18", weight_kg=55.0)
+def test_fitness_progress_tool_enforces_domain_scope_and_reads_owner_data(pg_db, monkeypatch):
+    db = _db(pg_db, monkeypatch)
+    PostgresBodyMeasurementRepository(db).create("u1", measured_date="2026-11-18", weight_kg=71.2)
+    PostgresBodyMeasurementRepository(db).create("u2", measured_date="2026-11-18", weight_kg=55.0)
 
     class _DummyRepo:
         def read_profile(self, _uid):
@@ -132,8 +127,8 @@ def test_fitness_progress_tool_enforces_domain_scope_and_reads_owner_data(tmp_pa
         assert str(err) == "SCOPE_PERMISSION_REQUIRED"
 
 
-def test_weekly_automation_is_idempotent_and_never_auto_activates_draft(tmp_path: Path, monkeypatch):
-    db = _db(tmp_path, monkeypatch)
+def test_weekly_automation_is_idempotent_and_never_auto_activates_draft(pg_db, monkeypatch):
+    db = _db(pg_db, monkeypatch)
     service = WeeklyAutomationService(db)
     report_calls: list[tuple[str, str]] = []
 
@@ -154,7 +149,7 @@ def test_weekly_automation_is_idempotent_and_never_auto_activates_draft(tmp_path
     assert run1.draft_cycle_id is not None
 
     # Draft must NOT be auto-activated
-    cycle_repo = SQLitePlanCycleRepository(db)
+    cycle_repo = PostgresPlanCycleRepository(db)
     assert cycle_repo.get_active_cycle("u1") is None
     draft = cycle_repo.get_cycle("u1", run1.draft_cycle_id)
     assert draft is not None and draft.status == "draft"
@@ -173,10 +168,10 @@ def test_weekly_automation_is_idempotent_and_never_auto_activates_draft(tmp_path
     assert service.get_run("u1", "2026-W47").dismissed is True
 
 
-def test_weekly_automation_concurrent_checks_create_only_one_draft(tmp_path: Path, monkeypatch):
+def test_weekly_automation_concurrent_checks_create_only_one_draft(pg_db, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
 
-    db = _db(tmp_path, monkeypatch)
+    db = _db(pg_db, monkeypatch)
     service = WeeklyAutomationService(db)
 
     def _run_once(_index: int):
@@ -187,5 +182,5 @@ def test_weekly_automation_concurrent_checks_create_only_one_draft(tmp_path: Pat
 
     draft_ids = {run.draft_cycle_id for run in runs}
     assert len(draft_ids) == 1
-    cycles = SQLitePlanCycleRepository(db).list_cycles("u1")
+    cycles = PostgresPlanCycleRepository(db).list_cycles("u1")
     assert len(cycles) == 1

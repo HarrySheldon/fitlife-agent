@@ -36,12 +36,12 @@ def test_execution_records_live_steps_and_terminal_state(repository):
         "STEP_STARTED", "STEP_SUCCEEDED", "RUN_SUCCEEDED"]
 
 
-@pytest.fixture(params=["memory", "sqlite"])
-def repository(request, tmp_path):
+@pytest.fixture(params=["memory", "postgres"])
+def repository(request, pg_db):
     if request.param == "memory":
         return MemoryRunRepository()
-    from backend.infrastructure.agent_runtime.sqlite_run_repository import SQLiteRunRepository
-    return SQLiteRunRepository(tmp_path / "agent_runtime.sqlite3")
+    from backend.infrastructure.agent_runtime.postgres_run_repository import PostgresRunRepository
+    return PostgresRunRepository(pg_db)
 
 
 def test_run_transition_and_event_are_versioned_and_atomic(repository):
@@ -131,17 +131,16 @@ def test_task_budget_exhaustion_is_a_controlled_linked_run_failure(repository):
     assert repository.events(run.run_id, "user")[-1].payload["error_code"] == "TASK_BUDGET_EXHAUSTED"
 
 
-def test_checkpoint_metadata_is_separate_and_survives_reopen(tmp_path):
-    from backend.infrastructure.agent_runtime.sqlite_run_repository import SQLiteRunRepository
-    from backend.infrastructure.agent_runtime.sqlite_checkpoint_store import SQLiteCheckpointStore
+def test_checkpoint_metadata_is_separate_and_survives_reopen(pg_db):
+    from backend.infrastructure.agent_runtime.postgres_run_repository import PostgresRunRepository
+    from backend.infrastructure.agent_runtime.postgres_checkpoint_store import PostgresCheckpointStore
     from backend.agent.persistence import InvalidTransition
-    path = tmp_path / "agent_runtime.sqlite3"
-    repository = SQLiteRunRepository(path)
+    repository = PostgresRunRepository(pg_db)
     run = repository.create(AgentRunSnapshot("r", "q", "u", "chat", "accepted"))
-    store = SQLiteCheckpointStore(repository)
+    store = PostgresCheckpointStore(repository)
     store.save("r", "u", "planner", {"completed": True, "attempt": 2})
-    reopened = SQLiteRunRepository(path)
-    assert SQLiteCheckpointStore(reopened).get("r", "u", "planner").state == {"completed": True, "attempt": 2}
+    reopened = PostgresRunRepository(pg_db)
+    assert PostgresCheckpointStore(reopened).get("r", "u", "planner").state == {"completed": True, "attempt": 2}
     assert reopened.get("r", "u") == run
     assert len(reopened.events("r", "u")) == 1
     with pytest.raises(ValueError):
@@ -185,11 +184,19 @@ def test_repository_errors_always_keep_correlation_ids(fail_event):
     assert raised.value.run_id and raised.value.request_id
 
 
-def test_real_factory_uses_current_settings_and_sqlite(tmp_path, monkeypatch, isolated_agent_runtime):
+def test_real_factory_uses_current_settings_and_postgres(pg_db, make_isolated_pg_db, tmp_path, monkeypatch, isolated_agent_runtime):
     from backend.config import Settings
     from backend.infrastructure.agent_runtime import factory
-    from backend.infrastructure.agent_runtime.sqlite_run_repository import SQLiteRunRepository
-    monkeypatch.setattr(factory, "get_settings", lambda: Settings(data_dir=tmp_path))
+    from backend.infrastructure.agent_runtime.postgres_run_repository import PostgresRunRepository
+    monkeypatch.setattr(
+        factory,
+        "get_settings",
+        lambda: Settings(
+            data_dir=tmp_path,
+            database_url=pg_db.dsn,
+            database_schema=pg_db.target_schema,
+        ),
+    )
     production_factory = isolated_agent_runtime
     runtime = production_factory()
     assert production_factory() is runtime
@@ -201,12 +208,21 @@ def test_real_factory_uses_current_settings_and_sqlite(tmp_path, monkeypatch, is
             context.consume_output("ok")
             return AgentResult("ok", "chat", {}, {}, (), "test-model")
     result = runtime.execute_sync(AgentCommand("chat", "q", "u"), Workflow())
-    reopened = SQLiteRunRepository(tmp_path / "agent_runtime.sqlite3")
+    reopened = PostgresRunRepository(pg_db)
     run = reopened.get(result.run_id, "u")
     assert (run.provider, run.model, run.output_tokens) == ("mock", "test-model", 1)
     assert len(reopened.events(result.run_id, "u")) == 13
     assert not (tmp_path / "fitlife.sqlite3").exists()
-    monkeypatch.setattr(factory, "get_settings", lambda: Settings(data_dir=tmp_path / "next"))
+    other_db = make_isolated_pg_db(initialize=False)
+    monkeypatch.setattr(
+        factory,
+        "get_settings",
+        lambda: Settings(
+            data_dir=tmp_path / "next",
+            database_url=other_db.dsn,
+            database_schema=other_db.target_schema,
+        ),
+    )
     assert production_factory() is not runtime
 
 

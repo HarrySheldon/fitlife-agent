@@ -60,17 +60,28 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
     from backend.task_evaluation.runner import CaseResult, CaseError, NetworkAttempt, execute_scenario
     from backend.task_evaluation.contracts import Scenario
     scenario = Scenario.model_validate(declaration)
+    eval_db = None
     try:
         if True:  # Workspace lifetime belongs to the parent, including forced termination.
             root = Path(temporary)
             from backend.task_evaluation.runner import reject_nonempty_workspace
             reject_nonempty_workspace(root)
+            from urllib.parse import urlparse
+            from uuid import uuid4
             from backend.config import Settings, get_settings
+
+            base_database_url = (
+                os.environ.get("FITLIFE_TEST_DATABASE_URL")
+                or os.environ.get("DATABASE_URL")
+                or Settings().database_url
+            )
+            eval_schema = f"eval_{uuid4().hex[:16]}"
+
             for key in list(os.environ):
                 if key.lower() in Settings.model_fields or any(word in key.upper() for word in ("API_KEY", "SECRET", "TOKEN", "CREDENTIAL")):
                     os.environ.pop(key, None)
             Settings.settings_customise_sources = classmethod(lambda cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings: (init_settings,))
-            fixed = Settings(_env_file=None, data_dir=root, sqlite_database_path=root / "fitlife.sqlite3", auth_secret="synthetic-evaluation-only", llm_enabled=False,
+            fixed = Settings(_env_file=None, data_dir=root, database_url=base_database_url, database_schema=eval_schema, auth_secret="synthetic-evaluation-only", llm_enabled=False,
                              interactive_entry_enabled='interactive_entry' in scenario.requires,
                              coach_conversations_enabled='coach_conversations' in scenario.requires,
                              coach_agent_mode='unified' if 'unified_coach' in scenario.requires else 'legacy',
@@ -85,10 +96,22 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
             import backend.config as configuration
             configuration.get_settings = lambda: fixed
             os.environ["DATA_DIR"] = str(root)
-            os.environ["SQLITE_DATABASE_PATH"] = str(fixed.database_path)
+            os.environ["DATABASE_URL"] = fixed.database_url
+            os.environ["DATABASE_SCHEMA"] = eval_schema
 
+            from backend.infrastructure.postgres.database import PostgresDatabase
+
+            eval_db = PostgresDatabase(base_database_url, schema=eval_schema)
+            eval_db.create_schema()
+
+            parsed_db = urlparse(base_database_url)
+            db_port = parsed_db.port or 5432
+            db_host = parsed_db.hostname or "127.0.0.1"
+            allowed_db = {(db_host, db_port)}
+            if db_host in {"localhost", "127.0.0.1", "::1"}:
+                allowed_db.update({("127.0.0.1", db_port), ("::1", db_port), ("localhost", db_port)})
             from backend.task_evaluation.network import install_network_guard
-            install_network_guard()
+            install_network_guard(allowed_addresses=allowed_db)
             from backend.main import create_app
             from backend.agent import graph
             from backend.api import plan, plan_adjustment, smart_entry
@@ -160,10 +183,10 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                     # cannot compare-and-swap a head, so a scenario that confirms
                     # a candidate has to run on the store that can.
                     from backend.task_evaluation.seeding import (
-                        activate_sqlite_plan_store,
+                        activate_postgres_plan_store,
                         seed_plan_safety,
                     )
-                    activate_sqlite_plan_store(fixed, root)
+                    activate_postgres_plan_store(fixed, root, database=eval_db)
                     if scenario.initial_state.plan_constraints is not None:
                         # The import also migrates the allergy list out of the
                         # account's profile file, which is empty here. Written
@@ -171,27 +194,25 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                         # file nobody authored -- are the version the task is
                         # frozen against.
                         seed_plan_safety(root, headers.user_ids["primary"],
-                                         scenario.initial_state.plan_constraints)
+                                         scenario.initial_state.plan_constraints,
+                                         database=eval_db)
                 step_number = 0
                 def before_step(step):
                     nonlocal step_number
                     step_number += 1
                     if scenario.initial_state.faults.expire_drafts:
-                        import sqlite3
-                        with sqlite3.connect(fixed.database_path) as connection:
+                        with eval_db.transaction() as connection:
                             connection.execute("UPDATE record_drafts SET expires_at='2000-01-01T00:00:00Z'")
                     if scenario.initial_state.faults.expire_coach_messages_at_step == step_number:
-                        import sqlite3
-                        with sqlite3.connect(fixed.database_path) as connection:
+                        with eval_db.transaction() as connection:
                             connection.execute("UPDATE coach_messages SET created_at='2000-01-01T00:00:00Z'")
                 def observations():
-                    values = {**observe_database(fixed.database_path, actors=headers.user_ids, data_dir=root), 'gateway_attempts': gateway.attempts}
+                    values = {**observe_database(eval_db, actors=headers.user_ids, data_dir=root), 'gateway_attempts': gateway.attempts}
                     if 'plan_adjustment' in scenario.requires:
                         values['plan_authorize_checks'] = authorization['checks']
                         values['plan_authorize_denials'] = authorization['denied']
                     if faults.unified_review_unavailable:
-                        import sqlite3
-                        with sqlite3.connect(fixed.database_path) as connection:
+                        with eval_db.connection() as connection:
                             values['unified_draft_leaks'] = connection.execute(
                                 "SELECT COUNT(*) FROM coach_messages WHERE role='coach' AND body LIKE '%PRIVATE_SYNTHETIC_DRAFT%'").fetchone()[0]
                     return values
@@ -201,11 +222,11 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                 from backend.task_evaluation.metrics import runtime_metrics
                 from backend.task_evaluation.measurements import config_fingerprints
                 from backend.safety.gate import SAFETY_RULE_VERSION, default_pack
-                executed = runtime_metrics(root)
+                executed = runtime_metrics(eval_db)
                 if result.metrics.get("candidate_ms") is None and result.metrics.get("response_ready_ms") is not None and executed["run_succeeded"]:
                     result = replace(result, metrics={**result.metrics, "candidate_ms": result.metrics["response_ready_ms"], "candidate_reason": "response_ready_non_confirmation", "first_candidate": {"kind": "response_ready", "id": None}, "confirmed_candidate": None})
                 result = replace(result, status="budget_exceeded" if gateway.denied else result.status,
-                    metrics={**result.metrics, **collect_metrics(root, fixed, gateway, progress), **executed,
+                    metrics={**result.metrics, **collect_metrics(eval_db, fixed, gateway, progress), **executed,
                     "rule_version": SAFETY_RULE_VERSION, "rule_pack_version": default_pack().pack_version,
                     **config_fingerprints(fixed),
                     "gateway_attempts": gateway.attempts, "estimated_tokens": None if gateway.failed_attempts else gateway.estimated_tokens,
@@ -214,8 +235,7 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
                     "model": gateway.model if gateway.attempts else None,
                     "token_measurement": "mock_character_estimate"})
                 if live_settings is not None and live_settings.get('capture_review'):
-                    import sqlite3
-                    with sqlite3.connect(fixed.database_path) as connection:
+                    with eval_db.connection() as connection:
                         messages = connection.execute(
                             "SELECT role, body FROM coach_messages WHERE user_id=? "
                             "AND (role='user' OR review_status='approved') ORDER BY created_at, message_id LIMIT 32",
@@ -247,6 +267,11 @@ def worker_main(channel, declaration, temporary, strategy="reference", cache_sta
         if type(error).__name__ == "BudgetExceeded":
             status = "budget_exceeded"
         channel.send(CaseResult(scenario.id, scenario.version, status, failures=(status,),
-            metrics=collect_metrics(root, fixed, gateway, progress)))
+            metrics=collect_metrics(eval_db or root, fixed, gateway, progress)))
     finally:
+        if eval_db is not None:
+            try:
+                eval_db.drop_schema()
+            except Exception:
+                pass
         channel.close()

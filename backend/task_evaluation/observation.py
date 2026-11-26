@@ -1,7 +1,9 @@
 """Read only final state, without copying record contents into reports."""
-import sqlite3
 import json
 from pathlib import Path
+
+from backend.config import get_settings
+from backend.infrastructure.postgres.database import PostgresDatabase
 
 # The two roots a plan patch may edit, in the order the product names them.
 PLAN_DOMAINS = (("training", "workout_plan"), ("diet", "diet_plan"))
@@ -101,20 +103,32 @@ def _task_facts(connection, tables, user_id, task):
     return facts
 
 
-def observe_database(path, *, actors=None, data_dir=None):
-    path = Path(path).resolve()
-    if not path.exists():
-        return {}
-    connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
-    try:
-        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+def observe_database(target=None, *, actors=None, data_dir=None):
+    if isinstance(target, PostgresDatabase):
+        database = target
+    else:
+        settings = get_settings()
+        database = PostgresDatabase(settings.database_url, schema=settings.database_schema)
+    with database.connection() as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()"
+            ).fetchall()
+        }
         mappings = {"confirmed_meals": "meals", "confirmed_workouts": "training_sessions", "draft_count": "record_drafts", "idempotency_count": "idempotency_keys", "profile_version_count": "user_profile_versions"}
         def observe(user_id=None):
             result = {}
             for name, table in mappings.items():
                 if table not in tables:
                     continue
-                columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+                columns = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?",
+                        (table,),
+                    ).fetchall()
+                }
                 if user_id is not None and "user_id" not in columns:
                     continue
                 condition = " WHERE user_id=?" if user_id is not None else ""
@@ -177,10 +191,6 @@ def observe_database(path, *, actors=None, data_dir=None):
                 result["plan_draft_count"] = len(list((user_root / "plan-drafts").glob("*.json")))
                 result["plan_history_count"] = history
                 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
-                # Deliberately the file reader, not the plan repository factory:
-                # this observes a directory an evaluation run seeded, so the file
-                # layout *is* the subject. Routing it through the deployment's
-                # configured store would measure the wrong thing.
                 try:
                     plans = FilePlanRepository(data_dir).list(user_id)
                     result["plans_readable"] = len(plans) == history
@@ -188,10 +198,11 @@ def observe_database(path, *, actors=None, data_dir=None):
                 except Exception:
                     result["plans_readable"] = False
                     result["plans_validated"] = False
-                runtime_path = Path(data_dir) / "agent_runtime.sqlite3"
-                if runtime_path.exists():
-                    with sqlite3.connect(runtime_path.resolve().as_uri() + "?mode=ro", uri=True) as runtime:
-                        result["successful_runs"] = runtime.execute("SELECT COUNT(*) FROM agent_runs WHERE user_id=? AND status='succeeded'", (user_id,)).fetchone()[0]
+                if "agent_runs" in tables:
+                    result["successful_runs"] = connection.execute(
+                        "SELECT COUNT(*) FROM agent_runs WHERE user_id=? AND status='succeeded'",
+                        (user_id,),
+                    ).fetchone()[0]
             if user_id is not None:
                 result.update(observe_plan_tasks(connection, tables, user_id))
             return result
@@ -200,5 +211,3 @@ def observe_database(path, *, actors=None, data_dir=None):
         scoped = {actor: observe(user_id) for actor, user_id in actors.items()}
         return {**scoped.get("primary", {}), "actors": scoped,
                 **{f"actor.{actor}.{key}": value for actor, facts in scoped.items() for key, value in facts.items() if isinstance(value, (bool, int))}}
-    finally:
-        connection.close()

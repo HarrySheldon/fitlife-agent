@@ -14,10 +14,10 @@ from backend.domain.model_provider import DEFAULT_PROVIDERS
 from backend.config import get_settings
 from backend.infrastructure.model_gateway.preview_process import create_preview_gateway as create_model_gateway
 from backend.infrastructure.settings.fernet_cipher import FernetCredentialCipher
-from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
-from backend.infrastructure.settings.sqlite_user_preferences_repository import SQLiteUserPreferencesRepository
+from backend.infrastructure.settings.postgres_model_connection_repository import PostgresModelConnectionRepository
+from backend.infrastructure.settings.postgres_user_preferences_repository import PostgresUserPreferencesRepository
 from backend.infrastructure.settings.model_verification import SignedModelVerification
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.domain.errors import model_verification_required_error
 from backend.i18n import message_for_request
 from backend.schemas import AuthenticatedUser, ModelSettingsUpdateRequest, UserPreferencesUpdateRequest
@@ -179,12 +179,12 @@ def _workspace_service(request):
     return ModelConnectionWorkspaceService(_preview(request))
 
 
-def _repository() -> SQLiteModelConnectionRepository:
-    return SQLiteModelConnectionRepository(get_database(), get_settings().data_dir)
+def _repository() -> PostgresModelConnectionRepository:
+    return PostgresModelConnectionRepository(get_database(), get_settings().data_dir)
 
 
-def _preferences_repository() -> SQLiteUserPreferencesRepository:
-    return SQLiteUserPreferencesRepository(get_database(), get_settings().data_dir)
+def _preferences_repository() -> PostgresUserPreferencesRepository:
+    return PostgresUserPreferencesRepository(get_database(), get_settings().data_dir)
 
 
 def _cipher() -> FernetCredentialCipher | None:

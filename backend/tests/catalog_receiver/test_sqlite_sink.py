@@ -3,27 +3,17 @@ from pathlib import Path
 from backend.catalog_receiver.mapping import load_mapping_profile
 from backend.catalog_receiver.projectors import project_source
 from backend.catalog_receiver.readers import read_source
-from backend.catalog_receiver.sinks import SQLiteCatalogSink
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.catalog_receiver.sinks import PostgresCatalogSink
 
 
 ROOT = Path(__file__).parent
 PROFILE = Path(__file__).parents[2] / "data/catalog/mappings/tfda-foods.v1.json"
 
 
-def _database(tmp_path: Path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "receiver.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
-
-
-def test_sink_imports_and_idempotently_skips_normalized_foods(tmp_path: Path) -> None:
-    database = _database(tmp_path)
+def test_sink_imports_and_idempotently_skips_normalized_foods(pg_db) -> None:
     profile = load_mapping_profile(PROFILE)
     projected = project_source(read_source(ROOT / "fixtures/tfda-foods.csv"), profile)
-    sink = SQLiteCatalogSink(database)
+    sink = PostgresCatalogSink(pg_db)
 
     first = sink.import_records(profile, projected.records)
     second = sink.import_records(profile, projected.records)
@@ -32,7 +22,7 @@ def test_sink_imports_and_idempotently_skips_normalized_foods(tmp_path: Path) ->
     assert first["inserted_count"] == 1
     assert second["status"] == "skipped"
     assert second["unchanged_count"] == 1
-    with database.connection() as connection:
+    with pg_db.connection() as connection:
         row = connection.execute(
             "SELECT name, calories, source_name FROM food_catalog WHERE source_record_id = 'A001'"
         ).fetchone()
@@ -43,11 +33,10 @@ def test_sink_imports_and_idempotently_skips_normalized_foods(tmp_path: Path) ->
     }
 
 
-def test_retirement_only_deactivates_public_rows_and_search(tmp_path: Path) -> None:
-    database = _database(tmp_path)
+def test_retirement_only_deactivates_public_rows_and_search(pg_db) -> None:
     profile = load_mapping_profile(PROFILE)
     projected = project_source(read_source(ROOT / "fixtures/tfda-foods.csv"), profile)
-    with database.transaction() as connection:
+    with pg_db.transaction() as connection:
         common = (
             "2026-01-01", "Rice", "per_100g", 100, "g", 130, 28, 3, 1,
             "CC0", "source", "{}", "hash",
@@ -78,10 +67,10 @@ def test_retirement_only_deactivates_public_rows_and_search(tmp_path: Path) -> N
             "INSERT INTO catalog_search (catalog_kind, catalog_id, name, aliases, pinyin, source_tokens) VALUES ('food', 'old-public', 'Rice', '', '', '')"
         )
 
-    result = SQLiteCatalogSink(database).import_records(profile, projected.records)
+    result = PostgresCatalogSink(pg_db).import_records(profile, projected.records)
 
     assert result["retirement"]["deactivated_count"] == 1
-    with database.connection() as connection:
+    with pg_db.connection() as connection:
         public = connection.execute("SELECT active FROM food_catalog WHERE id = 'old-public'").fetchone()
         private = connection.execute("SELECT active FROM food_catalog WHERE id = 'old-private'").fetchone()
         search_count = connection.execute(

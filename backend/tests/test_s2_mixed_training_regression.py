@@ -135,7 +135,7 @@ def test_active_training_update_retains_owner_cas_and_expiry(client, monkeypatch
     elif boundary == 'stale':
         version -= 1
     else:
-        from backend.infrastructure.sqlite.runtime import get_database
+        from backend.infrastructure.postgres.runtime import get_database
         with get_database().transaction() as connection:
             connection.execute("UPDATE record_drafts SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", (active['id'],))
     response = client.patch(f"{BASE}/{active['id']}",

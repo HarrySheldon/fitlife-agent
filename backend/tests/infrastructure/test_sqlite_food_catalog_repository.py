@@ -7,22 +7,19 @@ from backend.application.ports.food_catalog_repository import (
     NewCustomFood,
 )
 from backend.domain.meals import FoodDefinition
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-    SQLiteFoodCatalogRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    PostgresFoodCatalogRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "food-catalog.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
+def _database(_tmp_path=None) -> PostgresDatabase:
+    return PostgresDatabase(TEST_DATABASE_URL)
 
 
 def _insert_food(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     *,
     food_id: str,
     owner_user_id: str | None,
@@ -86,7 +83,7 @@ def test_search_exposes_public_and_owned_private_foods_but_not_inactive_or_forei
     tmp_path,
 ):
     database = _database(tmp_path)
-    repository = SQLiteFoodCatalogRepository(database)
+    repository = PostgresFoodCatalogRepository(database)
     _insert_food(
         database,
         food_id="public-rice",
@@ -123,7 +120,7 @@ def test_search_matches_name_and_alias_prefixes_after_sanitizing_match_syntax(
     tmp_path,
 ):
     database = _database(tmp_path)
-    repository = SQLiteFoodCatalogRepository(database)
+    repository = PostgresFoodCatalogRepository(database)
     _insert_food(
         database,
         food_id="jasmine-rice",
@@ -153,7 +150,7 @@ def test_search_matches_name_and_alias_prefixes_after_sanitizing_match_syntax(
 
 def test_search_orders_recent_favorite_private_then_public_with_stable_ties(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteFoodCatalogRepository(database)
+    repository = PostgresFoodCatalogRepository(database)
     _insert_food(
         database,
         food_id="public-rice",
@@ -202,7 +199,7 @@ def test_search_orders_recent_favorite_private_then_public_with_stable_ties(tmp_
 
 def test_favorite_and_usage_writes_reject_invisible_foods(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteFoodCatalogRepository(database)
+    repository = PostgresFoodCatalogRepository(database)
     _insert_food(
         database,
         food_id="private-b",
@@ -231,7 +228,7 @@ def test_favorite_and_usage_writes_reject_invisible_foods(tmp_path):
 
 def test_create_custom_food_is_owned_searchable_and_source_aware(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteFoodCatalogRepository(
+    repository = PostgresFoodCatalogRepository(
         database,
         id_factory=iter(
             ("custom-food", "alias-zh", "alias-en", "alias-long")
@@ -275,7 +272,7 @@ def test_create_custom_food_is_owned_searchable_and_source_aware(tmp_path):
 
 
 def test_create_custom_food_rejects_non_custom_source(tmp_path):
-    repository = SQLiteFoodCatalogRepository(_database(tmp_path))
+    repository = PostgresFoodCatalogRepository(_database(tmp_path))
     invalid = NewCustomFood(
         definition=FoodDefinition(
             name="Public-like food",

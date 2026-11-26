@@ -11,21 +11,15 @@ from backend.application.ports.smart_entry_repository import (
     SmartEntryRepositoryError,
 )
 from backend.domain.smart_entry import ResolvedCandidate
-from backend.infrastructure.repositories.sqlite_smart_entry_repository import (
-    SQLiteSmartEntryRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_smart_entry_repository import (
+    PostgresSmartEntryRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 
-def _database() -> tuple[SQLiteDatabase, Path]:
-    temp_dir = Path(tempfile.gettempdir()) / "fitlife-test-smart-entry"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    path = temp_dir / f"test-smart-entry-{uuid4().hex}.sqlite3"
-    database = SQLiteDatabase(path)
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database, path
+def _database() -> tuple[PostgresDatabase, None]:
+    return PostgresDatabase(TEST_DATABASE_URL), None
 
 
 def _payload(
@@ -63,26 +57,26 @@ def _payload(
     )
 
 
-def _cleanup(path: Path) -> None:
-    for suffix in ("", "-shm", "-wal"):
-        target = Path(f"{path}{suffix}")
-        if target.exists():
-            target.unlink()
+def _cleanup(_path: Path | None) -> None:
+    return None
 
 
 def test_legacy_interaction_projection_reads_without_writing_and_upgrades_on_update():
     import json
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
         with database.transaction() as connection:
             legacy = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
             legacy.pop('interaction', None)
             connection.execute('UPDATE record_drafts SET schema_version = 1, payload_json = ? WHERE id = ?', (json.dumps(legacy), draft.id))
-        before = path.read_bytes()
+        with database.connection() as connection:
+            before = dict(connection.execute('SELECT * FROM record_drafts WHERE id = ?', (draft.id,)).fetchone())
         projected = repository.get_draft('user-interaction', draft.id)
-        assert path.read_bytes() == before
+        with database.connection() as connection:
+            after = dict(connection.execute('SELECT * FROM record_drafts WHERE id = ?', (draft.id,)).fetchone())
+        assert after == before
         assert projected.version == 1
         assert projected.payload.interaction.schema_version == 1
         assert projected.payload.interaction.items[0].item_id == 'segment-1'
@@ -102,7 +96,7 @@ def test_corrupt_persisted_interaction_is_rejected(corruption):
     import json
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
         with database.transaction() as connection:
             payload = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
@@ -122,10 +116,22 @@ def test_corrupt_persisted_interaction_is_rejected(corruption):
 @pytest.mark.parametrize('corruption', ['values_list', 'provenance_list', 'payload_blob'])
 def test_malformed_legacy_payload_shape_returns_bounded_corruption_error(corruption):
     import json
+    from backend.infrastructure.postgres.errors import DatabaseIntegrityError
+    from backend.infrastructure.repositories.postgres_smart_entry_repository import _draft
+
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
+        if corruption == 'payload_blob':
+            with pytest.raises(DatabaseIntegrityError):
+                with database.transaction() as inner:
+                    inner.execute('UPDATE record_drafts SET schema_version = 1, payload_json = ? WHERE id = ?', ('[]', draft.id))
+            with pytest.raises(SmartEntryRepositoryError, match='SMART_ENTRY_DRAFT_CORRUPT'):
+                _draft({'payload_json': '[]', 'agent_metadata_json': '{}'})
+            with pytest.raises(SmartEntryRepositoryError, match='SMART_ENTRY_DRAFT_CORRUPT'):
+                _draft({'payload_json': b'{}', 'agent_metadata_json': '{}'})
+            return
         with database.transaction() as connection:
             data = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
             data.pop('interaction')
@@ -133,7 +139,7 @@ def test_malformed_legacy_payload_shape_returns_bounded_corruption_error(corrupt
                 data['candidates'][0]['values'] = []
             elif corruption == 'provenance_list':
                 data['candidates'][0]['provenance'] = []
-            serialized = b'{}' if corruption == 'payload_blob' else json.dumps(data)
+            serialized = json.dumps(data)
             connection.execute('UPDATE record_drafts SET schema_version = 1, payload_json = ? WHERE id = ?', (serialized, draft.id))
         with pytest.raises(SmartEntryRepositoryError, match='SMART_ENTRY_DRAFT_CORRUPT'):
             repository.get_draft('user-interaction', draft.id)
@@ -142,7 +148,7 @@ def test_malformed_legacy_payload_shape_returns_bounded_corruption_error(corrupt
 
 
 def test_deeply_nested_legacy_json_returns_bounded_corruption_error():
-    from backend.infrastructure.repositories.sqlite_smart_entry_repository import _draft
+    from backend.infrastructure.repositories.postgres_smart_entry_repository import _draft
 
     row = {'payload_json': '[' * 20_000 + '0' + ']' * 20_000, 'agent_metadata_json': '{}'}
     with pytest.raises(SmartEntryRepositoryError, match='SMART_ENTRY_DRAFT_CORRUPT'):
@@ -152,7 +158,7 @@ def test_deeply_nested_legacy_json_returns_bounded_corruption_error():
 def test_reordering_duplicate_food_names_preserves_item_ids_and_revisions():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         first = _food_candidate('first', 'breakfast')
         second = _food_candidate('second', 'breakfast')
         payload = replace(_payload(), candidates=(first, second))
@@ -169,7 +175,7 @@ def test_legacy_mutation_cannot_change_terminal_items(change):
     import json
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('user-interaction', _payload(), expires_at='2099-01-01T00:00:00Z')
         with database.transaction() as connection:
             data = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
@@ -292,7 +298,7 @@ def _confirmation_payload(
 def test_smart_entry_drafts_are_owner_scoped_versioned_and_date_searchable():
     database, path = _database()
     now = datetime(2026, 7, 26, 8, tzinfo=timezone.utc)
-    repository = SQLiteSmartEntryRepository(
+    repository = PostgresSmartEntryRepository(
         database,
         clock=lambda: now,
         id_factory=lambda: "smart-draft-1",
@@ -336,7 +342,7 @@ def test_smart_entry_drafts_are_owner_scoped_versioned_and_date_searchable():
 def test_smart_entry_draft_expiry_and_malformed_payload_are_defensive():
     database, path = _database()
     current = [datetime(2026, 7, 26, 8, tzinfo=timezone.utc)]
-    repository = SQLiteSmartEntryRepository(
+    repository = PostgresSmartEntryRepository(
         database,
         clock=lambda: current[0],
         id_factory=lambda: "smart-draft-2",
@@ -369,7 +375,7 @@ def test_smart_entry_draft_expiry_and_malformed_payload_are_defensive():
 
 def test_smart_entry_draft_bounds_raw_text_and_candidate_count():
     database, path = _database()
-    repository = SQLiteSmartEntryRepository(database)
+    repository = PostgresSmartEntryRepository(database)
     try:
         with pytest.raises(SmartEntryRepositoryError) as raised:
             repository.create_draft(
@@ -398,7 +404,7 @@ def test_smart_entry_draft_bounds_raw_text_and_candidate_count():
 
 def test_agent_state_writes_are_version_checked_and_preserve_failure_payload():
     database, path = _database()
-    repository = SQLiteSmartEntryRepository(
+    repository = PostgresSmartEntryRepository(
         database,
         clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
         id_factory=lambda: "smart-draft-agent",
@@ -452,7 +458,7 @@ def test_agent_state_writes_are_version_checked_and_preserve_failure_payload():
 
 def test_confirmation_is_atomic_idempotent_and_raises_planned_meal_count():
     database, path = _database()
-    repository = SQLiteSmartEntryRepository(
+    repository = PostgresSmartEntryRepository(
         database,
         clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
     )
@@ -576,7 +582,7 @@ def test_late_confirmation_failure_rolls_back_every_formal_row():
             "duplicate-cardio-id",
         )
     )
-    repository = SQLiteSmartEntryRepository(
+    repository = PostgresSmartEntryRepository(
         database,
         clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
         id_factory=lambda: next(ids),
@@ -623,7 +629,7 @@ def test_late_confirmation_failure_rolls_back_every_formal_row():
 
 def test_confirmation_rejects_unaccepted_agent_estimates_before_writing():
     database, path = _database()
-    repository = SQLiteSmartEntryRepository(
+    repository = PostgresSmartEntryRepository(
         database,
         clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
     )
@@ -659,7 +665,7 @@ def test_confirmation_rejects_unaccepted_agent_estimates_before_writing():
 
 def test_confirmation_rejects_cardio_without_device_calories_or_met():
     database, path = _database()
-    repository = SQLiteSmartEntryRepository(
+    repository = PostgresSmartEntryRepository(
         database,
         clock=lambda: datetime(2026, 7, 26, 8, tzinfo=timezone.utc),
     )

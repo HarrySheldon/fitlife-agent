@@ -8,6 +8,7 @@ So the refusal has to happen at construction time, not on the first read.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -19,25 +20,22 @@ from backend.infrastructure.repositories.plan_repository_factory import (
     build_plan_repository,
     require_imported,
 )
-from backend.infrastructure.repositories.sqlite_plan_repository import (
-    SQLitePlanRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_plan_repository import (
+    PostgresPlanRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 NOW = datetime(2026, 10, 25, 9, 0, tzinfo=timezone.utc)
 
 
-def _settings(tmp_path, mode="file"):
-    return Settings(data_dir=tmp_path / "data", plan_storage_mode=mode,
-                    sqlite_database_path=None)
-
-
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
+def _settings(tmp_path, mode="file", database: PostgresDatabase | None = None):
+    return Settings(
+        data_dir=tmp_path / "data",
+        plan_storage_mode=mode,
+        database_url=database.dsn if database is not None else Settings().database_url,
+        database_schema=database.target_schema if database is not None else "public",
+    )
 
 
 def _record_import(database, data_dir, *, owners=1, plans=2):
@@ -57,38 +55,45 @@ def test_the_default_mode_is_the_file_store(tmp_path):
 
 
 def test_file_mode_never_opens_the_database(tmp_path):
-    settings = _settings(tmp_path)
+    schema = f"test_unopened_{uuid4().hex[:12]}"
+    database = PostgresDatabase(TEST_DATABASE_URL, schema=schema)
+    settings = _settings(tmp_path, "file", database)
     build_plan_repository(settings)
 
-    assert not settings.database_path.exists()
+    with PostgresDatabase(TEST_DATABASE_URL).connection() as connection:
+        row = connection.execute(
+            "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?",
+            (schema,),
+        ).fetchone()
+    assert row is None
 
 
-def test_sqlite_mode_without_an_import_is_refused(tmp_path):
+def test_postgres_mode_without_an_import_is_refused(tmp_path, pg_db):
     with pytest.raises(ApplicationError) as raised:
-        build_plan_repository(_settings(tmp_path, "sqlite"), database=_database(tmp_path))
+        build_plan_repository(_settings(tmp_path, "postgres", pg_db), database=pg_db)
 
     assert raised.value.code == "CONFIGURATION_INVALID"
     assert "import" in raised.value.message
 
 
-def test_an_import_of_a_different_directory_is_refused(tmp_path):
-    database = _database(tmp_path)
+def test_an_import_of_a_different_directory_is_refused(tmp_path, pg_db):
+    database = pg_db
     _record_import(database, tmp_path / "somewhere-else")
 
     with pytest.raises(ApplicationError) as raised:
-        build_plan_repository(_settings(tmp_path, "sqlite"), database=database)
+        build_plan_repository(_settings(tmp_path, "postgres", database), database=database)
 
     assert raised.value.code == "CONFIGURATION_INVALID"
 
 
-def test_sqlite_mode_with_a_matching_import_returns_the_sqlite_store(tmp_path):
-    database = _database(tmp_path)
-    settings = _settings(tmp_path, "sqlite")
+def test_postgres_mode_with_a_matching_import_returns_the_postgres_store(tmp_path, pg_db):
+    database = pg_db
+    settings = _settings(tmp_path, "postgres", database)
     _record_import(database, settings.data_dir)
 
     repository = build_plan_repository(settings, database=database)
 
-    assert isinstance(repository, SQLitePlanRepository)
+    assert isinstance(repository, PostgresPlanRepository)
 
 
 def test_a_file_store_cannot_confirm(tmp_path):
@@ -98,9 +103,9 @@ def test_a_file_store_cannot_confirm(tmp_path):
     assert raised.value.code == "CONFIGURATION_INVALID"
 
 
-def test_a_sqlite_store_can_confirm(tmp_path):
-    database = _database(tmp_path)
-    settings = _settings(tmp_path, "sqlite")
+def test_a_postgres_store_can_confirm(tmp_path, pg_db):
+    database = pg_db
+    settings = _settings(tmp_path, "postgres", database)
     _record_import(database, settings.data_dir)
 
     assert hasattr(build_plan_activation_repository(settings, database=database),
@@ -109,7 +114,7 @@ def test_a_sqlite_store_can_confirm(tmp_path):
 
 def test_an_unknown_mode_is_a_configuration_error(tmp_path):
     settings = _settings(tmp_path)
-    object.__setattr__(settings, "plan_storage_mode", "postgres")
+    object.__setattr__(settings, "plan_storage_mode", "invalid_mode")
 
     with pytest.raises(ApplicationError) as raised:
         build_plan_repository(settings)
@@ -117,9 +122,9 @@ def test_an_unknown_mode_is_a_configuration_error(tmp_path):
     assert raised.value.code == "CONFIGURATION_INVALID"
 
 
-def test_the_import_record_reports_what_it_covered(tmp_path):
-    database = _database(tmp_path)
-    settings = _settings(tmp_path, "sqlite")
+def test_the_import_record_reports_what_it_covered(tmp_path, pg_db):
+    database = pg_db
+    settings = _settings(tmp_path, "postgres", database)
     _record_import(database, settings.data_dir, owners=3, plans=7)
 
     state = require_imported(settings, database)
@@ -127,24 +132,25 @@ def test_the_import_record_reports_what_it_covered(tmp_path):
     assert state["owner_count"] == 3 and state["plan_count"] == 7
 
 
-def test_the_factory_opens_the_database_the_settings_name(tmp_path):
-    settings = _settings(tmp_path, "sqlite")
-    database = SQLiteDatabase(settings.database_path)
-    run_migrations(database, RECORDS_MIGRATIONS)
+def test_the_factory_opens_the_database_the_settings_name(tmp_path, make_isolated_pg_db):
+    database = make_isolated_pg_db()
+    settings = _settings(tmp_path, "postgres", database)
     _record_import(database, settings.data_dir)
 
     repository = build_plan_repository(settings)
 
-    assert isinstance(repository, SQLitePlanRepository)
-    assert repository.database.path == settings.database_path
+    assert isinstance(repository, PostgresPlanRepository)
+    assert repository.database.target_schema == settings.database_schema
 
 
-def test_an_import_record_in_another_database_does_not_count(tmp_path):
-    # The record exists, but in a file the settings do not name. Reading the
+def test_an_import_record_in_another_database_does_not_count(tmp_path, make_isolated_pg_db):
+    # The record exists, but in a schema the settings do not name. Reading the
     # process-wide default instead of the given settings is exactly how this
     # passes when it should not.
-    settings = _settings(tmp_path, "sqlite")
-    _record_import(_database(tmp_path), settings.data_dir)
+    target_db = make_isolated_pg_db()
+    other_db = make_isolated_pg_db()
+    settings = _settings(tmp_path, "postgres", target_db)
+    _record_import(other_db, settings.data_dir)
 
     with pytest.raises(ApplicationError) as raised:
         build_plan_repository(settings)
@@ -152,7 +158,7 @@ def test_an_import_record_in_another_database_does_not_count(tmp_path):
     assert raised.value.code == "CONFIGURATION_INVALID"
 
 
-def test_the_activation_store_reads_the_versioned_profile(tmp_path):
+def test_the_activation_store_reads_the_versioned_profile(tmp_path, pg_db):
     # Confirmation has to read the constraints on its own transaction, so the
     # store it builds must carry that reader. Without it every candidate would be
     # refused for the wrong reason -- "no versioned store" instead of "this
@@ -161,14 +167,14 @@ def test_the_activation_store_reads_the_versioned_profile(tmp_path):
         GoalVersionInput,
         ProfileVersionInput,
     )
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
-    database = _database(tmp_path)
-    settings = _settings(tmp_path, "sqlite")
+    database = pg_db
+    settings = _settings(tmp_path, "postgres", database)
     _record_import(database, settings.data_dir)
-    profiles = SQLiteProfileTargetRepository(database)
+    profiles = PostgresProfileTargetRepository(database)
     setup = profiles.bootstrap(
         "alice",
         ProfileVersionInput(age=30, height_cm=175.0, weight_kg=70.0,

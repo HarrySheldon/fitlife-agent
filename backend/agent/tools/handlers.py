@@ -54,18 +54,18 @@ class BoundFitnessReads:
 
     def query_progress(self, args, domains):
         """Read-only owner-scoped progress metrics (body trend, exercise PRs, adherence, training context)."""
-        from backend.infrastructure.sqlite.runtime import get_database
-        from backend.infrastructure.repositories.sqlite_body_measurement_repository import (
-            SQLiteBodyMeasurementRepository,
+        from backend.infrastructure.postgres.runtime import get_database
+        from backend.infrastructure.repositories.postgres_body_measurement_repository import (
+            PostgresBodyMeasurementRepository,
         )
-        from backend.infrastructure.repositories.sqlite_exercise_progress_repository import (
-            SQLiteExerciseProgressRepository,
+        from backend.infrastructure.repositories.postgres_exercise_progress_repository import (
+            PostgresExerciseProgressRepository,
         )
-        from backend.infrastructure.repositories.sqlite_plan_cycle_repository import (
-            SQLitePlanCycleRepository,
+        from backend.infrastructure.repositories.postgres_plan_cycle_repository import (
+            PostgresPlanCycleRepository,
         )
-        from backend.infrastructure.repositories.sqlite_training_context_repository import (
-            SQLiteTrainingContextRepository,
+        from backend.infrastructure.repositories.postgres_training_context_repository import (
+            PostgresTrainingContextRepository,
         )
 
         db = get_database()
@@ -73,7 +73,7 @@ class BoundFitnessReads:
         if args.aspect == 'body_trend':
             if 'profile' not in domains:
                 raise PermissionError('SCOPE_PERMISSION_REQUIRED')
-            entries = SQLiteBodyMeasurementRepository(db).list_for_user(
+            entries = PostgresBodyMeasurementRepository(db).list_for_user(
                 self.owner_id, days=args.days, end_date=today_iso
             )
             target_weight = None
@@ -88,11 +88,11 @@ class BoundFitnessReads:
         if args.aspect == 'training_context':
             if not {'profile', 'training'} <= domains:
                 raise PermissionError('SCOPE_PERMISSION_REQUIRED')
-            return SQLiteTrainingContextRepository(db).get(self.owner_id).to_dict()
+            return PostgresTrainingContextRepository(db).get(self.owner_id).to_dict()
         if args.aspect == 'exercise_progress':
             if 'training' not in domains:
                 raise PermissionError('SCOPE_PERMISSION_REQUIRED')
-            items = SQLiteExerciseProgressRepository(db).list_progress(
+            items = PostgresExerciseProgressRepository(db).list_progress(
                 self.owner_id, days=args.days, end_date=today_iso
             )
             return [
@@ -110,7 +110,7 @@ class BoundFitnessReads:
         if args.aspect == 'plan_adherence':
             if 'training' not in domains:
                 raise PermissionError('SCOPE_PERMISSION_REQUIRED')
-            repo = SQLitePlanCycleRepository(db)
+            repo = PostgresPlanCycleRepository(db)
             active = repo.get_active_cycle(self.owner_id)
             adherence = repo.week_adherence_summary(self.owner_id, today_iso)
             return {
@@ -122,12 +122,12 @@ class BoundFitnessReads:
 
 def search_public_foods(query: str, limit: int = 8) -> list[dict]:
     """Read-only search over the public food catalog (never exposes user private items)."""
-    from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-        SQLiteFoodCatalogRepository,
+    from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+        PostgresFoodCatalogRepository,
     )
-    from backend.infrastructure.sqlite.runtime import get_database
+    from backend.infrastructure.postgres.runtime import get_database
 
-    repo = SQLiteFoodCatalogRepository(get_database())
+    repo = PostgresFoodCatalogRepository(get_database())
     items = repo.search('__public_only__', query, limit=limit)
     public_items = [item for item in items if item.owner_user_id is None][:limit]
     return [
@@ -154,7 +154,7 @@ def search_public_exercises(
     limit: int = 8,
 ) -> list[dict]:
     """Read-only structured search over the public exercise catalog."""
-    from backend.infrastructure.sqlite.runtime import get_database
+    from backend.infrastructure.postgres.runtime import get_database
 
     db = get_database()
     where = ["active = 1", "owner_user_id IS NULL"]

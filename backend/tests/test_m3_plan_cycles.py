@@ -18,21 +18,16 @@ from backend.domain.plan_cycles import (
 )
 from backend.domain.training_context import InjuryLimitation, TrainingContext
 from backend.domain.workouts import StrengthSet
-from backend.infrastructure.repositories.sqlite_plan_cycle_repository import (
-    SQLitePlanCycleRepository,
+from backend.infrastructure.repositories.postgres_plan_cycle_repository import (
+    PostgresPlanCycleRepository,
 )
-from backend.infrastructure.repositories.sqlite_workout_repository import (
-    SQLiteWorkoutRepository,
+from backend.infrastructure.repositories.postgres_workout_repository import (
+    PostgresWorkoutRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 
 
-def _db(tmp_path: Path) -> SQLiteDatabase:
-    db = SQLiteDatabase(tmp_path / "m3.sqlite3")
-    run_migrations(db, RECORDS_MIGRATIONS)
-    return db
+def _db(pg_db):
+    return pg_db
 
 
 def _sample_catalog() -> tuple[CatalogExerciseOption, ...]:
@@ -104,9 +99,9 @@ def test_personalized_cycle_respects_equipment_days_rest_and_progressive_overloa
     assert bench_entries[0]["target_weight_kg"] == 27.5
 
 
-def test_plan_cycle_lifecycle_adherence_and_atomic_activation(tmp_path: Path):
-    db = _db(tmp_path)
-    repo = SQLitePlanCycleRepository(db)
+def test_plan_cycle_lifecycle_adherence_and_atomic_activation(pg_db):
+    db = _db(pg_db)
+    repo = PostgresPlanCycleRepository(db)
     ctx = TrainingContext(user_id="u1", weekly_available_days=3, configured=True)
 
     c1_payload, c1_days = build_personalized_cycle_draft(
@@ -161,8 +156,8 @@ def test_plan_cycle_lifecycle_adherence_and_atomic_activation(tmp_path: Path):
     assert old1 is not None and old1.status == "archived"
 
 
-def test_prefill_workout_creates_unconfirmed_draft_not_formal_session(tmp_path: Path):
-    db = _db(tmp_path)
+def test_prefill_workout_creates_unconfirmed_draft_not_formal_session(pg_db):
+    db = _db(pg_db)
     with db.transaction() as conn:
         conn.execute(
             """
@@ -173,7 +168,7 @@ def test_prefill_workout_creates_unconfirmed_draft_not_formal_session(tmp_path: 
             VALUES ('p1', 'u1', 30, 175, 70.0, 'male', 'moderate', '2026-01-01T00:00:00Z')
             """
         )
-    workout_service = WorkoutService(SQLiteWorkoutRepository(db))
+    workout_service = WorkoutService(PostgresWorkoutRepository(db))
     draft = workout_service.create_draft(
         "u1",
         WorkoutDraftInput(

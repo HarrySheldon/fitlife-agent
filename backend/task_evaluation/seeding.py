@@ -25,12 +25,15 @@ def _request(client, method, path, headers=None, body=None):
     return response.json()["data"]
 
 
-def _database(root):
-    from backend.infrastructure.sqlite.database import SQLiteDatabase
-    return SQLiteDatabase(root / "fitlife.sqlite3")
+def _database(root=None):
+    from backend.config import get_settings
+    from backend.infrastructure.postgres.database import PostgresDatabase
+
+    settings = get_settings()
+    return PostgresDatabase(settings.database_url, schema=settings.database_schema)
 
 
-def seed_plan_constraints(root, user_id, seed):
+def seed_plan_constraints(root, user_id, seed, *, database=None):
     """The versioned rows a plan task's hard constraints come from.
 
     The setup form writes exactly these four things -- a profile version, a goal
@@ -43,11 +46,11 @@ def seed_plan_constraints(root, user_id, seed):
         ProfileVersionInput,
         TargetVersionInput,
     )
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
-    profiles = SQLiteProfileTargetRepository(_database(root))
+    profiles = PostgresProfileTargetRepository(database or _database(root))
     effective = seed.effective_from.isoformat()
     setup = profiles.bootstrap(
         user_id,
@@ -69,11 +72,11 @@ def seed_plan_constraints(root, user_id, seed):
     seed_plan_safety(root, user_id, seed)
 
 
-def seed_plan_safety(root, user_id, seed):
+def seed_plan_safety(root, user_id, seed, *, database=None):
     """The allergy version a plan task is frozen against.
 
     Separate from the rest of the seed because it has to be written *last*. The
-    legacy import that makes SQLite the plan store also migrates each account's
+    legacy import that makes PostgreSQL the plan store also migrates each account's
     allergy list out of ``user_profile.json``, and a freshly registered account's
     file says ``[]``. Run in the other order the migration's empty list becomes the
     newest version, so the task is frozen against "verified to have no
@@ -82,11 +85,11 @@ def seed_plan_safety(root, user_id, seed):
     makes the scenario's own value the one the task is frozen with.
     """
     from backend.application.ports.profile_target_repository import SafetyVersionInput
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
-    SQLiteProfileTargetRepository(_database(root)).append_safety_if_changed(
+    PostgresProfileTargetRepository(database or _database(root)).append_safety_if_changed(
         user_id,
         SafetyVersionInput(allergies_or_restrictions=tuple(seed.allergies_or_restrictions)))
 
@@ -95,7 +98,7 @@ def seed_declared_plan(root, user_id, seed):
     """Write the plan a scenario declared, before the store is migrated.
 
     It lands as a file because that is what this deployment's data directory holds
-    at this point; ``activate_sqlite_plan_store`` then imports it, so the scenario
+    at this point; ``activate_postgres_plan_store`` then imports it, so the scenario
     measures the same migration path an operator would run.
     """
     from backend.application.ports.plan_repository import StoredPlan
@@ -109,8 +112,8 @@ def seed_declared_plan(root, user_id, seed):
         plan=GeneratedPlan.model_validate(seed.document)))
 
 
-def activate_sqlite_plan_store(settings, root):
-    """Import the seeded directory into SQLite, then make SQLite authoritative.
+def activate_postgres_plan_store(settings, root, *, database=None):
+    """Import the seeded directory into PostgreSQL, then make PostgreSQL authoritative.
 
     Only a store that can compare-and-swap a head can confirm a candidate, so a
     plan scenario that never confirms anything is the only kind that could run on
@@ -118,10 +121,13 @@ def activate_sqlite_plan_store(settings, root):
     operator runs -- is what makes the confirmation evidence real instead of a
     claim about a deployment nobody configured.
     """
-    from backend.infrastructure.sqlite.import_legacy_plans import apply
+    from backend.infrastructure.postgres.import_legacy_plans import apply
 
-    apply(root, _database(root))
-    settings.plan_storage_mode = "sqlite"
+    apply(root, database or _database(root))
+    settings.plan_storage_mode = "postgres"
+
+
+activate_sqlite_plan_store = activate_postgres_plan_store
 
 
 def seed_environment(client, scenario, root):

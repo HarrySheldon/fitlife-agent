@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-import sqlite3
 
 import pytest
 
@@ -13,28 +12,26 @@ from backend.application.ports.meal_repository import (
     MealDraftItemInput,
     MealRepositoryError,
 )
-from backend.infrastructure.repositories.sqlite_meal_repository import (
-    SQLiteMealRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import DatabaseIntegrityError
+from backend.infrastructure.repositories.postgres_meal_repository import (
+    PostgresMealRepository,
 )
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-    SQLiteFoodCatalogRepository,
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    PostgresFoodCatalogRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 
 NOW = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)
 
 
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "meals.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
+def _database(_tmp_path=None) -> PostgresDatabase:
+    return PostgresDatabase(TEST_DATABASE_URL)
 
 
-def _repository(tmp_path) -> SQLiteMealRepository:
-    return SQLiteMealRepository(
+def _repository(tmp_path) -> PostgresMealRepository:
+    return PostgresMealRepository(
         _database(tmp_path),
         clock=lambda: NOW,
         id_factory=iter(("draft-1",)).__next__,
@@ -170,7 +167,7 @@ def test_draft_owner_isolation_and_optimistic_version_conflict(tmp_path):
 
 def test_expired_draft_is_hidden_and_cannot_be_updated(tmp_path):
     database = _database(tmp_path)
-    active = SQLiteMealRepository(
+    active = PostgresMealRepository(
         database,
         clock=lambda: NOW,
         id_factory=iter(("draft-1",)).__next__,
@@ -180,7 +177,7 @@ def test_expired_draft_is_hidden_and_cannot_be_updated(tmp_path):
         _custom_payload(),
         expires_at="2026-07-25T12:00:00Z",
     )
-    expired = SQLiteMealRepository(
+    expired = PostgresMealRepository(
         database,
         clock=lambda: NOW + timedelta(days=2),
     )
@@ -198,7 +195,7 @@ def test_expired_draft_is_hidden_and_cannot_be_updated(tmp_path):
 
 def test_expiry_is_compared_as_an_instant_and_stored_in_canonical_utc(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteMealRepository(database, clock=lambda: NOW)
+    repository = PostgresMealRepository(database, clock=lambda: NOW)
 
     with pytest.raises(MealRepositoryError) as past:
         repository.create_draft(
@@ -232,7 +229,7 @@ def test_catalog_food_values_are_server_resolved_and_snapshotted(tmp_path):
             )
             """
         )
-    repository = SQLiteMealRepository(
+    repository = PostgresMealRepository(
         database,
         clock=lambda: NOW,
     )
@@ -321,7 +318,7 @@ def test_incomplete_custom_food_cannot_enter_a_draft(tmp_path):
 def test_confirm_atomically_creates_meal_items_custom_food_and_usage(tmp_path):
     database = _database(tmp_path)
     _insert_public_rice(database)
-    repository = SQLiteMealRepository(database, clock=lambda: NOW)
+    repository = PostgresMealRepository(database, clock=lambda: NOW)
     payload = MealDraftInput(
         log_date="2026-07-24",
         name="Lunch",
@@ -377,7 +374,7 @@ def test_confirm_atomically_creates_meal_items_custom_food_and_usage(tmp_path):
 
 def test_confirmed_custom_food_uses_catalog_normalization_and_chinese_index(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteMealRepository(database, clock=lambda: NOW)
+    repository = PostgresMealRepository(database, clock=lambda: NOW)
     payload = MealDraftInput(
         log_date="2026-07-24",
         name="Lunch",
@@ -415,7 +412,7 @@ def test_confirmed_custom_food_uses_catalog_normalization_and_chinese_index(tmp_
     )
 
     assert confirmed.items[0].food_name == "香喷喷白米饭碗"
-    results = SQLiteFoodCatalogRepository(database).search(
+    results = PostgresFoodCatalogRepository(database).search(
         "user-a",
         "白米饭",
         limit=20,
@@ -426,7 +423,7 @@ def test_confirmed_custom_food_uses_catalog_normalization_and_chinese_index(tmp_
 
 
 def test_confirm_replays_matching_key_and_rejects_fingerprint_reuse(tmp_path):
-    repository = SQLiteMealRepository(_database(tmp_path), clock=lambda: NOW)
+    repository = PostgresMealRepository(_database(tmp_path), clock=lambda: NOW)
     draft = repository.create_draft(
         "user-a",
         _custom_payload(),
@@ -464,7 +461,7 @@ def test_confirm_replays_matching_key_and_rejects_fingerprint_reuse(tmp_path):
 
 
 def test_confirm_rejects_empty_and_stale_drafts(tmp_path):
-    repository = SQLiteMealRepository(_database(tmp_path), clock=lambda: NOW)
+    repository = PostgresMealRepository(_database(tmp_path), clock=lambda: NOW)
     empty_payload = MealDraftInput(
         log_date="2026-07-24",
         name="Lunch",
@@ -504,9 +501,9 @@ def test_confirm_rejects_empty_and_stale_drafts(tmp_path):
     assert stale.value.code == "DRAFT_VERSION_CONFLICT"
 
 
-def test_confirm_rolls_back_every_write_when_item_insert_fails(tmp_path):
-    database = _database(tmp_path)
-    repository = SQLiteMealRepository(database, clock=lambda: NOW)
+def test_confirm_rolls_back_every_write_when_item_insert_fails(make_isolated_pg_db):
+    database = make_isolated_pg_db()
+    repository = PostgresMealRepository(database, clock=lambda: NOW)
     draft = repository.create_draft(
         "user-a",
         _custom_payload(),
@@ -515,15 +512,23 @@ def test_confirm_rolls_back_every_write_when_item_insert_fails(tmp_path):
     with database.transaction() as connection:
         connection.execute(
             """
+            CREATE OR REPLACE FUNCTION reject_meal_item_fn()
+            RETURNS TRIGGER LANGUAGE plpgsql AS $$
+            BEGIN
+                RAISE EXCEPTION 'simulated item failure' USING ERRCODE = 'check_violation';
+            END;
+            $$
+            """
+        )
+        connection.execute(
+            """
             CREATE TRIGGER reject_meal_item
             BEFORE INSERT ON meal_items
-            BEGIN
-                SELECT RAISE(ABORT, 'simulated item failure');
-            END
+            FOR EACH ROW EXECUTE FUNCTION reject_meal_item_fn()
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         repository.confirm(
             "user-a",
             draft.id,
@@ -554,7 +559,7 @@ def test_confirm_rolls_back_every_write_when_item_insert_fails(tmp_path):
 
 def test_concurrent_confirm_retries_create_one_meal(tmp_path):
     database = _database(tmp_path)
-    setup = SQLiteMealRepository(database, clock=lambda: NOW)
+    setup = PostgresMealRepository(database, clock=lambda: NOW)
     draft = setup.create_draft(
         "user-a",
         _custom_payload(),
@@ -562,7 +567,7 @@ def test_concurrent_confirm_retries_create_one_meal(tmp_path):
     )
 
     def confirm():
-        return SQLiteMealRepository(database, clock=lambda: NOW).confirm(
+        return PostgresMealRepository(database, clock=lambda: NOW).confirm(
             "user-a",
             draft.id,
             expected_version=1,
@@ -579,19 +584,19 @@ def test_concurrent_confirm_retries_create_one_meal(tmp_path):
 
 def test_confirm_reads_expiry_clock_after_acquiring_write_lock(tmp_path):
     database = _database(tmp_path)
-    setup = SQLiteMealRepository(database, clock=lambda: NOW)
+    setup = PostgresMealRepository(database, clock=lambda: NOW)
     draft = setup.create_draft(
         "user-a",
         _custom_payload(),
         expires_at="2026-08-23T12:00:00Z",
     )
-    tracking = _LockTrackingDatabase(database.path)
+    tracking = _LockTrackingDatabase(database.dsn, schema=database.schema)
 
     def locked_clock():
         assert tracking.lock_acquired
         return NOW
 
-    confirmed = SQLiteMealRepository(
+    confirmed = PostgresMealRepository(
         tracking,
         clock=locked_clock,
     ).confirm(
@@ -605,7 +610,7 @@ def test_confirm_reads_expiry_clock_after_acquiring_write_lock(tmp_path):
     assert confirmed.id is not None
 
 
-def _insert_public_rice(database: SQLiteDatabase) -> None:
+def _insert_public_rice(database: PostgresDatabase) -> None:
     with database.transaction() as connection:
         connection.execute(
             """
@@ -629,9 +634,9 @@ def _insert_public_rice(database: SQLiteDatabase) -> None:
         )
 
 
-class _LockTrackingDatabase(SQLiteDatabase):
-    def __init__(self, path):
-        super().__init__(path)
+class _LockTrackingDatabase(PostgresDatabase):
+    def __init__(self, dsn, *, schema=None):
+        super().__init__(dsn, schema=schema)
         self.lock_acquired = False
 
     @contextmanager

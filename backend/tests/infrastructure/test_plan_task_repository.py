@@ -24,21 +24,19 @@ from backend.domain.plan_adjustment import (
     Patch,
     Violation,
 )
-from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import (
-    SQLitePlanAdjustmentRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_plan_adjustment_repository import (
+    PostgresPlanAdjustmentRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 NOW = datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc)
 
 
-def _repository(path, *, now=NOW, ids=None):
-    database = SQLiteDatabase(path)
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return SQLitePlanAdjustmentRepository(
-        database,
+def _repository(path=None, *, database=None, now=NOW, ids=None):
+    target = database or PostgresDatabase(TEST_DATABASE_URL)
+    return PostgresPlanAdjustmentRepository(
+        target,
         clock=lambda: now,
         ids=ids or _counter_ids(),
     )
@@ -358,13 +356,16 @@ def test_every_state_is_known():
             "cancelled", "expired"} == TASK_STATES
 
 
-def _spawn_reserve(path, owner, task_id, version, operation_id, barrier, results):
-    from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import (
-        SQLitePlanAdjustmentRepository,
+def _spawn_reserve(dsn, schema, owner, task_id, version, operation_id, barrier, results):
+    from backend.infrastructure.repositories.postgres_plan_adjustment_repository import (
+        PostgresPlanAdjustmentRepository,
     )
-    from backend.infrastructure.sqlite.database import SQLiteDatabase
+    from backend.infrastructure.postgres.database import PostgresDatabase
 
-    repository = SQLitePlanAdjustmentRepository(SQLiteDatabase(path))
+    repository = PostgresPlanAdjustmentRepository(
+        PostgresDatabase(dsn, schema=schema),
+        clock=lambda: NOW,
+    )
     barrier.wait(timeout=20)
     try:
         snapshot = repository.reserve_repair_round(owner, task_id, version, operation_id,
@@ -376,9 +377,9 @@ def _spawn_reserve(path, owner, task_id, version, operation_id, barrier, results
         results.close()
 
 
-def test_two_processes_cannot_both_take_the_last_round(tmp_path):
-    path = tmp_path / "plan.sqlite3"
-    repo = _repository(path)
+def test_two_processes_cannot_both_take_the_last_round(make_isolated_pg_db):
+    database = make_isolated_pg_db()
+    repo = _repository(database=database)
     task = _task(repo)
     repo.grant("alice", task.task_id, 1, frozenset({"training"}), frozenset({"training"}), key="grant-1")
     first = repo.reserve_repair_round("alice", task.task_id, 2, "op-1", frozenset({"training"}))
@@ -389,8 +390,8 @@ def test_two_processes_cannot_both_take_the_last_round(tmp_path):
     barrier = context.Barrier(2)
     results = context.Queue()
     processes = [context.Process(target=_spawn_reserve,
-                                 args=(str(path), "alice", task.task_id, submitted.version,
-                                       f"race-{index}", barrier, results))
+                                 args=(database.dsn, database.target_schema, "alice", task.task_id,
+                                       submitted.version, f"race-{index}", barrier, results))
                  for index in range(2)]
     outcomes = []
     try:

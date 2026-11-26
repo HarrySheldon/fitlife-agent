@@ -8,9 +8,7 @@ import zipfile
 from pathlib import Path
 
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.database import PostgresDatabase
 
 
 USER_ID = "a" * 32
@@ -26,19 +24,17 @@ WORKOUTS = b"""date,type,exercise,muscle_group,sets,reps,weight,duration_min,not
 """
 
 
-def _setup(tmp_path: Path):
+def _setup(tmp_path: Path, database: PostgresDatabase):
     data_dir = tmp_path / "data"
     root = data_dir / "users" / USER_ID
     root.mkdir(parents=True)
     (root / "meals.csv").write_bytes(MEALS)
     (root / "workouts.csv").write_bytes(WORKOUTS)
-    database = SQLiteDatabase(data_dir / "fitlife.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
     return data_dir, root, database
 
 
-def test_migration_archives_exact_sources_groups_meals_and_reconciles(tmp_path):
-    data_dir, root, database = _setup(tmp_path)
+def test_migration_archives_exact_sources_groups_meals_and_reconciles(tmp_path, pg_db):
+    data_dir, root, database = _setup(tmp_path, pg_db)
 
     result = LegacyCsvMigrator(database, data_dir).migrate_user(USER_ID)
 
@@ -92,8 +88,8 @@ def test_migration_archives_exact_sources_groups_meals_and_reconciles(tmp_path):
     assert json.loads(ledger["details_json"])["meal_rows"] == 3
 
 
-def test_completed_migration_is_sticky_when_legacy_files_drift(tmp_path):
-    data_dir, root, database = _setup(tmp_path)
+def test_completed_migration_is_sticky_when_legacy_files_drift(tmp_path, pg_db):
+    data_dir, root, database = _setup(tmp_path, pg_db)
     migrator = LegacyCsvMigrator(database, data_dir)
     first = migrator.migrate_user(USER_ID)
     (root / "meals.csv").write_bytes(MEALS.replace(b"379", b"999"))
@@ -106,8 +102,8 @@ def test_completed_migration_is_sticky_when_legacy_files_drift(tmp_path):
         assert connection.execute("SELECT SUM(calories) FROM meal_items").fetchone()[0] == 1034
 
 
-def test_invalid_csv_records_safe_failure_without_mutating_sources(tmp_path):
-    data_dir, root, database = _setup(tmp_path)
+def test_invalid_csv_records_safe_failure_without_mutating_sources(tmp_path, pg_db):
+    data_dir, root, database = _setup(tmp_path, pg_db)
     invalid = MEALS.replace(b"379", b"-1")
     (root / "meals.csv").write_bytes(invalid)
 
@@ -123,11 +119,25 @@ def test_invalid_csv_records_safe_failure_without_mutating_sources(tmp_path):
     assert "-1" not in ledger["details_json"]
 
 
-def test_write_failure_rolls_back_formal_rows_and_can_retry(tmp_path):
-    data_dir, _, database = _setup(tmp_path)
+def test_write_failure_rolls_back_formal_rows_and_can_retry(tmp_path, pg_db):
+    data_dir, _, database = _setup(tmp_path, pg_db)
     with database.transaction() as connection:
         connection.execute(
-            "CREATE TRIGGER reject_legacy_meal BEFORE INSERT ON meal_items BEGIN SELECT RAISE(ABORT, 'private row'); END"
+            """
+            CREATE OR REPLACE FUNCTION reject_legacy_meal_fn()
+            RETURNS TRIGGER LANGUAGE plpgsql AS $$
+            BEGIN
+                RAISE EXCEPTION 'private row' USING ERRCODE = 'check_violation';
+            END;
+            $$
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER reject_legacy_meal
+            BEFORE INSERT ON meal_items
+            FOR EACH ROW EXECUTE FUNCTION reject_legacy_meal_fn()
+            """
         )
     migrator = LegacyCsvMigrator(database, data_dir)
 
@@ -139,7 +149,8 @@ def test_write_failure_rolls_back_formal_rows_and_can_retry(tmp_path):
         assert connection.execute("SELECT COUNT(*) FROM meals").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM training_sessions").fetchone()[0] == 0
     with database.transaction() as connection:
-        connection.execute("DROP TRIGGER reject_legacy_meal")
+        connection.execute("DROP TRIGGER reject_legacy_meal ON meal_items")
+        connection.execute("DROP FUNCTION reject_legacy_meal_fn()")
 
     retried = migrator.migrate_user(USER_ID)
     assert retried.status == "completed"

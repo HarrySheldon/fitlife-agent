@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from backend.config import get_settings
 from backend.infrastructure.migration.legacy_csv import LegacyCsvMigrator
-from backend.infrastructure.sqlite.runtime import get_database, initialize_database
+from backend.infrastructure.postgres.runtime import get_database, initialize_database
 from backend.main import create_app
 
 
@@ -221,7 +221,7 @@ def test_authenticated_legacy_agent_entry_is_deprecated(monkeypatch):
     )
 
 
-def test_cutover_user_csv_upload_imports_and_replays_from_sqlite(monkeypatch):
+def test_cutover_user_csv_upload_imports_and_replays_from_postgres(monkeypatch):
     data_dir = make_test_data_dir()
     client = build_client(data_dir, monkeypatch)
     headers = register_and_authorize(client)

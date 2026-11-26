@@ -22,7 +22,7 @@ def _commit(client, headers, draft, item):
         'selections': [{'item_id': item['item_id'], 'item_revision': item['revision']}],
     })
     assert response.status_code == 200, response.json()
-    from backend.infrastructure.sqlite.runtime import get_database
+    from backend.infrastructure.postgres.runtime import get_database
     with get_database().connection() as connection:
         row = connection.execute('SELECT * FROM meal_items WHERE id=?',
             (response.json()['data']['commits'][0]['meal_item_id'],)).fetchone()
@@ -39,7 +39,7 @@ def test_switching_catalog_replaces_attribution_in_draft_and_formal_record(clien
     })
     assert created.status_code == 200
     food = created.json()['data']
-    from backend.infrastructure.sqlite.runtime import get_database
+    from backend.infrastructure.postgres.runtime import get_database
     with get_database().transaction() as connection:
         connection.execute('UPDATE food_catalog SET source_name=?, source_record_id=?, '
             'dataset_version=?, license=?, attribution=?, content_hash=?, provenance_json=? WHERE id=?',

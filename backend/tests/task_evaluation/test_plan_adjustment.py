@@ -17,7 +17,6 @@ of that is read from what the model said.
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from pathlib import Path
 
@@ -141,9 +140,9 @@ def test_a_domain_list_must_be_a_sorted_closed_enum():
 
 
 # -- what the database reports -------------------------------------------
-def _plan_database(path, *, candidates, rounds=(1,), state="awaiting_confirmation"):
+def _plan_database(database, *, candidates, rounds=(1,), state="awaiting_confirmation"):
     """A minimal plan-task store, so the observation can be read without the app."""
-    with sqlite3.connect(path) as connection:
+    with database.transaction() as connection:
         connection.execute(
             "CREATE TABLE plan_adjustment_sessions (task_id TEXT, user_id TEXT, state TEXT,"
             " version INTEGER, repair_rounds INTEGER, base_plan_id TEXT, candidate_id TEXT,"
@@ -173,7 +172,7 @@ def _plan_database(path, *, candidates, rounds=(1,), state="awaiting_confirmatio
                         "diet_plan": {"meals": ["花生燕麦粥"], "daily_calorie_target": 1000}})))
 
 
-def test_the_domains_that_did_not_change_are_compared_deeply(tmp_path):
+def test_the_domains_that_did_not_change_are_compared_deeply(make_isolated_pg_db):
     """Two candidates, one domain byte-identical.
 
     The comparison is against the stored documents, not against the digest the
@@ -181,7 +180,7 @@ def test_the_domains_that_did_not_change_are_compared_deeply(tmp_path):
     """
     from backend.task_evaluation.observation import observe_database
 
-    database = tmp_path / "plan.sqlite3"
+    database = make_isolated_pg_db(initialize=False)
     _plan_database(database, candidates=[
         (1, {"workout_plan": {"days": ["fixed"], "weekly_training_days": 4},
              "diet_plan": {"meals": ["花生酱"], "daily_calorie_target": 1000}}),
@@ -201,10 +200,10 @@ def test_the_domains_that_did_not_change_are_compared_deeply(tmp_path):
     assert "original" not in str(observed)
 
 
-def test_a_moved_target_is_reported_as_moved(tmp_path):
+def test_a_moved_target_is_reported_as_moved(make_isolated_pg_db):
     from backend.task_evaluation.observation import observe_database
 
-    database = tmp_path / "plan.sqlite3"
+    database = make_isolated_pg_db(initialize=False)
     _plan_database(database, candidates=[
         (0, {"workout_plan": {"days": ["original"], "weekly_training_days": 4},
              "diet_plan": {"meals": ["燕麦粥"], "daily_calorie_target": 2000}}),
@@ -214,12 +213,12 @@ def test_a_moved_target_is_reported_as_moved(tmp_path):
     assert observed["plan_targets_unchanged"] is False
 
 
-def test_a_task_scoped_fact_is_absent_when_the_account_has_no_task(tmp_path):
+def test_a_task_scoped_fact_is_absent_when_the_account_has_no_task(make_isolated_pg_db):
     from backend.task_evaluation.observation import observe_database
 
-    database = tmp_path / "plan.sqlite3"
+    database = make_isolated_pg_db(initialize=False)
     _plan_database(database, candidates=[])
-    with sqlite3.connect(database) as connection:
+    with database.transaction() as connection:
         connection.execute("DELETE FROM plan_adjustment_sessions")
     observed = observe_database(database, actors={"primary": "owner"})
 

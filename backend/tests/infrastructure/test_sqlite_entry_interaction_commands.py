@@ -6,14 +6,14 @@ import json
 import pytest
 
 from backend.application.ports.smart_entry_repository import SmartEntryRepositoryError
-from backend.infrastructure.repositories.sqlite_smart_entry_repository import SQLiteSmartEntryRepository
+from backend.infrastructure.repositories.postgres_smart_entry_repository import PostgresSmartEntryRepository
 from backend.tests.infrastructure.test_sqlite_smart_entry_repository import _database, _cleanup, _payload
 
 
 def test_command_commits_interaction_and_replays_original_snapshot_after_later_edit():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', _payload(), expires_at='2099-01-01T00:00:00Z')
 
         def activate(current):
@@ -55,7 +55,7 @@ def _command(repository, draft, *, key='command', version=None, transform=None, 
 def test_command_concurrent_duplicate_applies_once_and_stale_new_command_conflicts():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', _payload(), expires_at='2099-01-01T00:00:00Z')
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = list(executor.map(lambda _: _command(repository, draft), range(2)))
@@ -72,7 +72,7 @@ def test_command_replay_checks_owner_and_expiry_before_returning_health_snapshot
     database, path = _database()
     now = datetime(2026, 10, 15, tzinfo=timezone.utc)
     try:
-        repository = SQLiteSmartEntryRepository(database, clock=lambda: now)
+        repository = PostgresSmartEntryRepository(database, clock=lambda: now)
         draft = repository.create_draft('owner', _payload(), expires_at=(now + timedelta(minutes=30)).isoformat())
         _command(repository, draft)
         with pytest.raises(SmartEntryRepositoryError, match='DRAFT_NOT_FOUND'):
@@ -91,7 +91,7 @@ def test_command_replay_checks_owner_and_expiry_before_returning_health_snapshot
 def test_command_snapshots_are_removed_when_draft_is_deleted():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', _payload(), expires_at='2099-01-01T00:00:00Z')
         _command(repository, draft)
         repository.delete_draft('owner', draft.id)
@@ -105,7 +105,7 @@ def test_command_snapshots_are_removed_when_draft_is_deleted():
 def test_terminal_items_cannot_be_forged_by_trusted_command():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', _payload(), expires_at='2099-01-01T00:00:00Z')
         item = draft.payload.interaction.items[0]
         terminal = _command(repository, draft, transform=lambda current: replace(
@@ -123,7 +123,7 @@ def test_question_metadata_roundtrips_and_old_schema_two_defaults_remain_readabl
 
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', _payload(), expires_at='2099-01-01T00:00:00Z')
         group = EntryQuestionGroup('group-1', '2026-10-15T00:00:00Z', 2,
                                    (EntryQuestion('segment-1', 'amount', ('g',)),))
@@ -150,7 +150,7 @@ def test_question_metadata_roundtrips_and_old_schema_two_defaults_remain_readabl
 def test_corrupt_optional_interaction_metadata_is_rejected(field, value):
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', _payload(), expires_at='2099-01-01T00:00:00Z')
         with database.transaction() as connection:
             payload = json.loads(connection.execute('SELECT payload_json FROM record_drafts WHERE id = ?', (draft.id,)).fetchone()[0])
@@ -166,7 +166,7 @@ def test_corrupt_optional_interaction_metadata_is_rejected(field, value):
 def test_corrupt_command_snapshot_is_rejected(mutation):
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', _payload(), expires_at='2099-01-01T00:00:00Z')
         _command(repository, draft)
         with database.transaction() as connection:

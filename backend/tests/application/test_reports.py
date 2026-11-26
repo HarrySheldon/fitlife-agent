@@ -17,7 +17,7 @@ from backend.application.use_cases.reports import WeeklyReports, iso_week_bounds
 from backend.domain.errors import ApplicationError
 from backend.config import get_settings
 from backend.infrastructure.repositories.file_report_repository import FileReportRepository
-from backend.infrastructure.sqlite.runtime import initialize_database
+from backend.infrastructure.postgres.runtime import initialize_database
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.main import create_app
 from backend.tools.data_access import DEFAULT_PROFILE, MEAL_COLUMNS, WORKOUT_COLUMNS

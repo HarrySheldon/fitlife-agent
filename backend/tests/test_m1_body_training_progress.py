@@ -8,24 +8,19 @@ import pytest
 from backend.domain.body_measurements import BodyMeasurement, compute_body_summary
 from backend.domain.exercise_progress import StrengthSetRow, aggregate_exercise_progress, estimate_epley_1rm
 from backend.domain.training_context import InjuryLimitation
-from backend.infrastructure.repositories.sqlite_body_measurement_repository import (
-    SQLiteBodyMeasurementRepository,
+from backend.infrastructure.repositories.postgres_body_measurement_repository import (
+    PostgresBodyMeasurementRepository,
 )
-from backend.infrastructure.repositories.sqlite_exercise_progress_repository import (
-    SQLiteExerciseProgressRepository,
+from backend.infrastructure.repositories.postgres_exercise_progress_repository import (
+    PostgresExerciseProgressRepository,
 )
-from backend.infrastructure.repositories.sqlite_training_context_repository import (
-    SQLiteTrainingContextRepository,
+from backend.infrastructure.repositories.postgres_training_context_repository import (
+    PostgresTrainingContextRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 
 
-def _db(tmp_path: Path) -> SQLiteDatabase:
-    db = SQLiteDatabase(tmp_path / "m1.sqlite3")
-    run_migrations(db, RECORDS_MIGRATIONS)
-    return db
+def _db(pg_db):
+    return pg_db
 
 
 def test_body_summary_computes_7d_moving_average_and_weekly_rate():
@@ -54,9 +49,9 @@ def test_body_summary_computes_7d_moving_average_and_weekly_rate():
     assert oct5.moving_avg_7d == pytest.approx(73.53, abs=0.01)
 
 
-def test_body_measurement_repository_crud_and_owner_isolation(tmp_path: Path):
-    db = _db(tmp_path)
-    repo = SQLiteBodyMeasurementRepository(db)
+def test_body_measurement_repository_crud_and_owner_isolation(pg_db):
+    db = _db(pg_db)
+    repo = PostgresBodyMeasurementRepository(db)
 
     m1 = repo.create("user-a", measured_date="2026-11-01", weight_kg=72.5, body_fat_pct=18.2, note="morning")
     repo.create("user-b", measured_date="2026-11-01", weight_kg=60.0)
@@ -72,9 +67,9 @@ def test_body_measurement_repository_crud_and_owner_isolation(tmp_path: Path):
     assert repo.latest_for_user("user-a") is None
 
 
-def test_training_context_repository_defaults_and_upsert(tmp_path: Path):
-    db = _db(tmp_path)
-    repo = SQLiteTrainingContextRepository(db)
+def test_training_context_repository_defaults_and_upsert(pg_db):
+    db = _db(pg_db)
+    repo = PostgresTrainingContextRepository(db)
 
     default_ctx = repo.get("user-a")
     assert default_ctx.configured is False
@@ -99,13 +94,13 @@ def test_training_context_repository_defaults_and_upsert(tmp_path: Path):
     assert reloaded.to_dict() == saved.to_dict()
 
 
-def test_epley_1rm_and_exercise_progress_aggregation(tmp_path: Path):
+def test_epley_1rm_and_exercise_progress_aggregation(pg_db):
     assert estimate_epley_1rm(100.0, 1) == 100.0
     assert estimate_epley_1rm(100.0, 6) == 120.0
     assert estimate_epley_1rm(60.0, 15) is None
     assert estimate_epley_1rm(None, 10) is None
 
-    db = _db(tmp_path)
+    db = _db(pg_db)
     with db.transaction() as conn:
         conn.execute(
             """
@@ -134,7 +129,7 @@ def test_epley_1rm_and_exercise_progress_aggregation(tmp_path: Path):
             """
         )
 
-    repo = SQLiteExerciseProgressRepository(db)
+    repo = PostgresExerciseProgressRepository(db)
     progress = repo.list_progress("u1", days=90, end_date="2026-10-15")
     assert len(progress) == 1
     squat = progress[0]

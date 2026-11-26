@@ -16,7 +16,8 @@ function Invoke-Startup {
     Initialize-Environment
     $resolvedDataDir = Resolve-DataDirectory
     Write-Host "Local environment is ready. The deployment encryption key is configured."
-    Write-Host "Runtime data directory: $resolvedDataDir"
+    Write-Host "Runtime data directory (files/exports): $resolvedDataDir"
+    Write-Host "Database mode: PostgreSQL + pgvector (docker compose service 'postgres')"
 
     if ($InitializeOnly) {
         return

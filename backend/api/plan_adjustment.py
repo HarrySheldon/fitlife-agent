@@ -53,7 +53,7 @@ from backend.application.use_cases.plan_adjustment import (
 from backend.application.ports.plan_repository import legacy_head
 from backend.config import get_settings
 from backend.domain.errors import ApplicationError, configuration_error
-from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
+from backend.infrastructure.auth.postgres_identity_repository import PostgresIdentityRepository
 from backend.infrastructure.model_gateway.agent_decision_adapter import (
     StructuredDecisionAdapter,
 )
@@ -65,20 +65,20 @@ from backend.infrastructure.repositories.plan_repository_factory import (
     build_plan_activation_repository,
     build_plan_repository,
 )
-from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import (
-    SQLitePlanAdjustmentRepository,
+from backend.infrastructure.repositories.postgres_plan_adjustment_repository import (
+    PostgresPlanAdjustmentRepository,
 )
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.repositories.sqlite_task_budget_repository import (
-    SQLiteTaskBudgetRepository,
+from backend.infrastructure.repositories.postgres_task_budget_repository import (
+    PostgresTaskBudgetRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 from backend.domain.user_preferences import UserPreferences
-from backend.infrastructure.settings.sqlite_user_preferences_repository import SQLiteUserPreferencesRepository
+from backend.infrastructure.settings.postgres_user_preferences_repository import PostgresUserPreferencesRepository
 
 
 router = APIRouter(prefix="/api/v1/plan-adjustment-tasks")
@@ -171,9 +171,9 @@ def require_enabled() -> None:
 
 def _build(settings) -> PlanAdjustmentService:
     database = get_database()
-    repository = SQLitePlanAdjustmentRepository(database)
-    budgets = SQLiteTaskBudgetRepository(database)
-    profiles = SQLiteProfileTargetRepository(database)
+    repository = PostgresPlanAdjustmentRepository(database)
+    budgets = PostgresTaskBudgetRepository(database)
+    profiles = PostgresProfileTargetRepository(database)
     plans = build_plan_repository(settings)
     try:
         activations = build_plan_activation_repository(settings)
@@ -225,9 +225,9 @@ def _runner(settings):
     The domains come from the task row, not from the request text, so a task that
     was granted training only cannot widen itself by describing a diet.
     """
-    database = SQLiteDatabase(settings.database_path)
-    identities = SQLiteIdentityRepository(database, settings.data_dir)
-    preferences_repo = SQLiteUserPreferencesRepository(database, settings.data_dir)
+    database = PostgresDatabase(settings.database_url, schema=settings.database_schema)
+    identities = PostgresIdentityRepository(database, settings.data_dir)
+    preferences_repo = PostgresUserPreferencesRepository(database, settings.data_dir)
 
     async def run(session, binding, request: RoundRequest):
         owner = session.owner
@@ -290,7 +290,7 @@ def _runner(settings):
 
 def get_plan_adjustment_service() -> PlanAdjustmentService:
     settings = get_settings()
-    key = f'{settings.database_path}|{settings.safety_review_mode}|{settings.plan_storage_mode}'
+    key = f'{settings.database_url}|{settings.database_schema or "public"}|{settings.safety_review_mode}|{settings.plan_storage_mode}'
     service = _SERVICES.get(key)
     if service is None:
         service = _build(settings)

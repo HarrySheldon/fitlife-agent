@@ -86,10 +86,10 @@ def test_factory_policy_resolution_does_not_read_user_connections(tmp_path, monk
     from backend.config import Settings
     from backend.infrastructure.agent_runtime import factory
     from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
-    from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
+    from backend.infrastructure.settings.postgres_model_connection_repository import PostgresModelConnectionRepository
     reads = []
     monkeypatch.setattr(FileModelConnectionRepository, "get", lambda self, user_id: reads.append(user_id))
-    monkeypatch.setattr(SQLiteModelConnectionRepository, "get", lambda self, user_id: reads.append(user_id))
+    monkeypatch.setattr(PostgresModelConnectionRepository, "get", lambda self, user_id: reads.append(user_id))
     monkeypatch.setattr(factory, "get_settings", lambda: Settings(data_dir=tmp_path))
     runtime = isolated_agent_runtime()
     runtime.resolver.resolve("chat", "u")
@@ -165,16 +165,16 @@ def test_request_cannot_relax_a_stricter_route_budget():
 
 @pytest.mark.parametrize("source", ["environment", "publication"])
 @pytest.mark.parametrize("fails", [False, True])
-def test_effective_zero_retention_evicts_completed_runs_but_preserves_history(source, fails, tmp_path):
+def test_effective_zero_retention_evicts_completed_runs_but_preserves_history(source, fails, pg_db):
     import asyncio
     import json
     from backend.agent.contracts import AgentCommand, AgentResult
     from backend.agent.runtime import AgentRuntime
-    from backend.infrastructure.agent_runtime.sqlite_run_repository import SQLiteRunRepository
+    from backend.infrastructure.agent_runtime.postgres_run_repository import PostgresRunRepository
     store = MemoryPolicyStore()
     environment = {"max_completed_runs": 0} if source == "environment" else {}
     runtime = AgentRuntime(resolver=ConfigurationResolver(store=store, environment=environment),
-                           repository=SQLiteRunRepository(tmp_path / "retention.sqlite3"))
+                           repository=PostgresRunRepository(pg_db))
     if source == "publication":
         store.publish({"max_completed_runs": 0})
     class Workflow:

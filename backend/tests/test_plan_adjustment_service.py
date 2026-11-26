@@ -33,15 +33,14 @@ from backend.agent.unified_coach import UnifiedCoachWorkflow
 from backend.application.ports.agent_decision_gateway import AgentDecisionResult
 from backend.application.use_cases.plan_adjustment import PlanAdjustmentService
 from backend.domain.errors import ApplicationError
-from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import (
-    SQLitePlanAdjustmentRepository,
+from backend.infrastructure.repositories.postgres_plan_adjustment_repository import (
+    PostgresPlanAdjustmentRepository,
 )
-from backend.infrastructure.repositories.sqlite_task_budget_repository import (
-    SQLiteTaskBudgetRepository,
+from backend.infrastructure.repositories.postgres_task_budget_repository import (
+    PostgresTaskBudgetRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.tests.conftest import TEST_DATABASE_URL
 from backend.schemas import GeneratedPlan
 from backend.application.ports.plan_repository import StoredPlan
 
@@ -166,10 +165,9 @@ def _runner(scripts):
 
 def _service(tmp_path, *, constraints=None, reviewer=None, scripts=(), plan=None,
              activations=None, constraints_source=None, **confirm_options):
-    database = SQLiteDatabase(tmp_path / "plan.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    repository = SQLitePlanAdjustmentRepository(database, clock=lambda: NOW, ids=_ids())
-    budgets = SQLiteTaskBudgetRepository(database)
+    database = PostgresDatabase(TEST_DATABASE_URL)
+    repository = PostgresPlanAdjustmentRepository(database, clock=lambda: NOW, ids=_ids())
+    budgets = PostgresTaskBudgetRepository(database)
     store = PlanStore(plan)
     runner = _runner(scripts)
     service = PlanAdjustmentService(
@@ -523,7 +521,7 @@ def test_a_second_protocol_failure_ends_the_run_but_keeps_the_budget(tmp_path):
     snapshot = repo.get("alice", task["task_id"])
     assert snapshot.state == "generating"
     # The failed run did not hand the task a fresh ceiling.
-    budget = SQLiteTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
+    budget = PostgresTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
     assert budget.call_limit == 36 and budget.spent_calls > 0
 
 
@@ -531,9 +529,9 @@ def test_execute_reuses_one_budget_per_task(tmp_path):
     service, repo, _, _ = _service(tmp_path, scripts=[ROUND_0, ROUND_1, ROUND_2])
     task = _start(service)
     first = asyncio.run(service.execute("alice", task["task_id"], task["version"], "exec-1", instructions=INSTRUCTIONS))
-    after_first = SQLiteTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
+    after_first = PostgresTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
     asyncio.run(service.execute("alice", task["task_id"], first["task"]["version"], "exec-2", instructions=INSTRUCTIONS))
-    after_second = SQLiteTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
+    after_second = PostgresTaskBudgetRepository(repo.database).get_snapshot("alice", task["task_id"])
 
     assert after_second.call_limit == after_first.call_limit
     assert after_second.spent_calls > after_first.spent_calls
@@ -766,15 +764,15 @@ def _real_wiring(tmp_path, *, allergies=None):
         SafetyVersionInput,
         TargetVersionInput,
     )
-    from backend.infrastructure.repositories.sqlite_plan_repository import (
-        SQLitePlanRepository,
+    from backend.infrastructure.repositories.postgres_plan_repository import (
+        PostgresPlanRepository,
     )
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
     service, repo, task, third, _ = _awaiting(tmp_path)
-    profiles = SQLiteProfileTargetRepository(repo.database, clock=lambda: NOW)
+    profiles = PostgresProfileTargetRepository(repo.database, clock=lambda: NOW)
     setup = profiles.bootstrap(
         "alice",
         ProfileVersionInput(age=30, height_cm=175.0, weight_kg=70.0,
@@ -794,8 +792,8 @@ def _real_wiring(tmp_path, *, allergies=None):
             "alice", SafetyVersionInput(allergies_or_restrictions=allergies))
     # Same clock as the task store, or the real one would judge the fixture's
     # timestamps against today and call an unexpired candidate expired.
-    plans = SQLitePlanRepository(repo.database, clock=lambda: NOW,
-                                 constraints_reader=profiles.constraint_snapshot_with)
+    plans = PostgresPlanRepository(repo.database, clock=lambda: NOW,
+                                   constraints_reader=profiles.constraint_snapshot_with)
     plans.save("alice", StoredPlan(plan_id="p1", activated_at=NOW,
                                    kind="deterministic", plan=BASE))
     service.activations = plans

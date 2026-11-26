@@ -14,19 +14,19 @@ from backend.domain.plan_cycles import (
     build_personalized_cycle_draft,
     monday_of_week,
 )
-from backend.infrastructure.repositories.sqlite_body_measurement_repository import (
-    SQLiteBodyMeasurementRepository,
+from backend.infrastructure.repositories.postgres_body_measurement_repository import (
+    PostgresBodyMeasurementRepository,
 )
-from backend.infrastructure.repositories.sqlite_exercise_progress_repository import (
-    SQLiteExerciseProgressRepository,
+from backend.infrastructure.repositories.postgres_exercise_progress_repository import (
+    PostgresExerciseProgressRepository,
 )
-from backend.infrastructure.repositories.sqlite_plan_cycle_repository import (
-    SQLitePlanCycleRepository,
+from backend.infrastructure.repositories.postgres_plan_cycle_repository import (
+    PostgresPlanCycleRepository,
 )
-from backend.infrastructure.repositories.sqlite_training_context_repository import (
-    SQLiteTrainingContextRepository,
+from backend.infrastructure.repositories.postgres_training_context_repository import (
+    PostgresTrainingContextRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
+from backend.infrastructure.postgres.database import PostgresDatabase
 
 
 @dataclass(frozen=True)
@@ -67,12 +67,12 @@ class WeeklyAutomationService:
     _LOCKS_GUARD = threading.Lock()
     _USER_LOCKS: dict[tuple[str, str], threading.Lock] = {}
 
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(self, database: PostgresDatabase) -> None:
         self.database = database
 
     @classmethod
-    def _automation_lock(cls, db_path: Path | str, user_id: str) -> threading.Lock:
-        key = (str(Path(db_path).resolve()), user_id)
+    def _automation_lock(cls, database: PostgresDatabase, user_id: str) -> threading.Lock:
+        key = (f"{database.dsn}|{database.target_schema}", user_id)
         with cls._LOCKS_GUARD:
             lock = cls._USER_LOCKS.get(key)
             if lock is None:
@@ -126,12 +126,12 @@ class WeeklyAutomationService:
         title: str | None = None,
     ) -> PlanCycle:
         today_iso = today_date.isoformat()
-        cycle_repo = SQLitePlanCycleRepository(self.database)
-        ctx = SQLiteTrainingContextRepository(self.database).get(user_id)
-        progress = SQLiteExerciseProgressRepository(self.database).list_progress(
+        cycle_repo = PostgresPlanCycleRepository(self.database)
+        ctx = PostgresTrainingContextRepository(self.database).get(user_id)
+        progress = PostgresExerciseProgressRepository(self.database).list_progress(
             user_id, days=90, end_date=today_iso
         )
-        measurements = SQLiteBodyMeasurementRepository(self.database).list_for_user(
+        measurements = PostgresBodyMeasurementRepository(self.database).list_for_user(
             user_id, days=60, end_date=today_iso
         )
         body_summary = compute_body_summary(measurements, target_weight_kg=target_weight_kg)
@@ -173,7 +173,7 @@ class WeeklyAutomationService:
         target_weight_kg: float | None = None,
         ensure_weekly_report: Callable[[str, str], str] | None = None,
     ) -> WeeklyAutomationRun:
-        with self._automation_lock(self.database.path, user_id):
+        with self._automation_lock(self.database, user_id):
             return self._check_and_run_locked(
                 user_id,
                 today_date,
@@ -204,7 +204,7 @@ class WeeklyAutomationService:
             except Exception:
                 report_status = "failed"
 
-        cycle_repo = SQLitePlanCycleRepository(self.database)
+        cycle_repo = PostgresPlanCycleRepository(self.database)
         week_start_iso = monday_of_week(today_date).isoformat()
         existing_draft = next(
             (
@@ -245,11 +245,12 @@ class WeeklyAutomationService:
         with self.database.transaction() as conn:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO weekly_automation_runs (
+                INSERT INTO weekly_automation_runs (
                     user_id, iso_week, report_week, report_status,
                     draft_cycle_id, draft_status, message, dismissed, created_at
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+                ON CONFLICT DO NOTHING
                 """,
                 (
                     user_id,

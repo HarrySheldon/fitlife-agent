@@ -100,7 +100,7 @@ def _localized_inputs(tmp_path: Path) -> dict[str, Path]:
     }
 
 
-def _import_args(tmp_path: Path, *, foods: Path) -> list[str]:
+def _import_args(tmp_path: Path, *, foods: Path, database_url: str, schema: str) -> list[str]:
     paths = _localized_inputs(tmp_path)
     return [
         "--foods", str(foods),
@@ -108,16 +108,24 @@ def _import_args(tmp_path: Path, *, foods: Path) -> list[str]:
         "--exercises", str(paths["exercises"]),
         "--exercise-localization", str(paths["exercise_localization"]),
         "--exercise-taxonomy", str(paths["exercise_taxonomy"]),
-        "--database", str(tmp_path / "catalog.sqlite3"),
+        "--database", database_url,
+        "--schema", schema,
         "--output-dir", str(tmp_path / "reports"),
     ]
 
 
 def test_initial_script_imports_both_sources_and_is_idempotent(
     tmp_path: Path,
+    make_isolated_pg_db,
     capsys,
 ) -> None:
-    args = _import_args(tmp_path, foods=ROOT / "fixtures/tfda-foods.csv")
+    db = make_isolated_pg_db(initialize=False)
+    args = _import_args(
+        tmp_path,
+        foods=ROOT / "fixtures/tfda-foods.csv",
+        database_url=db.dsn,
+        schema=db.target_schema,
+    )
 
     assert main(args) == 0
     assert main(args) == 0
@@ -129,15 +137,31 @@ def test_initial_script_imports_both_sources_and_is_idempotent(
     assert (tmp_path / "reports/exercises/normalized-exercises.json").exists()
 
 
-def test_initial_script_validates_both_before_creating_database(tmp_path: Path) -> None:
+def test_initial_script_validates_both_before_creating_database(
+    tmp_path: Path,
+    make_isolated_pg_db,
+) -> None:
     bad_food = tmp_path / "bad-food.csv"
     text = (ROOT / "fixtures/tfda-foods.csv").read_text(encoding="utf-8")
     bad_food.write_text(text.replace("總碳水化合物,g,28.2", "總碳水化合物,mg,unknown"), encoding="utf-8")
-    args = _import_args(tmp_path, foods=bad_food)
-    database = tmp_path / "catalog.sqlite3"
+    db = make_isolated_pg_db(initialize=False)
+    args = _import_args(
+        tmp_path,
+        foods=bad_food,
+        database_url=db.dsn,
+        schema=db.target_schema,
+    )
 
     exit_code = main(args)
 
     assert exit_code == 4
-    assert not database.exists()
+    with db.connection() as connection:
+        migrated = connection.execute(
+            """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = ? AND table_name = 'food_catalog'
+            """,
+            (db.target_schema,),
+        ).fetchone()
+    assert migrated is None
     assert (tmp_path / "reports/exercises/catalog-import-report.json").exists()

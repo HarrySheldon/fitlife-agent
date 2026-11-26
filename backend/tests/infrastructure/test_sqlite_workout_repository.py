@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -14,21 +13,20 @@ from backend.application.ports.workout_repository import (
     WorkoutRepositoryError,
 )
 from backend.domain.workouts import StrengthSet
-from backend.infrastructure.repositories.sqlite_workout_repository import (
-    SQLiteWorkoutRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import DatabaseIntegrityError
+from backend.infrastructure.repositories.postgres_workout_repository import (
+    PostgresWorkoutRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 
 NOW = datetime(2026, 7, 25, 12, tzinfo=timezone.utc)
 
 
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "workouts.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    with database.transaction() as connection:
+def _database(_tmp_path=None, *, database: PostgresDatabase | None = None) -> PostgresDatabase:
+    target = database or PostgresDatabase(TEST_DATABASE_URL)
+    with target.transaction() as connection:
         connection.execute(
             """
             INSERT INTO user_profile_versions (
@@ -42,11 +40,11 @@ def _database(tmp_path) -> SQLiteDatabase:
             )
             """
         )
-    return database
+    return target
 
 
 def _insert_exercise(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     exercise_id: str,
     *,
     name: str,
@@ -125,7 +123,7 @@ def test_draft_resolves_owned_snapshots_estimates_and_optimistic_versions(
         primary_muscle="cardiovascular",
         met=9.8,
     )
-    repository = SQLiteWorkoutRepository(database, clock=lambda: NOW)
+    repository = PostgresWorkoutRepository(database, clock=lambda: NOW)
 
     draft = repository.create_draft(
         "user-a",
@@ -174,7 +172,7 @@ def test_confirm_atomically_persists_mixed_session_and_replays_key(tmp_path):
         primary_muscle="cardiovascular",
         met=9.8,
     )
-    repository = SQLiteWorkoutRepository(database, clock=lambda: NOW)
+    repository = PostgresWorkoutRepository(database, clock=lambda: NOW)
     draft = repository.create_draft(
         "user-a",
         _mixed_payload(),
@@ -221,7 +219,7 @@ def test_custom_exercise_and_foreign_catalog_visibility(tmp_path):
         primary_muscle="back",
         owner_user_id="user-b",
     )
-    repository = SQLiteWorkoutRepository(database, clock=lambda: NOW)
+    repository = PostgresWorkoutRepository(database, clock=lambda: NOW)
     foreign = WorkoutDraftInput(
         **{
             **_mixed_payload().__dict__,
@@ -275,8 +273,8 @@ def test_custom_exercise_and_foreign_catalog_visibility(tmp_path):
     assert confirmed.strength_exercises[0].catalog_exercise_id is not None
 
 
-def test_confirm_rolls_back_complete_graph_when_child_insert_fails(tmp_path):
-    database = _database(tmp_path)
+def test_confirm_rolls_back_complete_graph_when_child_insert_fails(make_isolated_pg_db):
+    database = _database(database=make_isolated_pg_db())
     _insert_exercise(
         database,
         "squat",
@@ -292,7 +290,7 @@ def test_confirm_rolls_back_complete_graph_when_child_insert_fails(tmp_path):
         primary_muscle="cardiovascular",
         met=9.8,
     )
-    repository = SQLiteWorkoutRepository(database, clock=lambda: NOW)
+    repository = PostgresWorkoutRepository(database, clock=lambda: NOW)
     draft = repository.create_draft(
         "user-a",
         _mixed_payload(),
@@ -301,15 +299,23 @@ def test_confirm_rolls_back_complete_graph_when_child_insert_fails(tmp_path):
     with database.transaction() as connection:
         connection.execute(
             """
+            CREATE OR REPLACE FUNCTION reject_strength_set_fn()
+            RETURNS TRIGGER LANGUAGE plpgsql AS $$
+            BEGIN
+                RAISE EXCEPTION 'simulated failure' USING ERRCODE = 'check_violation';
+            END;
+            $$
+            """
+        )
+        connection.execute(
+            """
             CREATE TRIGGER reject_strength_set
             BEFORE INSERT ON strength_sets
-            BEGIN
-                SELECT RAISE(ABORT, 'simulated failure');
-            END
+            FOR EACH ROW EXECUTE FUNCTION reject_strength_set_fn()
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         repository.confirm(
             "user-a",
             draft.id,
@@ -350,7 +356,7 @@ def test_owner_isolation_and_concurrent_retries_create_one_session(tmp_path):
         primary_muscle="cardiovascular",
         met=9.8,
     )
-    setup = SQLiteWorkoutRepository(database, clock=lambda: NOW)
+    setup = PostgresWorkoutRepository(database, clock=lambda: NOW)
     draft = setup.create_draft(
         "user-a",
         _mixed_payload(),
@@ -359,7 +365,7 @@ def test_owner_isolation_and_concurrent_retries_create_one_session(tmp_path):
     assert setup.get_draft("user-b", draft.id) is None
 
     def confirm():
-        return SQLiteWorkoutRepository(database, clock=lambda: NOW).confirm(
+        return PostgresWorkoutRepository(database, clock=lambda: NOW).confirm(
             "user-a",
             draft.id,
             expected_version=1,

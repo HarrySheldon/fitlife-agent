@@ -33,9 +33,9 @@ class Settings(BaseSettings):
     plan_adjustment_tasks_enabled: bool = True
     # Which store is the plan authority. This is a data-migration switch, not a
     # feature flag: turning the coach on must not move anybody's history, and a
-    # merge must never migrate a database as a side effect. ``sqlite`` is refused
+    # merge must never migrate a database as a side effect. ``postgres`` is refused
     # until an import has completed against the configured data directory.
-    plan_storage_mode: Literal['file', 'sqlite'] = 'file'
+    plan_storage_mode: Literal['file', 'postgres'] = 'file'
     # Which side of the S4 paired comparison this deployment runs. It stays
     # "reference" even after the unified coach became the default path: flipping
     # it would delete the baseline the optimisation is measured against. The
@@ -84,7 +84,8 @@ class Settings(BaseSettings):
 
     data_dir: Path = BACKEND_ROOT / "data"
     seed_dir: Path = BACKEND_ROOT / "data"
-    sqlite_database_path: Path | None = None
+    database_url: str = "postgresql://fitlife:fitlife@127.0.0.1:5432/fitlife"
+    database_schema: str | None = None
     knowledge_base_dir: Path = BACKEND_ROOT / "knowledge_base"
 
     model_config = SettingsConfigDict(
@@ -93,9 +94,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("sqlite_database_path", mode="before")
+    @field_validator("database_schema", mode="before")
     @classmethod
-    def blank_sqlite_database_path_uses_default(cls, value: object) -> object:
+    def blank_database_schema_uses_default(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
         return value
@@ -103,18 +104,6 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.backend_cors_origins.split(",") if origin.strip()]
-
-    @property
-    def vector_index_path(self) -> Path:
-        return self.data_dir / "vector_index.json"
-
-    @property
-    def database_path(self) -> Path:
-        return self.sqlite_database_path or self.data_dir / "fitlife.sqlite3"
-
-    @property
-    def runtime_database_path(self) -> Path:
-        return self.data_dir / "agent_runtime.sqlite3"
 
     @property
     def food_catalog_seed_path(self) -> Path:

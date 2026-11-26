@@ -15,12 +15,13 @@ from backend.infrastructure.auth.file_identity_repository import (
     normalize_username,
 )
 from backend.infrastructure.settings.file_model_connection_repository import _workspace
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.runtime import ensure_database_ready
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.runtime import ensure_database_ready
 
 
 MIGRATION_KEY = "legacy_account_state_v1"
 _USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_UTC_NOW = "to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')"
 
 
 @dataclass(frozen=True)
@@ -32,12 +33,12 @@ class LegacyAccountStateResult:
 
 
 class LegacyAccountStateMigrator:
-    """Idempotently imports legacy JSON identity, preference, and model files into SQLite.
+    """Idempotently imports legacy JSON identity, preference, and model files into PostgreSQL.
 
     Original JSON files remain untouched on disk as a read-only recovery backup.
     """
 
-    def __init__(self, database: SQLiteDatabase, data_dir: Path) -> None:
+    def __init__(self, database: PostgresDatabase, data_dir: Path) -> None:
         self.database = database
         self.data_dir = Path(data_dir)
 
@@ -85,10 +86,11 @@ class LegacyAccountStateMigrator:
 
                 cursor = connection.execute(
                     """
-                    INSERT OR IGNORE INTO users (
+                    INSERT INTO users (
                         user_id, username, email, phone, display_name,
                         password_hash, token_version, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT DO NOTHING
                     """,
                     (
                         user_id,
@@ -131,9 +133,10 @@ class LegacyAccountStateMigrator:
                     if prefs is not None:
                         cursor = connection.execute(
                             """
-                            INSERT OR IGNORE INTO user_preferences (
+                            INSERT INTO user_preferences (
                                 user_id, language, unit_system, timezone, updated_at
                             ) VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT DO NOTHING
                             """,
                             (user_id, prefs.language, prefs.unit_system, prefs.timezone, now_iso),
                         )
@@ -166,9 +169,10 @@ class LegacyAccountStateMigrator:
                         )
                         cursor = connection.execute(
                             """
-                            INSERT OR IGNORE INTO model_connections (
+                            INSERT INTO model_connections (
                                 user_id, schema_version, revision, active_json, draft_json, updated_at
                             ) VALUES (?, ?, ?, ?, ?, ?)
+                            ON CONFLICT DO NOTHING
                             """,
                             (
                                 user_id,
@@ -189,16 +193,16 @@ class LegacyAccountStateMigrator:
                 "model_connections_imported": model_connections_imported,
             }
             connection.execute(
-                """
+                f"""
                 INSERT INTO data_migrations (
                     migration_key, user_id, checksum, status,
                     source_backup_path, details_json, started_at, completed_at
-                ) VALUES (?, NULL, ?, 'completed', NULL, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ) VALUES (?, NULL, ?, 'completed', NULL, ?, ({_UTC_NOW}), ({_UTC_NOW}))
                 ON CONFLICT(migration_key) DO UPDATE SET
                     checksum = excluded.checksum,
                     status = 'completed',
                     details_json = excluded.details_json,
-                    completed_at = CURRENT_TIMESTAMP
+                    completed_at = ({_UTC_NOW})
                 """,
                 (
                     MIGRATION_KEY,

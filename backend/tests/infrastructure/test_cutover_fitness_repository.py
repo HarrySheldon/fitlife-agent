@@ -9,10 +9,7 @@ from backend.infrastructure.repositories.cutover_fitness_repository import (
     CutoverFitnessRepository,
 )
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
-from backend.infrastructure.repositories.sqlite_fitness_repository import SQLiteFitnessRepository
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.repositories.postgres_fitness_repository import PostgresFitnessRepository
 from backend.schemas import MealRecord, WorkoutRecord
 from backend.tools.data_access import MEAL_COLUMNS, WORKOUT_COLUMNS
 
@@ -20,7 +17,7 @@ from backend.tools.data_access import MEAL_COLUMNS, WORKOUT_COLUMNS
 USER = "b" * 32
 
 
-def _setup(tmp_path: Path, monkeypatch):
+def _setup(tmp_path: Path, monkeypatch, database):
     data = tmp_path / "data"
     monkeypatch.setenv("DATA_DIR", str(data))
     get_settings.cache_clear()
@@ -34,21 +31,19 @@ def _setup(tmp_path: Path, monkeypatch):
         ",".join(WORKOUT_COLUMNS) + "\n2026-07-01,strength,squat,legs,3,8,60,45\n",
         encoding="utf-8",
     )
-    database = SQLiteDatabase(data / "fitlife.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
     file_repository = FileFitnessRepository()
-    sqlite_repository = SQLiteFitnessRepository(
+    sqlite_repository = PostgresFitnessRepository(
         database, profiles=file_repository, data_dir=data
     )
     return data, root, database, CutoverFitnessRepository(
         database,
         file_repository=file_repository,
-        sqlite_repository=sqlite_repository,
+        postgres_repository=sqlite_repository,
     )
 
 
-def test_failed_or_incomplete_user_stays_file_backed(tmp_path, monkeypatch):
-    _, root, database, repository = _setup(tmp_path, monkeypatch)
+def test_failed_or_incomplete_user_stays_file_backed(tmp_path, monkeypatch, pg_db):
+    _, root, database, repository = _setup(tmp_path, monkeypatch, pg_db)
     with database.transaction() as connection:
         connection.execute(
             """
@@ -67,8 +62,8 @@ def test_failed_or_incomplete_user_stays_file_backed(tmp_path, monkeypatch):
     assert "file meal" in (root / "meals.csv").read_text(encoding="utf-8")
 
 
-def test_completed_user_uses_sqlite_and_never_falls_back_on_file_drift(tmp_path, monkeypatch):
-    data, root, database, repository = _setup(tmp_path, monkeypatch)
+def test_completed_user_uses_sqlite_and_never_falls_back_on_file_drift(tmp_path, monkeypatch, pg_db):
+    data, root, database, repository = _setup(tmp_path, monkeypatch, pg_db)
     assert LegacyCsvMigrator(database, data).migrate_user(USER).status == "completed"
     (root / "meals.csv").write_text(
         ",".join(MEAL_COLUMNS) + "\n2026-07-02,dinner,drift,1,999,0,0,0\n",
@@ -86,9 +81,9 @@ def test_completed_user_uses_sqlite_and_never_falls_back_on_file_drift(tmp_path,
     assert "sqlite meal" not in (root / "meals.csv").read_text(encoding="utf-8")
 
 
-def test_signed_in_csv_import_is_atomic_archived_and_idempotent(tmp_path, monkeypatch):
-    data, _, database, _ = _setup(tmp_path, monkeypatch)
-    sqlite = SQLiteFitnessRepository(database, data_dir=data)
+def test_signed_in_csv_import_is_atomic_archived_and_idempotent(tmp_path, monkeypatch, pg_db):
+    data, _, database, _ = _setup(tmp_path, monkeypatch, pg_db)
+    sqlite = PostgresFitnessRepository(database, data_dir=data)
     content = (
         ",".join(MEAL_COLUMNS)
         + "\n2026-07-03,dinner,tofu,200g,288,34.6,5.56,17.44\n"
@@ -106,15 +101,15 @@ def test_signed_in_csv_import_is_atomic_archived_and_idempotent(tmp_path, monkey
     assert archives[0].read_bytes() == content
 
 
-def test_concurrent_identical_uploads_import_once(tmp_path, monkeypatch):
-    data, _, database, _ = _setup(tmp_path, monkeypatch)
+def test_concurrent_identical_uploads_import_once(tmp_path, monkeypatch, pg_db):
+    data, _, database, _ = _setup(tmp_path, monkeypatch, pg_db)
     content = (
         ",".join(MEAL_COLUMNS)
         + "\n2026-07-03,dinner,tofu,200g,288,34.6,5.56,17.44\n"
     ).encode()
 
     def upload():
-        return SQLiteFitnessRepository(database, data_dir=data).import_meals_csv(
+        return PostgresFitnessRepository(database, data_dir=data).import_meals_csv(
             USER, content
         )
 
@@ -125,7 +120,7 @@ def test_concurrent_identical_uploads_import_once(tmp_path, monkeypatch):
         (0, True),
         (1, False),
     ]
-    assert len(SQLiteFitnessRepository(database).read_meals(USER)) == 1
+    assert len(PostgresFitnessRepository(database).read_meals(USER)) == 1
 
 
 def _meal(food: str) -> MealRecord:
@@ -142,7 +137,7 @@ def _workout(exercise: str) -> WorkoutRecord:
     )
 
 
-def test_saving_a_profile_versions_the_allergy_list(tmp_path, monkeypatch):
+def test_saving_a_profile_versions_the_allergy_list(tmp_path, monkeypatch, pg_db):
     """The write path a plan confirmation depends on.
 
     The allergy list is the last hard constraint whose only authority was a file.
@@ -150,14 +145,14 @@ def test_saving_a_profile_versions_the_allergy_list(tmp_path, monkeypatch):
     has to be appended -- otherwise a confirmation has nothing to name and refuses
     for a reason the user cannot fix from the UI.
     """
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
-    data, root, database, _ = _setup(tmp_path, monkeypatch)
-    sqlite_repository = SQLiteFitnessRepository(
+    data, root, database, _ = _setup(tmp_path, monkeypatch, pg_db)
+    sqlite_repository = PostgresFitnessRepository(
         database, profiles=FileFitnessRepository(), data_dir=data)
-    profiles = SQLiteProfileTargetRepository(database)
+    profiles = PostgresProfileTargetRepository(database)
     profile = sqlite_repository.read_profile(USER).model_copy(
         update={"allergies_or_restrictions": ["花生"]})
     assert profiles.get_latest_safety(USER) is None
@@ -177,15 +172,11 @@ def test_saving_a_profile_versions_the_allergy_list(tmp_path, monkeypatch):
     assert profiles.get_latest_safety(USER).allergies_or_restrictions == ("花生", "海鲜")
 
 
-def test_the_ownerless_default_profile_has_no_version(tmp_path, monkeypatch):
+def test_the_ownerless_default_profile_has_no_version(tmp_path, monkeypatch, pg_db):
     # ``user_id=None`` is the template profile, not an account. Versioning it
     # would attribute one user's restrictions to nobody.
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
-    )
-
-    data, root, database, _ = _setup(tmp_path, monkeypatch)
-    sqlite_repository = SQLiteFitnessRepository(
+    data, root, database, _ = _setup(tmp_path, monkeypatch, pg_db)
+    sqlite_repository = PostgresFitnessRepository(
         database, profiles=FileFitnessRepository(), data_dir=data)
     profile = sqlite_repository.read_profile(USER).model_copy(
         update={"allergies_or_restrictions": ["花生"]})

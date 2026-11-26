@@ -17,12 +17,11 @@ from backend.application.ports.coach_answer import CoachTurnAnswer
 from backend.application.ports.model_call_context import current_abort
 from backend.application.use_cases.coach_turns import CoachTurnService, LegacyAnswerDiscarded
 from backend.domain.coach_turn import TurnNotCancellable, TurnSlotBusy
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.migrations import run_migrations
+from backend.infrastructure.postgres.schema import RECORDS_MIGRATIONS
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 
@@ -97,10 +96,9 @@ def test_overlong_final_answer_is_not_truncated_or_published(repository, mode, c
 
 
 @pytest.fixture
-def repository(tmp_path):
-    database = SQLiteDatabase(tmp_path / "coach.sqlite")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return SQLiteCoachConversationRepository(database)
+def repository(pg_db):
+    run_migrations(pg_db, RECORDS_MIGRATIONS)
+    return PostgresCoachConversationRepository(pg_db)
 
 
 def _conversation(repository, *, user="alice", conversation="c1"):

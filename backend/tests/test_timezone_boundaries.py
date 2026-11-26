@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
-from backend.infrastructure.sqlite.runtime import initialize_database
+from backend.infrastructure.postgres.runtime import initialize_database
 from backend.main import create_app
 
 

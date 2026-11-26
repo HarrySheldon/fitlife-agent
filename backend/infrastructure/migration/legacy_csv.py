@@ -6,7 +6,6 @@ import io
 import json
 import os
 import re
-import sqlite3
 import stat
 import zipfile
 from dataclasses import dataclass
@@ -15,7 +14,10 @@ from pathlib import Path
 from typing import Literal
 from uuid import NAMESPACE_URL, uuid5
 
-from backend.infrastructure.sqlite.database import SQLiteDatabase
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import DatabaseError
+
+_UTC_NOW = "to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')"
 
 
 MIGRATION_VERSION = "legacy_csv_v1"
@@ -77,7 +79,7 @@ class _WorkoutRow:
 
 
 class LegacyCsvMigrator:
-    def __init__(self, database: SQLiteDatabase, data_dir: Path) -> None:
+    def __init__(self, database: PostgresDatabase, data_dir: Path) -> None:
         self.database = database
         self.data_dir = Path(data_dir)
 
@@ -160,18 +162,18 @@ class LegacyCsvMigrator:
         groups = _group_meals(meals)
         with self.database.transaction() as connection:
             connection.execute(
-                """
+                f"""
                 INSERT INTO data_migrations (
                     migration_key, user_id, checksum, status,
                     source_backup_path, details_json, started_at, completed_at
-                ) VALUES (?, ?, ?, 'running', ?, '{}', CURRENT_TIMESTAMP, NULL)
+                ) VALUES (?, ?, ?, 'running', ?, '{{}}', ({_UTC_NOW}), NULL)
                 ON CONFLICT(migration_key) DO UPDATE SET
                     user_id = excluded.user_id,
                     checksum = excluded.checksum,
                     status = 'running',
                     source_backup_path = excluded.source_backup_path,
-                    details_json = '{}',
-                    started_at = CURRENT_TIMESTAMP,
+                    details_json = '{{}}',
+                    started_at = ({_UTC_NOW}),
                     completed_at = NULL
                 """,
                 (migration_key, user_id, source_checksum, str(backup_path)),
@@ -186,10 +188,10 @@ class LegacyCsvMigrator:
                 "backup_checksum": backup_checksum,
             }
             connection.execute(
-                """
+                f"""
                 UPDATE data_migrations
                 SET status = 'completed', details_json = ?,
-                    completed_at = CURRENT_TIMESTAMP
+                    completed_at = ({_UTC_NOW})
                 WHERE migration_key = ?
                 """,
                 (_json(details), migration_key),
@@ -224,25 +226,25 @@ class LegacyCsvMigrator:
                 if completed is not None and completed["status"] == "completed":
                     return
                 connection.execute(
-                    """
+                    f"""
                     INSERT INTO data_migrations (
                         migration_key, user_id, checksum, status,
                         source_backup_path, details_json, started_at, completed_at
-                    ) VALUES (?, ?, ?, 'failed', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, 'failed', ?, ?, ({_UTC_NOW}), ({_UTC_NOW}))
                     ON CONFLICT(migration_key) DO UPDATE SET
                         user_id = excluded.user_id,
                         checksum = excluded.checksum,
                         status = 'failed',
                         source_backup_path = excluded.source_backup_path,
                         details_json = excluded.details_json,
-                        completed_at = CURRENT_TIMESTAMP
+                        completed_at = ({_UTC_NOW})
                     """,
                     (
                         migration_key, user_id, source_checksum, backup_path,
                         _json(details),
                     ),
                 )
-        except sqlite3.Error:
+        except DatabaseError:
             return
 
     def _ledger(self, migration_key: str):

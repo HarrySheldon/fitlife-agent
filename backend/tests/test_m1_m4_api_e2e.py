@@ -6,25 +6,19 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
-from backend.infrastructure.sqlite import runtime as sqlite_runtime
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres import runtime as postgres_runtime
 from backend.main import create_app
 
 
-def test_m1_to_m4_http_end_to_end_flow(tmp_path: Path, monkeypatch):
+def test_m1_to_m4_http_end_to_end_flow(tmp_path: Path, monkeypatch, pg_db):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = data_dir / "fitlife.sqlite3"
-    db = SQLiteDatabase(db_path)
-    run_migrations(db, RECORDS_MIGRATIONS)
+    db = pg_db
 
     monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(db_path))
     monkeypatch.setenv("LLM_ENABLED", "false")
     get_settings.cache_clear()
-    monkeypatch.setattr(sqlite_runtime, "get_database", lambda: db)
+    monkeypatch.setattr(postgres_runtime, "get_database", lambda: db)
 
     app = create_app()
     client = TestClient(app)
@@ -129,27 +123,24 @@ def test_m1_to_m4_http_end_to_end_flow(tmp_path: Path, monkeypatch):
     get_settings.cache_clear()
 
 
-def test_progress_overview_uses_sqlite_setup_instead_of_default_profile(tmp_path: Path, monkeypatch):
+def test_progress_overview_uses_postgres_setup_instead_of_default_profile(tmp_path: Path, monkeypatch, pg_db):
     from backend.application.ports.profile_target_repository import (
         GoalVersionInput,
         ProfileVersionInput,
         TargetVersionInput,
     )
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = data_dir / "fitlife.sqlite3"
-    db = SQLiteDatabase(db_path)
-    run_migrations(db, RECORDS_MIGRATIONS)
+    db = pg_db
 
     monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(db_path))
     monkeypatch.setenv("LLM_ENABLED", "false")
     get_settings.cache_clear()
-    monkeypatch.setattr(sqlite_runtime, "get_database", lambda: db)
+    monkeypatch.setattr(postgres_runtime, "get_database", lambda: db)
 
     app = create_app()
     client = TestClient(app)
@@ -157,9 +148,9 @@ def test_progress_overview_uses_sqlite_setup_instead_of_default_profile(tmp_path
     reg = client.post(
         "/auth/register",
         json={
-            "username": "sqlite_truth_user",
+            "username": "postgres_truth_user",
             "password": "Password123!",
-            "display_name": "SQLite Truth User",
+            "display_name": "Postgres Truth User",
         },
     )
     assert reg.status_code in (200, 201), reg.text
@@ -167,7 +158,7 @@ def test_progress_overview_uses_sqlite_setup_instead_of_default_profile(tmp_path
     user_id = reg.json()["data"]["user"]["user_id"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    repo = SQLiteProfileTargetRepository(db)
+    repo = PostgresProfileTargetRepository(db)
     profile_v = repo.append_profile(
         user_id,
         ProfileVersionInput(

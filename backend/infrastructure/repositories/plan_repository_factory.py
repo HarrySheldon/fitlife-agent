@@ -21,16 +21,16 @@ data, and a merge must never migrate a database as a side effect.
 """
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 from typing import Literal
 
 from backend.application.ports.plan_repository import PlanActivationRepository, PlanRepository
 from backend.domain.errors import configuration_error
+from backend.infrastructure.postgres.errors import DatabaseOperationalError
 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
 
-PlanStorageMode = Literal["file", "sqlite"]
-_MODES = ("file", "sqlite")
+PlanStorageMode = Literal["file", "postgres"]
+_MODES = ("file", "postgres")
 
 
 def _mode(settings) -> str:
@@ -49,7 +49,7 @@ def _import_state(database) -> dict | None:
                 "SELECT data_dir, completed_at, owner_count, plan_count, draft_count "
                 "FROM plan_import_state WHERE id=1"
             ).fetchone()
-    except sqlite3.OperationalError:
+    except DatabaseOperationalError:
         # No schema at all. That is the strongest possible evidence that no
         # import completed here, and it must read as "refused", not as a crash.
         return None
@@ -69,11 +69,11 @@ def require_imported(settings, database) -> dict:
     state = _import_state(database)
     if state is None:
         raise configuration_error(
-            "plan_storage_mode='sqlite' requires a completed legacy plan import; "
-            "run backend.infrastructure.sqlite.import_legacy_plans --apply first.")
+            "plan_storage_mode='postgres' requires a completed legacy plan import; "
+            "run backend.infrastructure.postgres.import_legacy_plans --apply first.")
     if _resolved(state["data_dir"]) != _resolved(settings.data_dir):
         raise configuration_error(
-            "plan_storage_mode='sqlite' requires an import of the configured data "
+            "plan_storage_mode='postgres' requires an import of the configured data "
             "directory; the recorded import covers a different one.")
     return state
 
@@ -85,7 +85,7 @@ def build_plan_repository(settings, *, database=None) -> PlanRepository:
         return FilePlanRepository(Path(settings.data_dir))
     database = database or _database(settings)
     require_imported(settings, database)
-    return _sqlite_repository(database)
+    return _postgres_repository(database)
 
 
 def build_plan_activation_repository(settings, *, database=None) -> PlanActivationRepository:
@@ -105,38 +105,38 @@ def build_plan_activation_repository(settings, *, database=None) -> PlanActivati
     mode = _mode(settings)
     if mode == "file":
         raise configuration_error(
-            "Plan confirmation requires plan_storage_mode='sqlite'.")
+            "Plan confirmation requires plan_storage_mode='postgres'.")
     database = database or _database(settings)
     require_imported(settings, database)
     return _activation_repository(database)
 
 
 def _database(settings):
-    """The deployment's own database file, not the process-wide default.
+    """The deployment's own PostgreSQL database, not the process-wide default.
 
     Reading ``get_settings()`` here would make the factory ignore the settings it
     was handed -- which is how a test or a second deployment ends up importing
     one database and serving another.
     """
-    from backend.infrastructure.sqlite.database import SQLiteDatabase
-    return SQLiteDatabase(Path(settings.database_path))
+    from backend.infrastructure.postgres.database import PostgresDatabase
+    return PostgresDatabase(settings.database_url, schema=settings.database_schema)
 
 
-def _sqlite_repository(database):
-    from backend.infrastructure.repositories.sqlite_plan_repository import (
-        SQLitePlanRepository,
+def _postgres_repository(database):
+    from backend.infrastructure.repositories.postgres_plan_repository import (
+        PostgresPlanRepository,
     )
-    return SQLitePlanRepository(database)
+    return PostgresPlanRepository(database)
 
 
 def _activation_repository(database):
-    from backend.infrastructure.repositories.sqlite_plan_repository import (
-        SQLitePlanRepository,
+    from backend.infrastructure.repositories.postgres_plan_repository import (
+        PostgresPlanRepository,
     )
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-        SQLiteProfileTargetRepository,
+    from backend.infrastructure.repositories.postgres_profile_target_repository import (
+        PostgresProfileTargetRepository,
     )
 
-    profiles = SQLiteProfileTargetRepository(database)
-    return SQLitePlanRepository(
+    profiles = PostgresProfileTargetRepository(database)
+    return PostgresPlanRepository(
         database, constraints_reader=profiles.constraint_snapshot_with)

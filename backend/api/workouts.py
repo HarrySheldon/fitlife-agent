@@ -32,10 +32,10 @@ from backend.application.use_cases.workouts import (
 )
 from backend.config import get_settings
 from backend.domain.workouts import StrengthSet
-from backend.infrastructure.repositories.sqlite_workout_repository import (
-    SQLiteWorkoutRepository,
+from backend.infrastructure.repositories.postgres_workout_repository import (
+    PostgresWorkoutRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import ApiResponse, AuthenticatedUser
 
@@ -45,7 +45,7 @@ router = APIRouter(prefix="/api/v1/workout-drafts")
 
 def get_workout_service() -> WorkoutService:
     return WorkoutService(
-        SQLiteWorkoutRepository(get_database()),
+        PostgresWorkoutRepository(get_database()),
         mutation_scope=lambda user_id: user_lifecycle_guard(
             get_settings().data_dir,
             user_id,

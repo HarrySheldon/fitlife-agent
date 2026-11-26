@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from backend.infrastructure.catalog.import_ledger import (
@@ -9,27 +7,24 @@ from backend.infrastructure.catalog.import_ledger import (
     CatalogImportLedger,
     CatalogMutationResult,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.database import PostgresDatabase
 
 
 CHECKSUM_A = "a" * 64
 CHECKSUM_B = "b" * 64
 
 
-def _database(tmp_path: Path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "catalog-ledger.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+def _database(make_isolated_pg_db) -> PostgresDatabase:
+    database = make_isolated_pg_db()
     with database.transaction() as connection:
         connection.execute(
-            "CREATE TABLE import_probe (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS import_probe (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
         )
     return database
 
 
-def test_catalog_import_completes_once_and_skips_the_same_checksum(tmp_path):
-    database = _database(tmp_path)
+def test_catalog_import_completes_once_and_skips_the_same_checksum(make_isolated_pg_db):
+    database = _database(make_isolated_pg_db)
     calls = 0
 
     def import_rows(connection):
@@ -57,8 +52,8 @@ def test_catalog_import_completes_once_and_skips_the_same_checksum(tmp_path):
     assert row["imported_count"] == 1
 
 
-def test_catalog_import_rejects_checksum_drift_for_completed_version(tmp_path):
-    database = _database(tmp_path)
+def test_catalog_import_rejects_checksum_drift_for_completed_version(make_isolated_pg_db):
+    database = _database(make_isolated_pg_db)
     ledger = CatalogImportLedger(database)
     ledger.run(
         "source-a",
@@ -83,8 +78,8 @@ def test_catalog_import_rejects_checksum_drift_for_completed_version(tmp_path):
     assert dict(row) == {"checksum": CHECKSUM_A, "status": "completed"}
 
 
-def test_failed_catalog_import_rolls_back_rows_and_records_safe_failure(tmp_path):
-    database = _database(tmp_path)
+def test_failed_catalog_import_rolls_back_rows_and_records_safe_failure(make_isolated_pg_db):
+    database = _database(make_isolated_pg_db)
 
     def fail_after_write(connection):
         connection.execute(
@@ -113,8 +108,8 @@ def test_failed_catalog_import_rolls_back_rows_and_records_safe_failure(tmp_path
     assert "CATALOG_IMPORT_FAILED" in row["details_json"]
 
 
-def test_failed_version_can_retry_with_the_same_checksum(tmp_path):
-    database = _database(tmp_path)
+def test_failed_version_can_retry_with_the_same_checksum(make_isolated_pg_db):
+    database = _database(make_isolated_pg_db)
     ledger = CatalogImportLedger(database)
 
     with pytest.raises(CatalogImportError):

@@ -8,7 +8,6 @@ def test_boundary_language_survives_all_runtime_guards(tmp_path, monkeypatch, la
     from backend.agent import graph
     from backend.domain.coach_answer import message_catalog
     monkeypatch.setenv('DATA_DIR', str(tmp_path / 'isolated'))
-    monkeypatch.setenv('SQLITE_DATABASE_PATH', '')
     monkeypatch.setenv('LLM_ENABLED', 'false')
     get_settings.cache_clear()
     def unexpected_gateway(*args, **kwargs):

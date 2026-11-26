@@ -21,10 +21,10 @@ from backend.application.ports.meal_repository import (
 )
 from backend.application.use_cases.meals import MealService, MealServiceError
 from backend.config import get_settings
-from backend.infrastructure.repositories.sqlite_meal_repository import (
-    SQLiteMealRepository,
+from backend.infrastructure.repositories.postgres_meal_repository import (
+    PostgresMealRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedUser
 
@@ -34,7 +34,7 @@ router = APIRouter(prefix="/api/v1/meal-drafts")
 
 def get_meal_service() -> MealService:
     return MealService(
-        SQLiteMealRepository(get_database()),
+        PostgresMealRepository(get_database()),
         mutation_scope=lambda user_id: user_lifecycle_guard(
             get_settings().data_dir,
             user_id,

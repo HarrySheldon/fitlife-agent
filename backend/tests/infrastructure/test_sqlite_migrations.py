@@ -1,19 +1,18 @@
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
 import pytest
 
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import (
+from backend.infrastructure.postgres.errors import DatabaseOperationalError
+from backend.infrastructure.postgres.migrations import (
     Migration,
     MigrationError,
     run_migrations,
 )
 
 
-def test_migrations_run_in_order_and_are_idempotent(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
+def test_migrations_run_in_order_and_are_idempotent(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
     migrations = [
         Migration(
             version=2,
@@ -37,10 +36,14 @@ def test_migrations_run_in_order_and_are_idempotent(tmp_path):
             "SELECT version, name FROM schema_migrations ORDER BY version"
         ).fetchall()
         migration_columns = connection.execute(
-            "PRAGMA table_info(schema_migrations)"
+            "SELECT column_name AS name FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = 'schema_migrations' "
+            "ORDER BY ordinal_position"
         ).fetchall()
         training_log_columns = connection.execute(
-            "PRAGMA table_info(training_log)"
+            "SELECT column_name AS name FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = 'training_log' "
+            "ORDER BY ordinal_position"
         ).fetchall()
 
     assert [(row["version"], row["name"]) for row in applied] == [
@@ -56,8 +59,8 @@ def test_migrations_run_in_order_and_are_idempotent(tmp_path):
     assert [row["name"] for row in training_log_columns] == ["id", "notes"]
 
 
-def test_changing_an_applied_migration_raises_checksum_error(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
+def test_changing_an_applied_migration_raises_checksum_error(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
     original = Migration(
         version=1,
         name="create_entries",
@@ -77,9 +80,9 @@ def test_changing_an_applied_migration_raises_checksum_error(tmp_path):
 
 
 def test_applied_migration_missing_from_complete_set_is_rejected_unchanged(
-    tmp_path,
+    make_isolated_pg_db,
 ):
-    database = SQLiteDatabase(tmp_path / "app.db")
+    database = make_isolated_pg_db(initialize=False)
     migration = Migration(
         version=1,
         name="create_entries",
@@ -92,7 +95,9 @@ def test_applied_migration_missing_from_complete_set_is_rejected_unchanged(
             "SELECT version, name, checksum, applied_at FROM schema_migrations"
         ).fetchall()
         before_schema = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+            "SELECT table_name AS name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' "
+            "ORDER BY table_name"
         ).fetchall()
 
     with pytest.raises(MigrationError, match="not supplied"):
@@ -103,7 +108,9 @@ def test_applied_migration_missing_from_complete_set_is_rejected_unchanged(
             "SELECT version, name, checksum, applied_at FROM schema_migrations"
         ).fetchall()
         after_schema = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+            "SELECT table_name AS name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' "
+            "ORDER BY table_name"
         ).fetchall()
 
     assert [tuple(row) for row in after_history] == [
@@ -114,8 +121,8 @@ def test_applied_migration_missing_from_complete_set_is_rejected_unchanged(
     ]
 
 
-def test_preflight_drift_rejection_happens_before_pending_migration(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
+def test_preflight_drift_rejection_happens_before_pending_migration(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
     applied_v2 = Migration(
         version=2,
         name="create_version_two",
@@ -140,7 +147,8 @@ def test_preflight_drift_rejection_happens_before_pending_migration(tmp_path):
 
     with database.connection() as connection:
         version_one = connection.execute(
-            "SELECT name FROM sqlite_master WHERE name = 'version_one'"
+            "SELECT table_name AS name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = 'version_one'"
         ).fetchone()
         applied_versions = connection.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
@@ -150,8 +158,8 @@ def test_preflight_drift_rejection_happens_before_pending_migration(tmp_path):
     assert [row["version"] for row in applied_versions] == [2]
 
 
-def test_concurrent_runners_apply_new_migration_once(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
+def test_concurrent_runners_apply_new_migration_once(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
     migration = Migration(
         version=1,
         name="create_entries",
@@ -173,15 +181,16 @@ def test_concurrent_runners_apply_new_migration_once(tmp_path):
             "SELECT COUNT(*) AS count FROM schema_migrations"
         ).fetchone()["count"]
         entries = connection.execute(
-            "SELECT name FROM sqlite_master WHERE name = 'entries'"
+            "SELECT table_name AS name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = 'entries'"
         ).fetchone()
 
     assert applied_count == 1
     assert entries["name"] == "entries"
 
 
-def test_failed_migration_rolls_back_schema_and_metadata(tmp_path):
-    database = SQLiteDatabase(tmp_path / "app.db")
+def test_failed_migration_rolls_back_schema_and_metadata(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
     broken = Migration(
         version=1,
         name="broken",
@@ -191,19 +200,21 @@ def test_failed_migration_rolls_back_schema_and_metadata(tmp_path):
         ),
     )
 
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(DatabaseOperationalError):
         run_migrations(database, [broken])
 
     with database.connection() as connection:
         partial_table = connection.execute(
-            "SELECT name FROM sqlite_master WHERE name = 'partial_table'"
+            "SELECT table_name AS name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = 'partial_table'"
         ).fetchone()
-        applied_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM schema_migrations"
-        ).fetchone()["count"]
+        migrations_table = connection.execute(
+            "SELECT table_name AS name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = 'schema_migrations'"
+        ).fetchone()
 
     assert partial_table is None
-    assert applied_count == 0
+    assert migrations_table is None
 
 
 @pytest.mark.parametrize(
@@ -217,9 +228,9 @@ def test_failed_migration_rolls_back_schema_and_metadata(tmp_path):
     ],
 )
 def test_migration_versions_must_be_unique_positive_integers(
-    tmp_path, migrations
+    make_isolated_pg_db, migrations
 ):
-    database = SQLiteDatabase(tmp_path / "app.db")
+    database = make_isolated_pg_db(initialize=False)
 
     with pytest.raises(MigrationError):
         run_migrations(database, migrations)

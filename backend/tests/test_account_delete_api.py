@@ -11,17 +11,17 @@ from backend.application.ports.profile_target_repository import (
     ProfileVersionInput,
     TargetVersionInput,
 )
-from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.auth.postgres_identity_repository import PostgresIdentityRepository
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.settings.sqlite_model_connection_repository import (
-    SQLiteModelConnectionRepository,
+from backend.infrastructure.settings.postgres_model_connection_repository import (
+    PostgresModelConnectionRepository,
 )
-from backend.infrastructure.settings.sqlite_user_preferences_repository import (
-    SQLiteUserPreferencesRepository,
+from backend.infrastructure.settings.postgres_user_preferences_repository import (
+    PostgresUserPreferencesRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database, initialize_database
+from backend.infrastructure.postgres.runtime import get_database, initialize_database
 from backend.main import create_app
 from backend.tools.data_access import DEFAULT_PROFILE
 
@@ -168,7 +168,7 @@ def test_identity_failure_is_localized_and_can_retry_after_storage_is_missing(mo
         raise OSError("private identity write detail")
 
     with monkeypatch.context() as deletion_patch:
-        deletion_patch.setattr(SQLiteIdentityRepository, "_delete_user_row", fail_identity_write)
+        deletion_patch.setattr(PostgresIdentityRepository, "_delete_user_row", fail_identity_write)
         failed = client.request(
             "DELETE",
             "/account",
@@ -313,14 +313,14 @@ def _seed_versioned_setup(repository, user_id: str, weight_kg: float = 70):
     )
 
 
-def test_account_deletion_erases_only_authenticated_users_versioned_sqlite_data(monkeypatch):
+def test_account_deletion_erases_only_authenticated_users_versioned_postgres_data(monkeypatch):
     client, data_dir = build_client(monkeypatch)
-    current = register(client, "sqlite-delete-user")
-    other = register(client, "sqlite-preserved-user", "password456")
+    current = register(client, "postgres-delete-user")
+    other = register(client, "postgres-preserved-user", "password456")
     db = get_database()
-    repository = SQLiteProfileTargetRepository(db)
-    prefs_repo = SQLiteUserPreferencesRepository(db, data_dir)
-    models_repo = SQLiteModelConnectionRepository(db, data_dir)
+    repository = PostgresProfileTargetRepository(db)
+    prefs_repo = PostgresUserPreferencesRepository(db, data_dir)
+    models_repo = PostgresModelConnectionRepository(db, data_dir)
     from backend.domain.model_connection import ModelConnection
     from backend.domain.user_preferences import UserPreferences
 
@@ -355,18 +355,18 @@ def test_account_deletion_erases_only_authenticated_users_versioned_sqlite_data(
         assert connection.execute("SELECT 1 FROM model_connections WHERE user_id = ?", (other["user"]["user_id"],)).fetchone() is not None
 
 
-def test_sqlite_cleanup_failure_restores_files_and_preserves_identity(monkeypatch):
+def test_postgres_cleanup_failure_restores_files_and_preserves_identity(monkeypatch):
     client, data_dir = build_client(monkeypatch)
-    session = register(client, "sqlite-cleanup-failure")
+    session = register(client, "postgres-cleanup-failure")
     user_id = session["user"]["user_id"]
     user_root = data_dir / "users" / user_id
     marker = user_root / "record.json"
     marker.write_text("must be restored", encoding="utf-8")
 
     def fail_cleanup(_repository, _user_id: str) -> None:
-        raise OSError("private sqlite failure detail")
+        raise OSError("private postgres failure detail")
 
-    monkeypatch.setattr(SQLiteProfileTargetRepository, "delete_user_data", fail_cleanup)
+    monkeypatch.setattr(PostgresProfileTargetRepository, "delete_user_data", fail_cleanup)
     response = client.request(
         "DELETE",
         "/account",
@@ -376,7 +376,7 @@ def test_sqlite_cleanup_failure_restores_files_and_preserves_identity(monkeypatc
 
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "ACCOUNT_DELETE_FAILED"
-    assert "sqlite" not in response.text.lower()
+    assert "postgres" not in response.text.lower()
     assert client.get("/auth/me", headers=authorization(session)).status_code == 200
     assert marker.read_text(encoding="utf-8") == "must be restored"
     assert list(user_root.parent.glob(f".delete-{user_id}-*.quarantine")) == []

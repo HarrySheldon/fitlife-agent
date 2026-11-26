@@ -83,13 +83,12 @@ def test_final_permitted_poll_can_still_complete(monkeypatch):
     assert len(requests) == 101
 
 
-def test_boundary_counter_validates_actual_body_not_just_language_receipt(tmp_path):
+def test_boundary_counter_validates_actual_body_not_just_language_receipt(make_isolated_pg_db):
     import json
-    import sqlite3
     from backend.domain.coach_answer import message_catalog
     from backend.task_evaluation.observation import observe_database
-    database = tmp_path / 'synthetic.sqlite3'
-    with sqlite3.connect(database) as connection:
+    database = make_isolated_pg_db(initialize=False)
+    with database.transaction() as connection:
         connection.execute('CREATE TABLE coach_messages(turn_id TEXT, user_id TEXT, role TEXT, review_status TEXT, body TEXT)')
         connection.execute('CREATE TABLE coach_turns(turn_id TEXT, user_id TEXT, status TEXT, receipt_json TEXT)')
         connection.execute('INSERT INTO coach_turns VALUES(?,?,?,?)', ('t', 'owner', 'succeeded', json.dumps({'context': {'language': 'en-US'}})))
@@ -97,7 +96,7 @@ def test_boundary_counter_validates_actual_body_not_just_language_receipt(tmp_pa
     observed = observe_database(database, actors={'primary': 'owner'})
     assert observed['coach_boundary_replies'] == 0
     assert message_catalog('zh-CN').out_of_scope not in str(observed)
-    with sqlite3.connect(database) as connection:
+    with database.transaction() as connection:
         connection.execute('UPDATE coach_messages SET body=?', (message_catalog('en-US').out_of_scope,))
     assert observe_database(database, actors={'primary': 'owner'})['coach_boundary_replies'] == 1
 
@@ -152,12 +151,11 @@ def test_replay_faults_are_bounded_and_unknown_fields_are_rejected():
         FaultSeeds(expire_coach_messages_at_step=-1)
 
 
-def test_observation_counts_terminal_states_and_sources_without_bodies(tmp_path):
+def test_observation_counts_terminal_states_and_sources_without_bodies(make_isolated_pg_db):
     import json
-    import sqlite3
     from backend.task_evaluation.observation import observe_database
-    database = tmp_path / 'synthetic.sqlite3'
-    with sqlite3.connect(database) as connection:
+    database = make_isolated_pg_db(initialize=False)
+    with database.transaction() as connection:
         connection.execute('CREATE TABLE coach_messages(turn_id TEXT, user_id TEXT, role TEXT, review_status TEXT, body TEXT)')
         connection.execute('CREATE TABLE coach_turns(turn_id TEXT, user_id TEXT, status TEXT, receipt_json TEXT)')
         connection.execute('INSERT INTO coach_turns VALUES(?,?,?,?)', ('t1', 'owner', 'cancelled', json.dumps({'sources': [{'source': 'synthetic'}], 'context': {'language': 'zh-CN'}})))

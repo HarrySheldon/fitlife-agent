@@ -8,12 +8,9 @@ from backend.application.ports.coach_conversation_repository import (
 )
 from backend.application.use_cases.coach_conversations import CoachConversations
 from backend.domain.coach_conversation import CoachMessage
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 
@@ -68,11 +65,9 @@ def test_purge_is_the_only_sweep_without_an_owner():
 
 
 @pytest.fixture
-def coach(tmp_path):
-    database = SQLiteDatabase(tmp_path / "coach.sqlite")
-    run_migrations(database, RECORDS_MIGRATIONS)
+def coach(pg_db):
     return CoachConversations(
-        SQLiteCoachConversationRepository(database),
+        PostgresCoachConversationRepository(pg_db),
         clock=lambda: NOW,
         id_factory=lambda: "conversation-1",
     )

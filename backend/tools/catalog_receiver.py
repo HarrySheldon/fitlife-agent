@@ -9,10 +9,10 @@ from typing import Sequence
 from backend.catalog_receiver.localization import LOCALIZATION_MISSING
 from backend.catalog_receiver.models import ReceiverError
 from backend.catalog_receiver.service import CatalogReceiver
-from backend.catalog_receiver.sinks import SQLiteCatalogSink
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.catalog_receiver.sinks import PostgresCatalogSink
+from backend.config import get_settings
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.runtime import ensure_database_ready
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,7 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
         command_parser.add_argument("--taxonomy", type=Path)
         command_parser.add_argument("--output-dir", type=Path)
         if command == "import":
-            command_parser.add_argument("--database", type=Path, required=True)
+            command_parser.add_argument("--database", type=str, default=None)
+            command_parser.add_argument("--schema", type=str, default=None)
     return parser
 
 
@@ -86,9 +87,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             if preflight.report.has_errors:
                 _print_json(preflight.report.model_dump(mode="json"))
                 return 4
-            database = SQLiteDatabase(args.database)
-            run_migrations(database, RECORDS_MIGRATIONS)
-            receiver = CatalogReceiver(SQLiteCatalogSink(database))
+            settings = get_settings()
+            database = PostgresDatabase(
+                args.database or settings.database_url,
+                schema=args.schema or settings.database_schema,
+            )
+            ensure_database_ready(database)
+            receiver = CatalogReceiver(PostgresCatalogSink(database))
             result = receiver.import_catalog(
                 args.source,
                 mapping=args.mapping,

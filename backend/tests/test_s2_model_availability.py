@@ -6,7 +6,7 @@ import pytest
 from backend.config import get_settings
 from backend.domain.model_connection import ModelConnection
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
-from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
+from backend.infrastructure.settings.postgres_model_connection_repository import PostgresModelConnectionRepository
 from backend.task_evaluation.contracts import Scenario
 from backend.task_evaluation.seeding import seed_environment
 from backend.tests.task_evaluation.test_runner import _build_client, reset_settings_cache
@@ -45,9 +45,9 @@ def test_initial_unresolved_start_uses_only_enabled_user_connection(tmp_path, mo
     assert started.status_code == 200, started.json()
     data = started.json()['data']
     assert data['payload']['interaction']['clarification_rounds'] == 1
-    from backend.infrastructure.sqlite.runtime import get_database
-    from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
-    budget = SQLiteTaskBudgetRepository(get_database()).get_snapshot(user_id, created['id'])
+    from backend.infrastructure.postgres.runtime import get_database
+    from backend.infrastructure.repositories.postgres_task_budget_repository import PostgresTaskBudgetRepository
+    budget = PostgresTaskBudgetRepository(get_database()).get_snapshot(user_id, created['id'])
     assert calls == (['parse'] if connection_state == 'enabled' else [])
     assert budget.spent_calls == (1 if connection_state == 'enabled' else 0)
     assert len(data['payload']['interaction']['run_ids']) == (1 if connection_state == 'enabled' else 0)
@@ -55,7 +55,7 @@ def test_initial_unresolved_start_uses_only_enabled_user_connection(tmp_path, mo
     def forbidden(*args, **kwargs):
         raise AssertionError('recovery must not access model configuration or provider')
     monkeypatch.setattr(FileModelConnectionRepository, 'get', forbidden)
-    monkeypatch.setattr(SQLiteModelConnectionRepository, 'get', forbidden)
+    monkeypatch.setattr(PostgresModelConnectionRepository, 'get', forbidden)
     monkeypatch.setattr('backend.api.smart_entry.resolve_user_model_gateway', forbidden)
     recovered = client.get(base + '/' + created['id'], headers=actors['primary'])
     assert recovered.status_code == 200

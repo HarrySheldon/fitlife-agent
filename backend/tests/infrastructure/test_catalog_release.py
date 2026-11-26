@@ -21,19 +21,16 @@ from backend.domain.workouts import StrengthSet
 from backend.infrastructure.catalog.import_ledger import CatalogImportError
 from backend.infrastructure.catalog.seed_exercises import seed_exercise_payload
 from backend.infrastructure.catalog.seed_foods import seed_food_payload
-from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
-    SQLiteExerciseCatalogRepository,
+from backend.infrastructure.repositories.postgres_exercise_catalog_repository import (
+    PostgresExerciseCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
-    SQLiteFoodCatalogRepository,
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
+    PostgresFoodCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_meal_repository import SQLiteMealRepository
-from backend.infrastructure.repositories.sqlite_workout_repository import (
-    SQLiteWorkoutRepository,
+from backend.infrastructure.repositories.postgres_meal_repository import PostgresMealRepository
+from backend.infrastructure.repositories.postgres_workout_repository import (
+    PostgresWorkoutRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 
 
 def _payload(kind):
@@ -66,17 +63,11 @@ def _payload(kind):
     )
 
 
-def _database(tmp_path):
-    database = SQLiteDatabase(tmp_path / "release.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
-
-
 def _rows(database, table):
     with database.connection() as connection:
         return tuple(
             tuple(row)
-            for row in connection.execute(f"SELECT * FROM {table} ORDER BY rowid")
+            for row in connection.execute(f"SELECT * FROM {table} ORDER BY ctid").fetchall()
         )
 
 
@@ -119,10 +110,10 @@ def test_valid_release_boundaries(release):
 @pytest.mark.parametrize(
     "kind,seed", [("food", seed_food_payload), ("exercise", seed_exercise_payload)]
 )
-def test_completed_legacy_key_collision_fails_closed(tmp_path, kind, seed):
+def test_completed_legacy_key_collision_fails_closed(pg_db, kind, seed):
     from backend.infrastructure.catalog.release import catalog_import_version
 
-    database = _database(tmp_path)
+    database = pg_db
     payload = _payload(kind)
     payload["catalog_release"] = "v1"
     qualified = catalog_import_version(payload, "upstream-v1")
@@ -142,8 +133,8 @@ def test_completed_legacy_key_collision_fails_closed(tmp_path, kind, seed):
 @pytest.mark.parametrize(
     "kind,seed", [("food", seed_food_payload), ("exercise", seed_exercise_payload)]
 )
-def test_release_label_does_not_change_content_checksum(tmp_path, kind, seed):
-    database = _database(tmp_path)
+def test_release_label_does_not_change_content_checksum(pg_db, kind, seed):
+    database = pg_db
     payload = _payload(kind)
     seed(database, payload)
     payload["catalog_release"] = "v1"
@@ -152,7 +143,7 @@ def test_release_label_does_not_change_content_checksum(tmp_path, kind, seed):
 
     with database.connection() as connection:
         checksums = connection.execute(
-            "SELECT checksum FROM catalog_imports ORDER BY rowid"
+            "SELECT checksum FROM catalog_imports ORDER BY ctid"
         ).fetchall()
     assert len(checksums) == 2
     assert checksums[0]["checksum"] == checksums[1]["checksum"]
@@ -162,9 +153,9 @@ def test_release_label_does_not_change_content_checksum(tmp_path, kind, seed):
     "kind,seed", [("food", seed_food_payload), ("exercise", seed_exercise_payload)]
 )
 def test_explicit_release_preserves_legacy_ledger_ids_and_rejects_drift(
-    tmp_path, kind, seed
+    pg_db, kind, seed
 ):
-    database = _database(tmp_path)
+    database = pg_db
     payload = _payload(kind)
     assert seed(database, payload).inserted_count == 1
     original_ledger = _rows(database, "catalog_imports")[0]
@@ -210,8 +201,8 @@ def test_explicit_release_preserves_legacy_ledger_ids_and_rejects_drift(
 @pytest.mark.parametrize(
     "kind,seed", [("food", seed_food_payload), ("exercise", seed_exercise_payload)]
 )
-def test_invalid_release_fails_before_any_mutation(tmp_path, kind, seed, release):
-    database = _database(tmp_path)
+def test_invalid_release_fails_before_any_mutation(pg_db, kind, seed, release):
+    database = pg_db
     payload = _payload(kind)
     seed(database, payload)
     before = _catalog_state(database)
@@ -222,13 +213,13 @@ def test_invalid_release_fails_before_any_mutation(tmp_path, kind, seed, release
     assert _catalog_state(database) == before
 
 
-def test_release_preserves_private_rows_and_confirmed_meal_workout_snapshots(tmp_path):
-    database = _database(tmp_path)
+def test_release_preserves_private_rows_and_confirmed_meal_workout_snapshots(pg_db):
+    database = pg_db
     foods, exercises = _payload("food"), _payload("exercise")
     seed_food_payload(database, foods)
     seed_exercise_payload(database, exercises)
-    food_catalog = SQLiteFoodCatalogRepository(database)
-    exercise_catalog = SQLiteExerciseCatalogRepository(database)
+    food_catalog = PostgresFoodCatalogRepository(database)
+    exercise_catalog = PostgresExerciseCatalogRepository(database)
     food = food_catalog.search("user-a", "Original", limit=10)[0]
     exercise = exercise_catalog.search("user-a", "Original", limit=10)[0]
     private_food = food_catalog.create_custom_food(
@@ -270,8 +261,8 @@ def test_release_preserves_private_rows_and_confirmed_meal_workout_snapshots(tmp
     def now():
         return datetime(2026, 8, 15, tzinfo=timezone.utc)
 
-    meals = SQLiteMealRepository(database, clock=now)
-    workouts = SQLiteWorkoutRepository(database, clock=now)
+    meals = PostgresMealRepository(database, clock=now)
+    workouts = PostgresWorkoutRepository(database, clock=now)
     meal = meals.create_draft(
         "user-a",
         MealDraftInput(
@@ -341,19 +332,19 @@ def _private_state(database, food_id, exercise_id):
             state[table] = tuple(
                 tuple(row) for row in connection.execute(
                     f"SELECT * FROM {table} WHERE owner_user_id IS NOT NULL"
-                    " ORDER BY rowid"
+                    " ORDER BY ctid"
                 )
             )
         state["aliases"] = tuple(
             tuple(row) for row in connection.execute(
                 "SELECT * FROM catalog_aliases WHERE food_id = ? OR exercise_id = ?"
-                " ORDER BY rowid", (food_id, exercise_id),
+                " ORDER BY ctid", (food_id, exercise_id),
             )
         )
         state["search"] = tuple(
             tuple(row) for row in connection.execute(
                 "SELECT * FROM catalog_search WHERE catalog_id IN (?, ?)"
-                " ORDER BY rowid", (food_id, exercise_id),
+                " ORDER BY ctid", (food_id, exercise_id),
             )
         )
         return state

@@ -7,25 +7,22 @@ from backend.application.ports.exercise_catalog_repository import (
     ExerciseDefinition,
     NewCustomExercise,
 )
-from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
-    SQLiteExerciseCatalogRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_exercise_catalog_repository import (
+    PostgresExerciseCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_food_catalog_repository import (
+from backend.infrastructure.repositories.postgres_food_catalog_repository import (
     _source_tokens,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "exercise-catalog.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
+def _database(_tmp_path=None) -> PostgresDatabase:
+    return PostgresDatabase(TEST_DATABASE_URL)
 
 
 def _insert_exercise(
-    database: SQLiteDatabase,
+    database: PostgresDatabase,
     *,
     exercise_id: str,
     owner_user_id: str | None,
@@ -89,7 +86,7 @@ def _insert_exercise(
 
 def test_search_is_ownership_safe_and_matches_sanitized_aliases(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteExerciseCatalogRepository(database)
+    repository = PostgresExerciseCatalogRepository(database)
     _insert_exercise(
         database,
         exercise_id="public-squat",
@@ -131,7 +128,7 @@ def test_search_is_ownership_safe_and_matches_sanitized_aliases(tmp_path):
 
 def test_search_ranks_recent_favorite_private_then_public(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteExerciseCatalogRepository(database)
+    repository = PostgresExerciseCatalogRepository(database)
     for exercise_id, owner, name in (
         ("recent", None, "Recent"),
         ("favorite", None, "Favorite"),
@@ -163,7 +160,7 @@ def test_search_ranks_recent_favorite_private_then_public(tmp_path):
 
 def test_search_prioritizes_exact_canonical_and_alias_matches(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteExerciseCatalogRepository(database)
+    repository = PostgresExerciseCatalogRepository(database)
     for exercise_id, name, aliases in (
         ("full", "杠铃深蹲", ("Barbell Full Squat",)),
         ("standard", "杠铃标准深蹲", ("Barbell Squat",)),
@@ -194,7 +191,7 @@ def test_search_prioritizes_exact_canonical_and_alias_matches(tmp_path):
 
 def test_search_exact_nfkc_alias_beats_recent_favorite_partial_before_limit(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteExerciseCatalogRepository(database)
+    repository = PostgresExerciseCatalogRepository(database)
     _insert_exercise(
         database,
         exercise_id="exact-alias",
@@ -220,7 +217,7 @@ def test_search_exact_nfkc_canonical_beats_recent_favorite_partial_before_limit(
     tmp_path,
 ):
     database = _database(tmp_path)
-    repository = SQLiteExerciseCatalogRepository(database)
+    repository = PostgresExerciseCatalogRepository(database)
     _insert_exercise(
         database,
         exercise_id="exact-canonical",
@@ -242,7 +239,7 @@ def test_search_exact_nfkc_canonical_beats_recent_favorite_partial_before_limit(
 
 
 def test_custom_exercise_is_owned_searchable_and_source_aware(tmp_path):
-    repository = SQLiteExerciseCatalogRepository(
+    repository = PostgresExerciseCatalogRepository(
         _database(tmp_path),
         id_factory=iter(("custom", "alias-a", "usage")).__next__,
     )
@@ -274,7 +271,7 @@ def test_custom_exercise_is_owned_searchable_and_source_aware(tmp_path):
 
 def test_favorite_and_usage_reject_foreign_or_inactive_exercises(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteExerciseCatalogRepository(database)
+    repository = PostgresExerciseCatalogRepository(database)
     _insert_exercise(
         database,
         exercise_id="foreign",

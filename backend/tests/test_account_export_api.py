@@ -13,7 +13,7 @@ from backend.config import get_settings
 from backend.domain.model_connection import ModelConnection
 from backend.infrastructure.settings.file_model_connection_repository import FileModelConnectionRepository
 from backend.main import create_app
-from backend.infrastructure.sqlite.runtime import initialize_database
+from backend.infrastructure.postgres.runtime import initialize_database
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +25,6 @@ def reset_settings_cache():
 def build_client(monkeypatch) -> tuple[TestClient, Path]:
     data_dir = Path(".tmp") / "pytest-account-export-api" / uuid4().hex
     monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv('SQLITE_DATABASE_PATH', str(data_dir / 'records.sqlite3'))
     get_settings.cache_clear()
     initialize_database()
     return TestClient(create_app()), data_dir

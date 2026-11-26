@@ -154,7 +154,7 @@ def test_treatment_change_does_not_look_like_a_different_task():
     ('coach_agent_mode', 'legacy'),
     ('coach_conversations_enabled', True),
     ('plan_adjustment_tasks_enabled', True),
-    ('plan_storage_mode', 'sqlite'),
+    ('plan_storage_mode', 'postgres'),
     ('safety_review_mode', 'enforce'),
 ])
 def test_invariant_change_invalidates_the_fingerprint(field, value):

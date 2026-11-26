@@ -112,18 +112,14 @@ def test_untasked_runtime_never_calls_binding_factory():
         AgentCommand('chat', 'hello', 'alice'), Workflow()))
 
 
-def test_task_factory_persists_spend_across_runs_including_reviewer(tmp_path):
+def test_task_factory_persists_spend_across_runs_including_reviewer(pg_db):
     from backend.agent.contracts import AgentCommand, AgentResult
     from backend.agent.tasks.contracts import TaskRef
     from backend.agent.runtime import TaskBudgetExceeded
     from backend.application.ports.task_budget_repository import TaskBudgetBinding
-    from backend.infrastructure.sqlite.database import SQLiteDatabase
-    from backend.infrastructure.sqlite.migrations import run_migrations
-    from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
-    from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
-    database = SQLiteDatabase(tmp_path / 'runtime.sqlite')
-    run_migrations(database, RECORDS_MIGRATIONS)
-    repository = SQLiteTaskBudgetRepository(database)
+    from backend.infrastructure.repositories.postgres_task_budget_repository import PostgresTaskBudgetRepository
+    database = pg_db
+    repository = PostgresTaskBudgetRepository(database)
     repository.initialize('alice', 'task', 3, 100000)
     calls = []
     async def provider():
@@ -212,16 +208,12 @@ def test_late_return_never_changes_terminal_runtime_snapshot():
     assert binding.settlements[0][-1] is False
 
 
-def test_total_provider_usage_includes_already_consumed_context(tmp_path):
+def test_total_provider_usage_includes_already_consumed_context(pg_db):
     from backend.agent.policy import BudgetPolicy
     from backend.application.ports.task_budget_repository import TaskBudgetBinding
-    from backend.infrastructure.sqlite.database import SQLiteDatabase
-    from backend.infrastructure.sqlite.migrations import run_migrations
-    from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
-    from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
-    database = SQLiteDatabase(tmp_path / 'input-inclusive.sqlite')
-    run_migrations(database, RECORDS_MIGRATIONS)
-    repository = SQLiteTaskBudgetRepository(database)
+    from backend.infrastructure.repositories.postgres_task_budget_repository import PostgresTaskBudgetRepository
+    database = pg_db
+    repository = PostgresTaskBudgetRepository(database)
     repository.initialize('alice', 'task', 1, 100)
     context = RuntimeContext(task_budget_binding=TaskBudgetBinding(repository, 'alice', 'task'),
         policy=RuntimePolicy(budget=BudgetPolicy(max_tokens=100)), token_estimator=lambda text: 80)

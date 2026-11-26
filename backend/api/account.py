@@ -16,20 +16,20 @@ from backend.i18n import (
 )
 from backend.api.coach_conversations import get_coach_admission_service
 from backend.application.use_cases.coach_turns import CoachTurnService
-from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.auth.postgres_identity_repository import PostgresIdentityRepository
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
-from backend.infrastructure.settings.sqlite_user_preferences_repository import SQLiteUserPreferencesRepository
-from backend.infrastructure.sqlite.runtime import get_database
-from backend.infrastructure.repositories.sqlite_entry_task_lifecycle import SQLiteEntryTaskLifecycleRepository
+from backend.infrastructure.settings.postgres_model_connection_repository import PostgresModelConnectionRepository
+from backend.infrastructure.settings.postgres_user_preferences_repository import PostgresUserPreferencesRepository
+from backend.infrastructure.postgres.runtime import get_database
+from backend.infrastructure.repositories.postgres_entry_task_lifecycle import PostgresEntryTaskLifecycleRepository
 from backend.infrastructure.repositories.plan_repository_factory import build_plan_repository
-from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import SQLitePlanAdjustmentRepository
-from backend.infrastructure.repositories.sqlite_plan_repository import SQLitePlanRepository
+from backend.infrastructure.repositories.postgres_plan_adjustment_repository import PostgresPlanAdjustmentRepository
+from backend.infrastructure.repositories.postgres_plan_repository import PostgresPlanRepository
 from backend.schemas import (
     AccountDeleteRequest,
     AccountPasswordChangeRequest,
@@ -60,18 +60,18 @@ def delete_account(
     database = get_database()
     DeleteAccount(
         settings.data_dir,
-        SQLiteIdentityRepository(database, settings.data_dir),
-        SQLiteProfileTargetRepository(database),
-        coach_conversations=SQLiteCoachConversationRepository(database),
+        PostgresIdentityRepository(database, settings.data_dir),
+        PostgresProfileTargetRepository(database),
+        coach_conversations=PostgresCoachConversationRepository(database),
         # Unconditional, not mode-dependent: a deletion must not depend on the
         # plan store being configured correctly, and rows left behind are the one
         # thing an account deletion cannot leave behind.
-        plans=SQLitePlanRepository(database),
+        plans=PostgresPlanRepository(database),
         # Tasks, rounds, candidates and receipts. Without this the plans would be
         # gone but the record of what the user asked to change would remain.
-        plan_tasks=SQLitePlanAdjustmentRepository(database),
-        user_preferences=SQLiteUserPreferencesRepository(database, settings.data_dir),
-        model_connections=SQLiteModelConnectionRepository(database, settings.data_dir),
+        plan_tasks=PostgresPlanAdjustmentRepository(database),
+        user_preferences=PostgresUserPreferencesRepository(database, settings.data_dir),
+        model_connections=PostgresModelConnectionRepository(database, settings.data_dir),
     ).execute(
         principal,
         password=payload.password,
@@ -92,15 +92,15 @@ def export_account_data(
     database = get_database()
     archive = ExportAccountData(
         settings.data_dir,
-        SQLiteIdentityRepository(database, settings.data_dir),
-        SQLiteModelConnectionRepository(database, settings.data_dir),
-        user_preferences=SQLiteUserPreferencesRepository(database, settings.data_dir),
-        entry_tasks=SQLiteEntryTaskLifecycleRepository(database),
-        coach_conversations=SQLiteCoachConversationRepository(database),
-        # The authoritative store, so an export of a SQLite-backed deployment
+        PostgresIdentityRepository(database, settings.data_dir),
+        PostgresModelConnectionRepository(database, settings.data_dir),
+        user_preferences=PostgresUserPreferencesRepository(database, settings.data_dir),
+        entry_tasks=PostgresEntryTaskLifecycleRepository(database),
+        coach_conversations=PostgresCoachConversationRepository(database),
+        # The authoritative store, so an export of a PostgreSQL-backed deployment
         # contains the plans rather than an empty directory.
         plans=build_plan_repository(settings),
-        plan_tasks=SQLitePlanAdjustmentRepository(database),
+        plan_tasks=PostgresPlanAdjustmentRepository(database),
     ).execute(principal.user.user_id)
     return Response(
         content=archive,
@@ -120,7 +120,7 @@ def change_password(
     principal: AuthenticatedPrincipal = Depends(require_current_principal),
     admission: CoachTurnService = Depends(get_coach_admission_service),
 ):
-    repository = SQLiteIdentityRepository(get_database(), get_settings().data_dir)
+    repository = PostgresIdentityRepository(get_database(), get_settings().data_dir)
     session = ChangePassword(repository, _issue_session).execute(
         principal,
         current_password=payload.current_password,
@@ -139,7 +139,7 @@ def revoke_other_sessions(
     principal: AuthenticatedPrincipal = Depends(require_current_principal),
     admission: CoachTurnService = Depends(get_coach_admission_service),
 ):
-    repository = SQLiteIdentityRepository(get_database(), get_settings().data_dir)
+    repository = PostgresIdentityRepository(get_database(), get_settings().data_dir)
     session = RevokeOtherSessions(repository, _issue_session).execute(principal)
     admission.cancel_active_for_account(principal.user.user_id)
     return ok(

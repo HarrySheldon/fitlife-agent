@@ -307,21 +307,14 @@ def test_normalisation_collapses_horizontal_space_but_keeps_lines():
 # known defects, reproduced (RED evidence for R1/R2)
 # --------------------------------------------------------------------------
 
-def test_old_entry_still_returns_a_plain_list():
+def test_old_entry_still_returns_a_plain_list(pg_db):
     """The compatibility contract: callers that only want chunks keep working."""
     from backend.rag.retriever import retrieve_knowledge
 
-    result = retrieve_knowledge("progressive overload", top_k=2,
-                                index_path=_tmp_index_path())
+    result = retrieve_knowledge("progressive overload", top_k=2, database=pg_db)
 
     assert isinstance(result, list)
     assert all(isinstance(item, dict) for item in result)
-
-
-def _tmp_index_path() -> Path:
-    import tempfile
-
-    return Path(tempfile.mkdtemp()) / "index.json"
 
 
 def test_a_long_line_is_not_truncated():
@@ -335,27 +328,25 @@ def test_a_long_line_is_not_truncated():
     assert recovered.count("A") == 2000
 
 
-def test_a_same_length_content_change_invalidates_the_index():
+def test_a_same_length_content_change_invalidates_the_index(pg_db):
     """GAP 2, fixed in R2: v2 says 'zzz' and the index must serve 'zzz', not v1's 'xxx'."""
     from backend.rag.ingest import chunk_markdown
-    from backend.rag.retriever import _load_or_build_index
+    from backend.rag.retriever import _load_or_build_release
     from backend.rag.vector_store import build_embedding_provider
 
     provider = build_embedding_provider()
-    index_path = _tmp_index_path()
     v1 = chunk_markdown({"source": "a.md", "text": "# A\n" + "x" * 100 + "\n# B\n" + "y" * 100})
     v2 = chunk_markdown({"source": "a.md", "text": "# A\n" + "z" * 100 + "\n# B\n" + "w" * 100})
-    _load_or_build_index(v1, provider=provider, index_path=index_path)
-    index = _load_or_build_index(v2, provider=provider, index_path=index_path)
+    _load_or_build_release(v1, provider=provider, database=pg_db)
+    _, loaded_chunks = _load_or_build_release(v2, provider=provider, database=pg_db)
 
-    assert index.entries[0]["chunk"]["text"].startswith("z")
+    assert loaded_chunks[0]["text"].startswith("z")
 
 
-def test_an_unmatched_query_returns_no_content():
+def test_an_unmatched_query_returns_no_content(pg_db):
     """GAP 3, fixed in R3: an unrelated query returns nothing, not three chunks."""
     from backend.rag.retriever import retrieve_knowledge
 
-    result = retrieve_knowledge("quantum chromodynamics gluon confinement", top_k=3,
-                                index_path=_tmp_index_path())
+    result = retrieve_knowledge("quantum chromodynamics gluon confinement", top_k=3, database=pg_db)
 
     assert result == []

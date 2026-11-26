@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 import zipfile
@@ -20,21 +19,32 @@ from backend.domain.errors import ApplicationError
 from backend.domain.model_connection import ModelConnection, ModelConnectionWorkspace
 from backend.domain.user_preferences import UserPreferences
 from backend.infrastructure.auth.file_identity_repository import hash_password
-from backend.infrastructure.auth.sqlite_identity_repository import SQLiteIdentityRepository
+from backend.infrastructure.auth.postgres_identity_repository import PostgresIdentityRepository
 from backend.infrastructure.migration.legacy_account_state import LegacyAccountStateMigrator
-from backend.infrastructure.repositories.sqlite_profile_target_repository import SQLiteProfileTargetRepository
+from backend.infrastructure.postgres.backup import (
+    backup_postgres_database,
+    verify_backup_file,
+    verify_postgres_database,
+)
+from backend.infrastructure.postgres.migrations import run_migrations
+from backend.infrastructure.postgres.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
+)
 from backend.infrastructure.settings.fernet_cipher import FernetCredentialCipher
-from backend.infrastructure.settings.sqlite_model_connection_repository import SQLiteModelConnectionRepository
-from backend.infrastructure.settings.sqlite_user_preferences_repository import SQLiteUserPreferencesRepository
-from backend.infrastructure.sqlite.backup import backup_database, restore_database_backup, verify_database_backup
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.settings.postgres_model_connection_repository import (
+    PostgresModelConnectionRepository,
+)
+from backend.infrastructure.settings.postgres_user_preferences_repository import (
+    PostgresUserPreferencesRepository,
+)
 from backend.infrastructure.startup import run_startup
 from backend.schemas import AuthenticatedPrincipal
 
 
-def test_legacy_account_state_migrates_idempotently_preserving_originals_and_ciphertext(tmp_path):
+def test_legacy_account_state_migrates_idempotently_preserving_originals_and_ciphertext(
+    tmp_path, make_isolated_pg_db
+):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True)
     user1 = "a" * 32
@@ -104,10 +114,10 @@ def test_legacy_account_state_migrates_idempotently_preserving_originals_and_cip
     (u1_dir / "model_connection.json").write_bytes(model1_bytes)
     (u2_dir / "model_connection.json").write_bytes(model2_bytes)
 
-    db = SQLiteDatabase(data_dir / "fitlife.sqlite3")
+    db = make_isolated_pg_db(initialize=False)
     summary_first = run_startup(db, data_dir)
     assert summary_first.status == "ready"
-    assert summary_first.schema_version == 15
+    assert summary_first.schema_version == 16
 
     # Original files remain untouched as read-only backup.
     assert (data_dir / "users.json").read_bytes() == users_bytes
@@ -115,9 +125,9 @@ def test_legacy_account_state_migrates_idempotently_preserving_originals_and_cip
     assert (u1_dir / "model_connection.json").read_bytes() == model1_bytes
     assert (u2_dir / "model_connection.json").read_bytes() == model2_bytes
 
-    identities = SQLiteIdentityRepository(db, data_dir)
-    prefs_repo = SQLiteUserPreferencesRepository(db, data_dir)
-    models_repo = SQLiteModelConnectionRepository(db, data_dir)
+    identities = PostgresIdentityRepository(db, data_dir)
+    prefs_repo = PostgresUserPreferencesRepository(db, data_dir)
+    models_repo = PostgresModelConnectionRepository(db, data_dir)
 
     assert identities.authenticate("legacyone", "password123").user_id == user1
     assert identities.authenticate("13800138000", "password456").user_id == user2
@@ -136,10 +146,14 @@ def test_legacy_account_state_migrates_idempotently_preserving_originals_and_cip
     assert ws2.active.model == "model-v1"
     assert ws2.active.encrypted_api_key == enc_secret_2
 
-    # Ensure plaintext API keys are never written to SQLite text columns.
+    # Ensure plaintext API keys are never written to PostgreSQL columns.
     with db.connection() as conn:
         raw_rows = conn.execute("SELECT active_json, draft_json FROM model_connections").fetchall()
-        serialized = " ".join((row["active_json"] or "") + (row["draft_json"] or "") for row in raw_rows)
+        serialized = " ".join(
+            (json.dumps(val) if isinstance(val, (dict, list)) else str(val or ""))
+            for row in raw_rows
+            for val in (row["active_json"], row["draft_json"])
+        )
         assert "sk-legacy-one-9876" not in serialized
         assert "sk-legacy-two-4321" not in serialized
 
@@ -150,14 +164,16 @@ def test_legacy_account_state_migrates_idempotently_preserving_originals_and_cip
     assert replay.status == "skipped"
 
 
-def test_sqlite_repositories_support_optimistic_concurrency_export_and_deletion(tmp_path):
-    data_dir = tmp_path / "sqlite-only"
-    db = SQLiteDatabase(data_dir / "fitlife.sqlite3")
+def test_postgres_repositories_support_optimistic_concurrency_export_and_deletion(
+    tmp_path, make_isolated_pg_db
+):
+    data_dir = tmp_path / "pg-only"
+    db = make_isolated_pg_db(initialize=False)
     run_migrations(db, RECORDS_MIGRATIONS)
 
-    identities = SQLiteIdentityRepository(db, data_dir)
-    prefs_repo = SQLiteUserPreferencesRepository(db, data_dir)
-    models_repo = SQLiteModelConnectionRepository(db, data_dir)
+    identities = PostgresIdentityRepository(db, data_dir)
+    prefs_repo = PostgresUserPreferencesRepository(db, data_dir)
+    models_repo = PostgresModelConnectionRepository(db, data_dir)
 
     u1 = identities.register("alice", None, None, "password123", "Alice")
     u2 = identities.register("bob", None, None, "password456", "Bob")
@@ -225,11 +241,11 @@ def test_sqlite_repositories_support_optimistic_concurrency_export_and_deletion(
         assert exported_model["model"] == "m-active"
         assert exported_model["api_key_configured"] is True
 
-    # Deleting user1 removes only user1's SQLite rows while keeping user2 intact.
+    # Deleting user1 removes only user1's PostgreSQL rows while keeping user2 intact.
     DeleteAccount(
         data_dir,
         identities,
-        SQLiteProfileTargetRepository(db),
+        PostgresProfileTargetRepository(db),
         user_preferences=prefs_repo,
         model_connections=models_repo,
     ).execute(
@@ -246,44 +262,50 @@ def test_sqlite_repositories_support_optimistic_concurrency_export_and_deletion(
     assert models_repo.get(u2.user_id).model == "bob-model"
 
 
-def test_backup_verify_restore_and_cli_manifest(tmp_path):
+def test_backup_verify_restore_and_cli_manifest(tmp_path, make_isolated_pg_db):
     data_dir = tmp_path / "data"
-    db_path = data_dir / "fitlife.sqlite3"
-    db = SQLiteDatabase(db_path)
+    db = make_isolated_pg_db(initialize=False)
     run_migrations(db, RECORDS_MIGRATIONS)
-    identities = SQLiteIdentityRepository(db, data_dir)
-    models_repo = SQLiteModelConnectionRepository(db, data_dir)
+    identities = PostgresIdentityRepository(db, data_dir)
+    models_repo = PostgresModelConnectionRepository(db, data_dir)
     u = identities.register("backup-user", None, None, "password123", "Backup User")
     models_repo.save(u.user_id, ModelConnection(model="gpt-5.5", encrypted_api_key="cipher-val"))
 
-    backup_path = tmp_path / "snapshots" / "snapshot.sqlite3"
-    created = backup_database(db, backup_path)
+    backup_path = tmp_path / "snapshots" / "snapshot.pg.json"
+    created = backup_postgres_database(db, backup_path, prefer_pg_dump=False)
     assert created.integrity_check == "ok"
-    assert created.schema_version == 15
+    assert created.schema_version == 16
     assert created.user_count == 1
     assert created.model_connection_count == 1
 
-    verified = verify_database_backup(backup_path)
+    verified = verify_backup_file(backup_path)
     assert verified.checksum == created.checksum
-    assert verified.schema_version == 15
+    assert verified.schema_version == 16
 
-    restored_path = tmp_path / "restored" / "fitlife.sqlite3"
-    restored = restore_database_backup(backup_path, restored_path)
-    assert restored.integrity_check == "ok"
-    assert restored.user_count == 1
-    assert restored.model_connection_count == 1
+    live_verified = verify_postgres_database(db)
+    assert live_verified.integrity_check == "ok"
+    assert live_verified.user_count == 1
+    assert live_verified.model_connection_count == 1
 
     # CLI --manifest and --verify-only never print any secret key value.
     secret_marker = Fernet.generate_key().decode()
-    cli_backup = tmp_path / "cli" / "fitlife-cli.sqlite3"
+    cli_backup = tmp_path / "cli" / "fitlife-cli.pg.json"
     env = {
         **os.environ,
         "DATA_DIR": str(data_dir),
-        "SQLITE_DATABASE_PATH": str(db_path),
+        "DATABASE_URL": db.dsn,
+        "DATABASE_SCHEMA": db.target_schema,
         "SETTINGS_ENCRYPTION_KEY": secret_marker,
     }
     proc = subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "scripts" / "backup_sqlite.py"), "--output", str(cli_backup), "--manifest"],
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "backup_postgres.py"),
+            "--database-url", db.dsn,
+            "--schema", db.target_schema,
+            "--output", str(cli_backup),
+            "--manifest",
+        ],
         capture_output=True,
         text=True,
         check=True,
@@ -291,7 +313,7 @@ def test_backup_verify_restore_and_cli_manifest(tmp_path):
     )
     output_json = json.loads(proc.stdout)
     assert output_json["integrity_check"] == "ok"
-    assert output_json["schema_version"] == 15
+    assert output_json["schema_version"] == 16
     assert output_json["user_count"] == 1
     assert output_json["model_connection_count"] == 1
     assert "SETTINGS_ENCRYPTION_KEY" in output_json["encryption_key_notice"]
@@ -301,7 +323,11 @@ def test_backup_verify_restore_and_cli_manifest(tmp_path):
     assert secret_marker not in manifest_file.read_text(encoding="utf-8")
 
     verify_proc = subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "scripts" / "backup_sqlite.py"), "--verify-only", str(cli_backup)],
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "backup_postgres.py"),
+            "--verify-only", str(cli_backup),
+        ],
         capture_output=True,
         text=True,
         check=True,

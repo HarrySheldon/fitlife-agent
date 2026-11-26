@@ -17,10 +17,10 @@ from backend.domain.training_context import (
     InjuryLimitation,
     PreferredSplit,
 )
-from backend.infrastructure.repositories.sqlite_training_context_repository import (
-    SQLiteTrainingContextRepository,
+from backend.infrastructure.repositories.postgres_training_context_repository import (
+    PostgresTrainingContextRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 
 router = APIRouter(prefix="/api/v1/training-context")
@@ -45,14 +45,14 @@ class TrainingContextUpdateRequest(BaseModel):
     notes: str = Field(default="", max_length=500)
 
 
-def get_training_context_repo() -> SQLiteTrainingContextRepository:
-    return SQLiteTrainingContextRepository(get_database())
+def get_training_context_repo() -> PostgresTrainingContextRepository:
+    return PostgresTrainingContextRepository(get_database())
 
 
 @router.get("")
 def get_training_context(
     user: AuthenticatedUser = Depends(require_current_user),
-    repo: SQLiteTrainingContextRepository = Depends(get_training_context_repo),
+    repo: PostgresTrainingContextRepository = Depends(get_training_context_repo),
 ):
     context = repo.get(user.user_id)
     return ok(
@@ -73,7 +73,7 @@ def get_training_context(
 def update_training_context(
     payload: TrainingContextUpdateRequest,
     user: AuthenticatedUser = Depends(require_current_user),
-    repo: SQLiteTrainingContextRepository = Depends(get_training_context_repo),
+    repo: PostgresTrainingContextRepository = Depends(get_training_context_repo),
 ):
     saved = repo.upsert(
         user.user_id,

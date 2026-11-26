@@ -1,4 +1,19 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fitlife}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fitlife}
+      POSTGRES_DB: ${POSTGRES_DB:-fitlife}
+    volumes:
+      - fitlife_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-fitlife} -d $${POSTGRES_DB:-fitlife}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   backend:
     build:
       context: .
@@ -14,6 +29,7 @@ services:
     environment:
       DATA_DIR: ${DOCKER_DATA_DIR:-/app/data}
       SEED_DIR: /app/backend/data
+      DATABASE_URL: ${DATABASE_URL:-postgresql://fitlife:fitlife@postgres:5432/fitlife}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
       INTERACTIVE_ENTRY_ENABLED: ${INTERACTIVE_ENTRY_ENABLED:-false}
       COACH_CONVERSATIONS_ENABLED: ${COACH_CONVERSATIONS_ENABLED:-false}
@@ -22,6 +38,9 @@ services:
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000}
     volumes:
       - ${FITLIFE_DATA_DIR:-./backend/data}:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
       interval: 10s
@@ -48,3 +67,6 @@ services:
       timeout: 5s
       retries: 6
       start_period: 5s
+
+volumes:
+  fitlife_pgdata:

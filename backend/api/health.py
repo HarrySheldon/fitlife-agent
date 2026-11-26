@@ -1,10 +1,9 @@
-import sqlite3
-
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from backend.api.utils import ok
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.errors import DatabaseError
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.startup import last_startup_summary
 
 
@@ -20,7 +19,8 @@ def health():
 def readiness():
     try:
         with get_database().connection() as connection:
-            quick_check = connection.execute("PRAGMA quick_check").fetchone()[0]
+            ping_row = connection.execute("SELECT 1").fetchone()
+            quick_check = "ok" if ping_row is not None and ping_row[0] == 1 else "unavailable"
             schema_version = connection.execute(
                 "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
             ).fetchone()[0]
@@ -33,7 +33,7 @@ def readiness():
                 WHERE migration_key LIKE 'legacy_csv_v1:%' AND status = 'failed'
                 """
             ).fetchone()[0]
-    except sqlite3.Error:
+    except DatabaseError:
         payload = ok(
             {
                 "status": "unavailable",

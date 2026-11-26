@@ -9,10 +9,10 @@ from backend.api.preference_context import preferences_for
 from backend.api.utils import ok
 from backend.application.use_cases.daily_summary import DailySummaryService
 from backend.domain.account_clock import local_today
-from backend.infrastructure.repositories.sqlite_daily_summary_repository import (
-    SQLiteDailySummaryRepository,
+from backend.infrastructure.repositories.postgres_daily_summary_repository import (
+    PostgresDailySummaryRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.schemas import AuthenticatedUser
 from backend.tools.today_overview import build_today_overview
 
@@ -27,7 +27,7 @@ class DailyLogUpdateRequest(BaseModel):
 
 
 def get_daily_summary_service() -> DailySummaryService:
-    return DailySummaryService(SQLiteDailySummaryRepository(get_database()))
+    return DailySummaryService(PostgresDailySummaryRepository(get_database()))
 
 
 @router.get("/today")

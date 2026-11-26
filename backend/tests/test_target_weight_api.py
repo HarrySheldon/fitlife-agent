@@ -5,14 +5,13 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from backend.config import get_settings
-from backend.infrastructure.sqlite.runtime import initialize_database
+from backend.infrastructure.postgres.runtime import initialize_database
 from backend.main import create_app
 
 
 def _setup_client(tmp_path, monkeypatch) -> tuple[TestClient, dict[str, str]]:
     data_dir = tmp_path / f"target-weight-{uuid4().hex}"
     monkeypatch.setenv("DATA_DIR", str(data_dir))
-    monkeypatch.setenv("SQLITE_DATABASE_PATH", str(data_dir / "fitlife.sqlite3"))
     monkeypatch.setenv("LLM_ENABLED", "false")
     get_settings.cache_clear()
     initialize_database()

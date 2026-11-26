@@ -70,7 +70,8 @@ async def _sleep(delay: float):
 class RuntimeContext:
     def __init__(self, *, policy=None, clock=time.monotonic, sleeper=_sleep, random_value=random_module.random,
                  token_estimator=None, cancel_event=None, deadline_at=None, record=None, telemetry=None,
-                 checkpoint_store=None, run_id=None, user_id=None, task_budget_binding=None):
+                 checkpoint_store=None, run_id=None, user_id=None, task_budget_binding=None,
+                 initial_checkpoint=None, resumed_from_run_id=None):
         self.policy = policy or RuntimePolicy()
         self.clock = clock
         self.sleeper = sleeper
@@ -87,6 +88,8 @@ class RuntimeContext:
         self.telemetry = SafeTelemetryContext(telemetry)
         self.checkpoint_store = checkpoint_store
         self.run_id, self.user_id = run_id, user_id
+        self.initial_checkpoint = initial_checkpoint
+        self.resumed_from_run_id = resumed_from_run_id
         self.provider = self.model = None
         self.output_tokens = 0
         self.retry_count = 0
@@ -124,6 +127,33 @@ class RuntimeContext:
         except Exception as error:
             self._report_checkpoint_unavailable(name, type(error).__name__)
             return None
+
+    def save_checkpoint(self, name, state, *, step_index=0, checkpoint_kind="step"):
+        """Persist a step-level recovery checkpoint on a best-effort basis."""
+        self.raise_if_cancelled()
+        if self.checkpoint_store is None:
+            self._report_checkpoint_unavailable(name, "no checkpoint store is configured")
+            return None
+        try:
+            try:
+                saved = self.checkpoint_store.save(
+                    self.run_id,
+                    self.user_id,
+                    name,
+                    state,
+                    step_index=step_index,
+                    checkpoint_kind=checkpoint_kind,
+                )
+            except TypeError:
+                saved = self.checkpoint_store.save(self.run_id, self.user_id, name, state)
+        except Exception as error:
+            self._report_checkpoint_unavailable(name, type(error).__name__)
+            return None
+        try:
+            self.record("CHECKPOINT_SAVED", self, {"checkpoint_name": name, "step_index": int(step_index)})
+        except Exception:
+            pass
+        return saved
 
     def _report_checkpoint_unavailable(self, name, error_type):
         try:
@@ -424,7 +454,84 @@ class AgentRuntime:
         async with self.telemetry.span("fitlife.agent.run", {"operation": command.operation, "policy_version": "default-v1"}) as span:
             return await self._execute(command, workflow, span)
 
-    async def _execute(self, command: AgentCommand, workflow: AgentWorkflow, span):
+    async def resume_async(
+        self,
+        source_run_id: str,
+        command: AgentCommand,
+        workflow: AgentWorkflow,
+        *,
+        checkpoint_name: str | None = None,
+    ):
+        """Resume execution from a durable step checkpoint in a new audited run."""
+        if self.checkpoint_store is None:
+            raise RuntimeControlError("Checkpoint store unavailable")
+        source_run = self.repository.get(source_run_id, command.user_id)
+        if checkpoint_name is not None:
+            cp = self.checkpoint_store.get(source_run.run_id, command.user_id, checkpoint_name)
+        else:
+            latest_fn = getattr(self.checkpoint_store, "latest", None)
+            if callable(latest_fn):
+                cp = latest_fn(source_run.run_id, command.user_id)
+            else:
+                cp = None
+            if cp is None:
+                raise KeyError(source_run_id)
+        async with self.telemetry.span(
+            "fitlife.agent.run",
+            {"operation": command.operation, "policy_version": "default-v1"},
+        ) as span:
+            return await self._execute(
+                command,
+                workflow,
+                span,
+                initial_checkpoint=cp.state,
+                resumed_from_run_id=source_run.run_id,
+            )
+
+    def resume_sync(
+        self,
+        source_run_id: str,
+        command: AgentCommand,
+        workflow: AgentWorkflow,
+        *,
+        checkpoint_name: str | None = None,
+    ):
+        coro = self.resume_async(
+            source_run_id,
+            command,
+            workflow,
+            checkpoint_name=checkpoint_name,
+        )
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        result = []
+        failure = []
+        copied = copy_context()
+
+        def bridge():
+            try:
+                result.append(copied.run(asyncio.run, coro))
+            except BaseException as error:
+                failure.append(error)
+
+        thread = Thread(target=bridge, name="fitlife-agent-resume-sync-bridge")
+        thread.start()
+        thread.join()
+        if failure:
+            raise failure[0]
+        return result[0]
+
+    async def _execute(
+        self,
+        command: AgentCommand,
+        workflow: AgentWorkflow,
+        span,
+        *,
+        initial_checkpoint=None,
+        resumed_from_run_id: str | None = None,
+    ):
         run_id = uuid4().hex
         request_id = command.request_id or uuid4().hex
         event = Event()
@@ -447,7 +554,8 @@ class AgentRuntime:
         lease = None
         context=RuntimeContext(policy=policy,clock=self.clock,sleeper=self.sleeper,random_value=self.random_value,token_estimator=self.token_estimator,cancel_event=event,deadline_at=self.clock()+policy.deadline_seconds,
                                record=lambda kind, ctx, payload=None: self._record(run_id, kind, ctx, payload),
-                               telemetry=self.telemetry, checkpoint_store=self.checkpoint_store, run_id=run_id, user_id=command.user_id)
+                               telemetry=self.telemetry, checkpoint_store=self.checkpoint_store, run_id=run_id, user_id=command.user_id,
+                               initial_checkpoint=initial_checkpoint, resumed_from_run_id=resumed_from_run_id)
         context.effective_config = config
         span.set_attributes({"policy_version": f"policy-{config.revision}"})
         try:
@@ -460,6 +568,16 @@ class AgentRuntime:
                     task_version=command.task_ref.version if command.task_ref else None,
                     policy_snapshot_json=RunPolicySnapshot(revision=config.revision, policy=policy).model_dump_json()))
                 self._runs[run_id] = self.repository.update(replace(self._runs[run_id], status="running", started_at=utc_now()), "RUN_STARTED")
+            if resumed_from_run_id is not None:
+                step_idx = 0
+                if isinstance(initial_checkpoint, dict) and type(initial_checkpoint.get("step_index")) is int:
+                    step_idx = initial_checkpoint["step_index"]
+                self._record(
+                    run_id,
+                    "RUN_RESUMED",
+                    context,
+                    {"resumed_from_run_id": resumed_from_run_id, "step_index": step_idx},
+                )
             if config_error:
                 raise config_error
             if command.task_ref is not None and self.task_budget_binding_factory is not None:

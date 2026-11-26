@@ -64,7 +64,7 @@ _FILE_EXPORTS = (
     ("preferences.json", "preferences.json", _PREFERENCE_FIELDS),
     ("profile.json", "user_profile.json", _PROFILE_FIELDS),
 )
-_SQLITE_PREF_FILE_EXPORTS = (
+_POSTGRES_PREF_FILE_EXPORTS = (
     ("profile.json", "user_profile.json", _PROFILE_FIELDS),
 )
 _RECORD_EXPORTS = (
@@ -213,7 +213,7 @@ class ExportAccountData:
 
         user_root = _validated_user_root(self.data_dir, user_id)
         if user_root.exists():
-            file_exports = _SQLITE_PREF_FILE_EXPORTS if self.user_preferences is not None else _FILE_EXPORTS
+            file_exports = _POSTGRES_PREF_FILE_EXPORTS if self.user_preferences is not None else _FILE_EXPORTS
             for archive_path, filename, fields in file_exports:
                 snapshot = budget.read_snapshot(
                     user_root,

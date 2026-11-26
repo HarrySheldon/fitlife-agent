@@ -15,7 +15,8 @@ ERROR_CODES = frozenset({"INTERNAL_ERROR", "MODEL_AUTH_FAILED", "MODEL_NOT_FOUND
     "TASK_NOT_FOUND", "TASK_VERSION_CONFLICT", "IDEMPOTENCY_CONFLICT", "TASK_EXPIRED", "TASK_BUDGET_EXHAUSTED", "REPAIR_LIMIT",
     "INPUT_CLARIFICATION_REQUIRED", "INPUT_CONSTRAINT_CLARIFICATION_REQUIRED", "BUSINESS_SCOPE_NOT_SUPPORTED", "AGENT_TOOL_REJECTED", "AUTHENTICATION_REQUIRED"})
 EVENT_TYPES = frozenset({
-    "RUN_ACCEPTED", "RUN_STARTED", "STEP_STARTED", "STEP_RETRY_SCHEDULED",
+    "RUN_ACCEPTED", "RUN_STARTED", "RUN_RESUMED", "CHECKPOINT_SAVED",
+    "STEP_STARTED", "STEP_RETRY_SCHEDULED",
     "STEP_SUCCEEDED", "STEP_FAILED", "TOOL_STARTED", "TOOL_FINISHED",
     "SAFETY_DECIDED", "SAFETY_REVIEWED", "RUN_CANCEL_REQUESTED", "RUN_SUCCEEDED",
     "RUN_FAILED", "RUN_CANCELLED", "RUN_TIMED_OUT", "AGENT_TOOL_DECIDED", "AGENT_PROGRESS",
@@ -41,7 +42,7 @@ def safe_payload(payload: Mapping[str, object]) -> dict:
     source and a token count are registered here by name. Queries, records,
     prompts and keys have no field, so they cannot be recorded by accident.
     """
-    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions", "agent_tool", "resource_release", "loaded_skill_ids", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status", "attempt_id", "usage_source"}
+    allowed = {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions", "agent_tool", "resource_release", "loaded_skill_ids", "internal_error_id", "error_code", "error_type", "error_class", "outcome", "tool", "risk_category", "rule_version", "review_mode", "review_status", "attempt_id", "usage_source", "checkpoint_name", "step_index", "resumed_from_run_id", "invalidated_domains"}
     result = {}
     for key, value in payload.items():
         if key not in allowed:
@@ -49,6 +50,15 @@ def safe_payload(payload: Mapping[str, object]) -> dict:
         if key in {"duration_ms", "delay_ms", "input_tokens", "output_tokens", "cached_input_tokens", "tool_calls", "cache_hits", "decision_count", "protocol_failures", "context_chars", "tool_executions"}:
             if type(value) not in (int, float) or value < 0 or not math.isfinite(value):
                 raise ValueError("Invalid event metric")
+        elif key == "step_index":
+            if type(value) is not int or value < 0:
+                raise ValueError("Invalid step index")
+        elif key == "checkpoint_name" and (not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", value) is None):
+            raise ValueError("Invalid checkpoint name")
+        elif key == "resumed_from_run_id" and (not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", value) is None):
+            raise ValueError("Invalid resumed run identifier")
+        elif key == "invalidated_domains" and (not isinstance(value, list) or any(item not in {"profile", "training", "diet"} for item in value)):
+            raise ValueError("Invalid invalidated domains")
         elif key == "attempt_id" and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{32}", value) is None):
             raise ValueError("Invalid attempt identifier")
         elif key == "usage_source" and value not in {"provider", "mock_estimate", "unknown"}:
@@ -128,6 +138,8 @@ class Checkpoint:
     name: str
     state: Mapping[str, object]
     version: int = 1
+    step_index: int = 0
+    checkpoint_kind: str = "step"
 
 
 class CheckpointStore(Protocol):
@@ -137,9 +149,17 @@ class CheckpointStore(Protocol):
 
 def safe_checkpoint(state):
     if "schema_version" in state:
-        from backend.agent.checkpoints import restore_planner_state
-        restored = restore_planner_state(state)
-        return {"schema_version": 1, "next_step": "profile_loader", "route": restored["tool_requests"]}
+        version = state.get("schema_version")
+        if type(version) is not int:
+            raise ValueError("Invalid checkpoint schema version")
+        if version == 2:
+            from backend.agent.checkpoints import restore_workflow_checkpoint
+            return restore_workflow_checkpoint(state).model_dump()
+        if version == 1:
+            from backend.agent.checkpoints import restore_planner_state
+            restored = restore_planner_state(state)
+            return {"schema_version": 1, "next_step": "profile_loader", "route": restored["tool_requests"]}
+        raise ValueError("Unsupported checkpoint schema version")
     # Health data and model content intentionally have no representation here.
     if set(state) - {"completed", "attempt"} or ("completed" in state and type(state["completed"]) is not bool) or ("attempt" in state and (type(state["attempt"]) is not int or state["attempt"] < 0)):
         raise ValueError("Only minimal step completion metadata can be checkpointed")

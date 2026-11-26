@@ -21,15 +21,14 @@ import pytest
 from backend.application.ports.plan_repository import StoredPlan, legacy_head
 from backend.domain.errors import ApplicationError
 from backend.domain.plan_adjustment import CandidateBundle, CandidateVerdict, Patch
-from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import (
-    SQLitePlanAdjustmentRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_plan_adjustment_repository import (
+    PostgresPlanAdjustmentRepository,
 )
-from backend.infrastructure.repositories.sqlite_plan_repository import (
-    SQLitePlanRepository,
+from backend.infrastructure.repositories.postgres_plan_repository import (
+    PostgresPlanRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 NOW = datetime(2026, 10, 25, 9, 0, tzinfo=timezone.utc)
 
@@ -62,20 +61,18 @@ CONSTRAINTS = {
 }
 
 
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
+def _database(_tmp_path=None) -> PostgresDatabase:
+    return PostgresDatabase(TEST_DATABASE_URL)
 
 
-def _plans(database, *, now=NOW) -> SQLitePlanRepository:
+def _plans(database, *, now=NOW) -> PostgresPlanRepository:
     counter = {"n": 0}
 
     def next_id():
         counter["n"] += 1
         return f"new{counter['n']:04d}"
 
-    return SQLitePlanRepository(database, clock=lambda: now, ids=next_id)
+    return PostgresPlanRepository(database, clock=lambda: now, ids=next_id)
 
 
 def _stored(plan_id="p1", *, document=None, when=NOW, kind="deterministic",
@@ -108,7 +105,7 @@ def _awaiting_confirmation(database, *, owner="alice", base_plan_id="p1", head=1
                            document=None, change_domains=frozenset({"training"}),
                            created_at=NOW):
     """A task whose candidate passed and is waiting for the user."""
-    adjustments = SQLitePlanAdjustmentRepository(
+    adjustments = PostgresPlanAdjustmentRepository(
         database, clock=lambda: created_at, ids=_counter())
     suffix = f"{_TASK_SEQUENCE['n'] + 1}"
     created = adjustments.create_task(
@@ -167,7 +164,7 @@ def test_the_task_is_marked_activated(tmp_path):
 
     _activation(plans, task_id, submitted, digest)
 
-    adjustments = SQLitePlanAdjustmentRepository(database, clock=lambda: NOW)
+    adjustments = PostgresPlanAdjustmentRepository(database, clock=lambda: NOW)
     snapshot = adjustments.get("alice", task_id)
     assert snapshot.state == "activated"
     assert snapshot.version == submitted.version + 1
@@ -323,11 +320,11 @@ def test_a_candidate_that_changed_an_ungranted_domain_is_refused(tmp_path):
 # -------------------------------------------------------------- the two writers
 
 
-def _spawn_activate(path, task_id, version, head, digest, barrier, results, now):
-    from backend.infrastructure.repositories.sqlite_plan_repository import (
-        SQLitePlanRepository,
+def _spawn_activate(dsn, schema, task_id, version, head, digest, barrier, results, now):
+    from backend.infrastructure.postgres.database import PostgresDatabase
+    from backend.infrastructure.repositories.postgres_plan_repository import (
+        PostgresPlanRepository,
     )
-    from backend.infrastructure.sqlite.database import SQLiteDatabase
 
     # The clock has to cross the process boundary. The candidate was submitted at
     # a fixed instant and expires thirty minutes later, so a child reading the wall
@@ -335,7 +332,7 @@ def _spawn_activate(path, task_id, version, head, digest, barrier, results, now)
     # about -- and the assertion then fails for a reason that has nothing to do
     # with two writers. ``now`` is a datetime rather than a callable because only
     # the former survives ``spawn``.
-    repository = SQLitePlanRepository(SQLiteDatabase(path), clock=lambda: now)
+    repository = PostgresPlanRepository(PostgresDatabase(dsn, schema=schema), clock=lambda: now)
     barrier.wait(timeout=30)
     try:
         receipt = repository.activate(
@@ -349,19 +346,18 @@ def _spawn_activate(path, task_id, version, head, digest, barrier, results, now)
         results.close()
 
 
-def test_two_processes_cannot_both_confirm_the_same_head(tmp_path):
-    database = _database(tmp_path)
+def test_two_processes_cannot_both_confirm_the_same_head(make_isolated_pg_db):
+    database = make_isolated_pg_db()
     plans = _plans(database)
     plans.save("alice", _stored())
     task_id, submitted, digest = _awaiting_confirmation(database)
-    path = str(database.path)
 
     context = multiprocessing.get_context("spawn")
     barrier = context.Barrier(2)
     results = context.Queue()
     processes = [context.Process(target=_spawn_activate,
-                                 args=(path, task_id, submitted.version, 1, digest,
-                                       barrier, results, NOW))
+                                 args=(database.dsn, database.target_schema, task_id,
+                                       submitted.version, 1, digest, barrier, results, NOW))
                  for _ in range(2)]
     outcomes = []
     try:
@@ -417,15 +413,15 @@ def test_a_failure_at_any_stage_rolls_back_everything(tmp_path, monkeypatch, sta
 
     target = {"insert_plan": "_insert_plan", "advance_head": "_advance_head",
               "receipt": "_store_activation_receipt"}[stage]
-    monkeypatch.setattr(SQLitePlanRepository, target,
-                        _fail_after(getattr(SQLitePlanRepository, target)))
+    monkeypatch.setattr(PostgresPlanRepository, target,
+                        _fail_after(getattr(PostgresPlanRepository, target)))
 
     with pytest.raises(RuntimeError):
         _activation(plans, task_id, submitted, digest)
 
     assert plans.list("alice") == before
     assert plans.current_head("alice").revision == 1
-    adjustments = SQLitePlanAdjustmentRepository(database, clock=lambda: NOW)
+    adjustments = PostgresPlanAdjustmentRepository(database, clock=lambda: NOW)
     snapshot = adjustments.get("alice", task_id)
     assert snapshot.state == "awaiting_confirmation"
     assert snapshot.version == submitted.version
@@ -504,7 +500,7 @@ def test_a_confirmation_after_deletion_cannot_resurrect_a_plan(tmp_path):
     plans = _plans(database)
     plans.save("alice", _stored())
     task_id, submitted, digest = _awaiting_confirmation(database)
-    adjustments = SQLitePlanAdjustmentRepository(database, clock=lambda: NOW)
+    adjustments = PostgresPlanAdjustmentRepository(database, clock=lambda: NOW)
 
     plans.delete_user_data("alice")
     adjustments.delete_user_data("alice")

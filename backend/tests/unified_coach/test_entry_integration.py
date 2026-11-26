@@ -10,7 +10,6 @@ from backend.main import create_app
 @pytest.mark.parametrize('entry', ['chat', 'contextual'])
 def test_real_entry_uses_json_decisions_without_native_tools(tmp_path, monkeypatch, entry):
     monkeypatch.setenv('DATA_DIR', str(tmp_path))
-    monkeypatch.setenv('SQLITE_DATABASE_PATH', str(tmp_path / 'fitlife.sqlite3'))
     monkeypatch.setenv('COACH_AGENT_MODE', 'unified')
     get_settings.cache_clear()
 

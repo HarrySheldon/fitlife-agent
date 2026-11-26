@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
@@ -14,18 +13,16 @@ from backend.application.ports.profile_target_repository import (
     SafetyVersionInput,
     TargetVersionInput,
 )
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import DatabaseIntegrityError
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 
-def _database(tmp_path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "profile-targets.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
+def _database(_tmp_path=None) -> PostgresDatabase:
+    return PostgresDatabase(TEST_DATABASE_URL)
 
 
 class _SnapshotProbeConnection:
@@ -33,7 +30,7 @@ class _SnapshotProbeConnection:
         self._connection = connection
         self._database = database
 
-    def execute(self, statement, parameters=()):
+    def execute(self, statement, parameters=None):
         cursor = self._connection.execute(statement, parameters)
         callback = self._database.after_profile_read
         if callback is not None and "FROM user_profile_versions" in statement:
@@ -45,9 +42,9 @@ class _SnapshotProbeConnection:
         return getattr(self._connection, name)
 
 
-class _SnapshotProbeDatabase(SQLiteDatabase):
-    def __init__(self, path) -> None:
-        super().__init__(path)
+class _SnapshotProbeDatabase(PostgresDatabase):
+    def __init__(self, dsn: str, *, schema: str | None = None) -> None:
+        super().__init__(dsn, schema=schema)
         self.after_profile_read = None
 
     @contextmanager
@@ -75,7 +72,7 @@ def _profile(
 
 
 def test_repository_appends_profile_versions_and_reads_latest_by_effective_from(tmp_path):
-    repository = SQLiteProfileTargetRepository(
+    repository = PostgresProfileTargetRepository(
         _database(tmp_path),
         clock=lambda: datetime(2026, 7, 22, 8, 0, tzinfo=timezone.utc),
     )
@@ -91,7 +88,7 @@ def test_repository_appends_profile_versions_and_reads_latest_by_effective_from(
 def test_repository_orders_mixed_precision_effective_timestamps_chronologically(
     tmp_path,
 ):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     latest = repository.append_profile(
         "user-a",
         _profile("2026-07-22T08:00:00.000100Z", weight_kg=69),
@@ -105,7 +102,7 @@ def test_repository_orders_mixed_precision_effective_timestamps_chronologically(
 
 
 def test_repository_normalizes_legacy_free_text_safety_conditions(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     repository.append_profile(
         "user-a",
         _profile(
@@ -126,7 +123,7 @@ def test_append_profile_if_changed_is_atomic_under_concurrent_identical_updates(
     database = _database(tmp_path)
 
     def append(index):
-        return SQLiteProfileTargetRepository(database).append_profile_if_changed(
+        return PostgresProfileTargetRepository(database).append_profile_if_changed(
             "user-a",
             _profile(f"2026-07-22T08:00:0{index}Z"),
         )
@@ -144,7 +141,7 @@ def test_append_profile_if_changed_is_atomic_under_concurrent_identical_updates(
 
 
 def test_changed_profile_rejects_duplicate_effective_from_with_stable_error(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     repository.append_profile_if_changed(
         "user-a",
         _profile("2026-07-22T08:00:00Z"),
@@ -163,7 +160,7 @@ def test_append_goal_if_changed_is_atomic_under_concurrent_identical_updates(tmp
     database = _database(tmp_path)
 
     def append(index):
-        return SQLiteProfileTargetRepository(database).append_goal_if_changed(
+        return PostgresProfileTargetRepository(database).append_goal_if_changed(
             "user-a",
             GoalVersionInput(
                 goal="maintenance",
@@ -184,7 +181,7 @@ def test_append_goal_if_changed_is_atomic_under_concurrent_identical_updates(tmp
 
 
 def test_changed_goal_rejects_duplicate_effective_from_with_stable_error(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     repository.append_goal_if_changed(
         "user-a",
         GoalVersionInput(
@@ -206,7 +203,7 @@ def test_changed_goal_rejects_duplicate_effective_from_with_stable_error(tmp_pat
 
 
 def test_setup_reads_latest_profile_and_goal_for_only_the_requested_user(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     profile_a = repository.append_profile("user-a", _profile("2026-07-01"))
     goal_a = repository.append_goal(
         "user-a", GoalVersionInput(goal="fat_loss", effective_from="2026-07-01")
@@ -224,10 +221,10 @@ def test_setup_reads_latest_profile_and_goal_for_only_the_requested_user(tmp_pat
     assert repository.get_latest_profile("missing-user") is None
 
 
-def test_get_setup_reads_profile_goal_and_target_from_one_sqlite_snapshot(tmp_path):
-    database = _SnapshotProbeDatabase(tmp_path / "profile-targets.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    repository = SQLiteProfileTargetRepository(database)
+def test_get_setup_reads_profile_goal_and_target_from_one_sqlite_snapshot(make_isolated_pg_db):
+    isolated = make_isolated_pg_db()
+    database = _SnapshotProbeDatabase(isolated.dsn, schema=isolated.target_schema)
+    repository = PostgresProfileTargetRepository(database)
     original = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -236,7 +233,9 @@ def test_get_setup_reads_profile_goal_and_target_from_one_sqlite_snapshot(tmp_pa
     original_target = repository.append_target(
         "user-a", _target(original.profile.id, original.goal.id, "2026-07-01")
     )
-    writer = SQLiteProfileTargetRepository(SQLiteDatabase(database.path))
+    writer = PostgresProfileTargetRepository(
+        PostgresDatabase(isolated.dsn, schema=isolated.target_schema)
+    )
 
     def append_new_setup() -> None:
         profile = writer.append_profile(
@@ -260,7 +259,7 @@ def test_get_setup_reads_profile_goal_and_target_from_one_sqlite_snapshot(tmp_pa
 
 
 def test_repository_appends_targets_and_lists_newest_effective_version_first(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     profile = repository.append_profile("user-a", _profile("2026-07-01"))
     goal = repository.append_goal(
         "user-a", GoalVersionInput(goal="maintenance", effective_from="2026-07-01")
@@ -302,7 +301,7 @@ def test_repository_appends_targets_and_lists_newest_effective_version_first(tmp
 
 
 def test_target_rejects_duplicate_effective_from_with_stable_error(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     profile = repository.append_profile("user-a", _profile("2026-07-01"))
     goal = repository.append_goal(
         "user-a",
@@ -323,13 +322,13 @@ def test_target_rejects_duplicate_effective_from_with_stable_error(tmp_path):
 
 
 def test_target_cannot_reference_another_users_profile_or_goal(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     profile = repository.append_profile("user-a", _profile("2026-07-01"))
     goal = repository.append_goal(
         "user-a", GoalVersionInput(goal="maintenance", effective_from="2026-07-01")
     )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         repository.append_target(
             "user-b",
             TargetVersionInput(
@@ -351,7 +350,7 @@ def test_target_cannot_reference_another_users_profile_or_goal(tmp_path):
 
 
 def test_bootstrap_creates_profile_and_goal_atomically(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
 
     setup = repository.bootstrap(
         "user-a",
@@ -365,9 +364,9 @@ def test_bootstrap_creates_profile_and_goal_atomically(tmp_path):
 
 
 def test_bootstrap_rolls_back_profile_when_goal_insert_is_invalid(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         repository.bootstrap(
             "user-a",
             _profile("2026-07-01"),
@@ -394,7 +393,7 @@ def _target(profile_id: str, goal_id: str, effective_from: str = "2026-07-02"):
 
 
 def test_confirm_target_once_replays_same_response_and_rejects_fingerprint_conflict(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -415,7 +414,7 @@ def test_confirm_target_once_replays_same_response_and_rejects_fingerprint_confl
 
 def test_confirm_target_once_is_atomic_under_concurrent_retries(tmp_path):
     database = _database(tmp_path)
-    setup_repository = SQLiteProfileTargetRepository(database)
+    setup_repository = PostgresProfileTargetRepository(database)
     setup = setup_repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -424,7 +423,7 @@ def test_confirm_target_once_is_atomic_under_concurrent_retries(tmp_path):
     target = _target(setup.profile.id, setup.goal.id)
 
     def confirm():
-        return SQLiteProfileTargetRepository(database).confirm_target_once(
+        return PostgresProfileTargetRepository(database).confirm_target_once(
             "user-a", "concurrent-key", "same-fingerprint", target
         )
 
@@ -436,7 +435,7 @@ def test_confirm_target_once_is_atomic_under_concurrent_retries(tmp_path):
 
 
 def test_confirm_target_replays_before_freshness_check_and_tracks_projection(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -475,7 +474,7 @@ def test_confirm_target_replays_before_freshness_check_and_tracks_projection(tmp
 
 
 def test_get_confirmation_returns_saved_state_and_validates_fingerprint(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -504,7 +503,7 @@ def test_get_confirmation_returns_saved_state_and_validates_fingerprint(tmp_path
 
 
 def test_confirm_target_rejects_new_stale_preview_inside_transaction(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -526,7 +525,7 @@ def test_confirm_target_rejects_new_stale_preview_inside_transaction(tmp_path):
 
 
 def test_delete_user_data_removes_owned_rows_and_preserves_other_users(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     setup_a = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -556,7 +555,7 @@ def test_delete_user_data_removes_owned_rows_and_preserves_other_users(tmp_path)
 
 def test_delete_user_data_removes_user_scoped_migration_ledger(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteProfileTargetRepository(database)
+    repository = PostgresProfileTargetRepository(database)
     with database.transaction() as connection:
         connection.executemany(
             """
@@ -583,9 +582,9 @@ def test_delete_user_data_removes_user_scoped_migration_ledger(tmp_path):
     ]
 
 
-def test_delete_user_data_rolls_back_all_rows_when_cleanup_fails(tmp_path):
-    database = _database(tmp_path)
-    repository = SQLiteProfileTargetRepository(database)
+def test_delete_user_data_rolls_back_all_rows_when_cleanup_fails(make_isolated_pg_db):
+    database = make_isolated_pg_db()
+    repository = PostgresProfileTargetRepository(database)
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -597,15 +596,23 @@ def test_delete_user_data_rolls_back_all_rows_when_cleanup_fails(tmp_path):
     with database.transaction() as connection:
         connection.execute(
             """
+            CREATE OR REPLACE FUNCTION reject_target_cleanup_fn()
+            RETURNS TRIGGER LANGUAGE plpgsql AS $$
+            BEGIN
+                RAISE EXCEPTION 'simulated cleanup failure' USING ERRCODE = 'check_violation';
+            END;
+            $$
+            """
+        )
+        connection.execute(
+            """
             CREATE TRIGGER reject_target_cleanup
             BEFORE DELETE ON daily_target_versions
-            BEGIN
-                SELECT RAISE(ABORT, 'simulated cleanup failure');
-            END
+            FOR EACH ROW EXECUTE FUNCTION reject_target_cleanup_fn()
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         repository.delete_user_data("user-a")
 
     assert repository.get_setup("user-a").profile == setup.profile
@@ -821,7 +828,7 @@ def _owned_graph_counts(database, user_id: str, prefix: str) -> dict[str, int]:
 
 def test_delete_user_data_erases_complete_owned_graph_and_preserves_other_user(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteProfileTargetRepository(database)
+    repository = PostgresProfileTargetRepository(database)
     setup_a = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -850,7 +857,7 @@ def test_delete_user_data_erases_complete_owned_graph_and_preserves_other_user(t
 
 def test_catalog_search_deletion_uses_kind_when_food_and_exercise_ids_collide(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteProfileTargetRepository(database)
+    repository = PostgresProfileTargetRepository(database)
     with database.transaction() as connection:
         connection.execute(
             """
@@ -905,7 +912,7 @@ def test_catalog_search_deletion_uses_kind_when_food_and_exercise_ids_collide(tm
 
 
 def test_the_constraint_snapshot_names_the_rows_it_read(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -928,7 +935,7 @@ def test_an_unmigrated_allergy_list_is_reported_as_unversioned(tmp_path):
     # Before any safety row exists the list still lives only in the profile file.
     # Reporting it as absent would read as "nothing owns it"; reporting a version
     # would read as "reproducible". It is neither, so it is present and None.
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -949,7 +956,7 @@ def test_a_constraint_no_store_owns_is_absent_rather_than_unversioned(tmp_path):
     # clarification, and the task row is already their record. Listing them as
     # unversioned would block confirmation over a check that has nothing to
     # reproduce.
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -964,7 +971,7 @@ def test_a_constraint_no_store_owns_is_absent_rather_than_unversioned(tmp_path):
 
 
 def test_the_allergy_list_is_versioned_once_and_only_when_it_changes(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
 
     first = repository.append_safety_if_changed(
         "user-a", SafetyVersionInput(allergies_or_restrictions=("花生",)))
@@ -982,7 +989,7 @@ def test_the_allergy_list_is_versioned_once_and_only_when_it_changes(tmp_path):
 
 
 def test_the_versioned_allergy_list_reaches_the_snapshot(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     safety = repository.append_safety_if_changed(
         "user-a", SafetyVersionInput(allergies_or_restrictions=("花生",)))
 
@@ -994,7 +1001,7 @@ def test_the_versioned_allergy_list_reaches_the_snapshot(tmp_path):
 
 def test_the_snapshot_reads_on_the_connection_it_is_given(tmp_path):
     database = _database(tmp_path)
-    repository = SQLiteProfileTargetRepository(database)
+    repository = PostgresProfileTargetRepository(database)
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01"),
@@ -1014,7 +1021,7 @@ def test_deleting_an_account_removes_the_allergy_versions(tmp_path):
     is gone would mean the deletion removed the profile and left the one fact the
     profile was mostly there for.
     """
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     repository.append_safety_if_changed(
         "user-a", SafetyVersionInput(allergies_or_restrictions=("花生",)))
     repository.append_safety_if_changed(
@@ -1033,7 +1040,7 @@ def test_the_declared_safety_conditions_reach_the_snapshot(tmp_path):
     both -- and a confirmation can say which version of them it approved against
     instead of discovering the fact only in the file.
     """
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
     setup = repository.bootstrap(
         "user-a",
         _profile("2026-07-01", safety_conditions=("pregnancy",)),
@@ -1047,7 +1054,7 @@ def test_the_declared_safety_conditions_reach_the_snapshot(tmp_path):
 
 
 def test_an_account_without_a_profile_has_no_safety_version(tmp_path):
-    repository = SQLiteProfileTargetRepository(_database(tmp_path))
+    repository = PostgresProfileTargetRepository(_database(tmp_path))
 
     snapshot = repository.constraint_snapshot("user-a")
 

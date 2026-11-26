@@ -286,7 +286,7 @@ def _confirm_target(
     return confirmed.json()["data"]["target"]
 
 
-def test_authenticated_empty_day_uses_sqlite_summary(client):
+def test_authenticated_empty_day_uses_postgres_summary(client):
     headers = _register(client, "daily-empty")
 
     response = client.get("/today?date=2026-07-25", headers=headers)

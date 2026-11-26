@@ -14,10 +14,10 @@ from backend.application.use_cases.exercise_catalog import (
     ExerciseCatalogService,
 )
 from backend.config import get_settings
-from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
-    SQLiteExerciseCatalogRepository,
+from backend.infrastructure.repositories.postgres_exercise_catalog_repository import (
+    PostgresExerciseCatalogRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import ApiResponse, AuthenticatedUser
 
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/v1/catalog/exercises")
 
 def get_exercise_catalog_service() -> ExerciseCatalogService:
     return ExerciseCatalogService(
-        SQLiteExerciseCatalogRepository(get_database()),
+        PostgresExerciseCatalogRepository(get_database()),
         mutation_scope=lambda user_id: user_lifecycle_guard(
             get_settings().data_dir,
             user_id,

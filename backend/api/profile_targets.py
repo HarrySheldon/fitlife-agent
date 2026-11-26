@@ -24,10 +24,10 @@ from backend.domain.profile_targets import DailyTargets
 from backend.infrastructure.repositories.file_fitness_repository import (
     FileFitnessRepository,
 )
-from backend.infrastructure.repositories.sqlite_profile_target_repository import (
-    SQLiteProfileTargetRepository,
+from backend.infrastructure.repositories.postgres_profile_target_repository import (
+    PostgresProfileTargetRepository,
 )
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import (
     AuthenticatedUser,
@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/v1")
 
 def get_profile_target_service() -> ProfileTargetService:
     return ProfileTargetService(
-        SQLiteProfileTargetRepository(get_database()),
+        PostgresProfileTargetRepository(get_database()),
         FileLegacyProfileProjection(FileFitnessRepository()),
         mutation_scope=lambda user_id: user_lifecycle_guard(
             get_settings().data_dir,

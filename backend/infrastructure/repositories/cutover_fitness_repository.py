@@ -1,30 +1,31 @@
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable
 
 import pandas as pd
 
 from backend.config import get_settings
 from backend.infrastructure.migration.legacy_csv import MIGRATION_VERSION
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import DatabaseOperationalError
+from backend.infrastructure.postgres.runtime import get_database
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
-from backend.infrastructure.repositories.sqlite_fitness_repository import SQLiteFitnessRepository
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.repositories.postgres_fitness_repository import PostgresFitnessRepository
 from backend.schemas import MealRecord, UserProfile, WorkoutRecord
 
 
 class CutoverFitnessRepository:
     def __init__(
         self,
-        database: SQLiteDatabase,
+        database: PostgresDatabase,
         *,
         file_repository: FileFitnessRepository | None = None,
-        sqlite_repository: SQLiteFitnessRepository | None = None,
+        postgres_repository: PostgresFitnessRepository | None = None,
+        sqlite_repository: PostgresFitnessRepository | None = None,
     ) -> None:
         self.database = database
         self.file = file_repository or FileFitnessRepository()
-        self.sqlite = sqlite_repository or SQLiteFitnessRepository(database)
+        self.postgres = postgres_repository or sqlite_repository or PostgresFitnessRepository(database)
 
     def is_cutover(self, user_id: str | None) -> bool:
         if user_id is None:
@@ -38,15 +39,15 @@ class CutoverFitnessRepository:
                     """,
                     (f"{MIGRATION_VERSION}:{user_id}", user_id),
                 ).fetchone()
-        except sqlite3.OperationalError as error:
+        except DatabaseOperationalError as error:
             message = str(error).casefold()
-            if "no such table" not in message and "no such column" not in message:
+            if error.sqlstate not in {"42P01", "42703"} and "does not exist" not in message:
                 raise
             return False
         return row is not None and row["status"] == "completed"
 
     def _records(self, user_id: str | None):
-        return self.sqlite if self.is_cutover(user_id) else self.file
+        return self.postgres if self.is_cutover(user_id) else self.file
 
     def read_profile(self, user_id: str | None = None) -> UserProfile:
         return self.file.read_profile(user_id)
@@ -76,7 +77,7 @@ def get_fitness_repository() -> CutoverFitnessRepository:
     database = get_database()
     return CutoverFitnessRepository(
         database,
-        sqlite_repository=SQLiteFitnessRepository(
+        postgres_repository=PostgresFitnessRepository(
             database,
             data_dir=get_settings().data_dir,
         ),

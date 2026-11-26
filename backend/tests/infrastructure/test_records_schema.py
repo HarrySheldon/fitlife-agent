@@ -1,10 +1,10 @@
-import sqlite3
-
 import pytest
 
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.postgres.errors import DatabaseIntegrityError
+from backend.infrastructure.postgres.migrations import run_migrations
+from backend.infrastructure.postgres.schema import RECORDS_MIGRATIONS
+from backend.tests.conftest import TEST_DATABASE_URL
 
 
 REQUIRED_TABLES = {
@@ -31,7 +31,40 @@ REQUIRED_TABLES = {
     "catalog_search",
 }
 
-V1_CHECKSUM = "80f42c094b90e2dec79132a1c6edf8f214265de2565e2eecd999e5f93290e0fa"
+V1_CHECKSUM = "decd3f9e59c2757f3d2c6f77ff05a472638f44020c463b1ab1f6d0df57865978"
+
+
+def _foreign_keys(connection, table_name: str) -> list[tuple[str, str, str]]:
+    action_map = {
+        "r": "RESTRICT",
+        "c": "CASCADE",
+        "n": "SET NULL",
+        "a": "NO ACTION",
+        "d": "SET DEFAULT",
+    }
+    rows = connection.execute(
+        """
+        SELECT a_from.attname AS from_col,
+               a_to.attname AS to_col,
+               c.confdeltype AS on_delete
+        FROM pg_constraint c
+        JOIN pg_class tbl ON tbl.oid = c.conrelid
+        JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
+        JOIN pg_class ref ON ref.oid = c.confrelid
+        JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(col_num, ref_num, ord) ON TRUE
+        JOIN pg_attribute a_from ON a_from.attrelid = tbl.oid AND a_from.attnum = k.col_num
+        JOIN pg_attribute a_to ON a_to.attrelid = ref.oid AND a_to.attnum = k.ref_num
+        WHERE ns.nspname = current_schema()
+          AND c.contype = 'f'
+          AND tbl.relname = ?
+        ORDER BY from_col, to_col
+        """,
+        (table_name,),
+    ).fetchall()
+    return [
+        (row["from_col"], row["to_col"], action_map[row["on_delete"]])
+        for row in rows
+    ]
 
 
 def _insert_profile(connection, profile_id="profile-1", user_id="user-a"):
@@ -473,8 +506,8 @@ def _insert_late_invalid_parents(connection, case):
         )
 
 
-def test_records_schema_contains_required_tables_and_fts(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
+def test_records_schema_contains_required_tables_and_fts(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
 
     run_migrations(database, RECORDS_MIGRATIONS)
 
@@ -494,29 +527,37 @@ def test_records_schema_contains_required_tables_and_fts(tmp_path):
         tables = {
             row["name"]
             for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
+                """
+                SELECT table_name AS name
+                FROM information_schema.tables
+                WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
+                """
             )
         }
-        catalog_search_sql = connection.execute(
-            "SELECT sql FROM sqlite_master WHERE name = 'catalog_search'"
+        catalog_search_index = connection.execute(
+            """
+            SELECT indexdef FROM pg_indexes
+            WHERE schemaname = current_schema()
+              AND tablename = 'catalog_search'
+              AND indexname = 'idx_catalog_search_tsv'
+            """
         ).fetchone()
         search_result = connection.execute(
             """
             SELECT catalog_id
             FROM catalog_search
-            WHERE catalog_search MATCH 'chicken'
+            WHERE search_tsv @@ to_tsquery('simple', 'chicken')
             """
         ).fetchone()
 
     assert REQUIRED_TABLES <= tables
-    assert catalog_search_sql is not None
-    assert "VIRTUAL TABLE" in catalog_search_sql["sql"].upper()
+    assert catalog_search_index is not None
+    assert "USING GIN" in catalog_search_index["indexdef"].upper()
     assert search_result["catalog_id"] == "food-search-1"
 
 
-def test_catalog_search_supports_presegmented_chinese_alias_and_pinyin(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+def test_catalog_search_supports_presegmented_chinese_alias_and_pinyin():
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(
@@ -531,14 +572,20 @@ def test_catalog_search_supports_presegmented_chinese_alias_and_pinyin(tmp_path)
         )
 
     with database.connection() as connection:
-        catalog_search_sql = connection.execute(
-            "SELECT sql FROM sqlite_master WHERE name = 'catalog_search'"
-        ).fetchone()["sql"]
+        catalog_search_gen = connection.execute(
+            """
+            SELECT generation_expression
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'catalog_search'
+              AND column_name = 'search_tsv'
+            """
+        ).fetchone()["generation_expression"]
         matches = {
             query: connection.execute(
                 """
                 SELECT catalog_id FROM catalog_search
-                WHERE catalog_search MATCH ?
+                WHERE search_tsv @@ to_tsquery('simple', ?)
                 """,
                 (query,),
             ).fetchone()["catalog_id"]
@@ -548,18 +595,16 @@ def test_catalog_search_supports_presegmented_chinese_alias_and_pinyin(tmp_path)
                 "鸡丁",
                 "辣子鸡丁",
                 "gongbaojiding",
-                "gongbao*",
+                "gongbao:*",
             )
         }
 
-    assert "tokenize = 'unicode61 remove_diacritics 2'" in catalog_search_sql
-    assert "prefix = '2 3 4'" in catalog_search_sql
+    assert "to_tsvector" in catalog_search_gen
     assert set(matches.values()) == {"food-search-1"}
 
 
 def test_deleting_meal_cascades_to_its_items(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(
@@ -593,8 +638,7 @@ def test_deleting_meal_cascades_to_its_items(tmp_path):
 
 
 def test_deleting_catalog_food_sets_meal_item_reference_to_null(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(
@@ -635,8 +679,7 @@ def test_deleting_catalog_food_sets_meal_item_reference_to_null(tmp_path):
 def test_deleting_catalog_exercise_sets_training_reference_to_null(
     tmp_path, item_kind, exercise_type
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     item_statements = {
         "strength": """
             INSERT INTO strength_exercises (
@@ -674,8 +717,7 @@ def test_deleting_catalog_exercise_sets_training_reference_to_null(
 
 
 def test_meal_items_only_link_food_visible_to_meal_owner(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(
@@ -719,7 +761,7 @@ def test_meal_items_only_link_food_visible_to_meal_owner(tmp_path):
                 (item_id, catalog_food_id),
             )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -735,10 +777,9 @@ def test_meal_items_only_link_food_visible_to_meal_owner(tmp_path):
 
 
 def test_invalid_draft_json_is_rejected(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -762,14 +803,13 @@ def test_invalid_draft_json_is_rejected(tmp_path):
 def test_catalog_alias_requires_exactly_one_catalog_target(
     tmp_path, food_id, exercise_id
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         _insert_food(connection)
         _insert_exercise(connection)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -798,10 +838,9 @@ def test_catalog_alias_requires_exactly_one_catalog_target(
 def test_invalid_daily_target_boundaries_and_source_are_rejected(
     tmp_path, calories, carbs, protein, fat, source
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -817,8 +856,7 @@ def test_invalid_daily_target_boundaries_and_source_are_rejected(
 
 
 def test_duplicate_user_date_meal_position_is_rejected(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(
@@ -831,7 +869,7 @@ def test_duplicate_user_date_meal_position_is_rejected(tmp_path):
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -847,8 +885,7 @@ def test_duplicate_user_date_meal_position_is_rejected(tmp_path):
 
 
 def test_key_lookup_and_foreign_key_indexes_exist(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     required_indexes = {
         "idx_profile_versions_user_id": ("user_id", "id"),
@@ -924,37 +961,52 @@ def test_key_lookup_and_foreign_key_indexes_exist(tmp_path):
     }
 
     with database.connection() as connection:
+        index_rows = connection.execute(
+            """
+            SELECT i.relname AS name,
+                   pg_get_indexdef(i.oid) AS sql,
+                   ARRAY(
+                       SELECT a.attname
+                       FROM unnest(ix.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
+                       JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+                       ORDER BY k.ord
+                   ) AS cols
+            FROM pg_index ix
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            JOIN pg_class t ON t.oid = ix.indrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = current_schema()
+            """
+        ).fetchall()
+        cols_by_index = {
+            row["name"]: tuple(row["cols"]) for row in index_rows
+        }
         actual_indexes = {
-            index_name: tuple(
-                column["name"]
-                for column in connection.execute(
-                    "SELECT name FROM pragma_index_info(?)", (index_name,)
-                )
-            )
+            index_name: cols_by_index[index_name]
             for index_name in required_indexes
         }
-        index_sql = {
-            row["name"]: row["sql"]
-            for row in connection.execute(
-                "SELECT name, sql FROM sqlite_master WHERE type = 'index'"
-            )
+        index_sql = {row["name"]: row["sql"] for row in index_rows}
+        unique_rows = connection.execute(
+            """
+            SELECT t.relname AS table_name,
+                   ARRAY(
+                       SELECT a.attname
+                       FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+                       JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+                       ORDER BY k.ord
+                   ) AS cols
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = current_schema() AND c.contype = 'u'
+            """
+        ).fetchall()
+        actual_unique_constraints: dict[str, set[tuple[str, ...]]] = {
+            table_name: set() for table_name in unique_constraint_columns
         }
-        actual_unique_constraints = {
-            table_name: {
-                tuple(
-                    column["name"]
-                    for column in connection.execute(
-                        "SELECT name FROM pragma_index_info(?)",
-                        (index_row["name"],),
-                    )
-                )
-                for index_row in connection.execute(
-                    f"PRAGMA index_list('{table_name}')"
-                )
-                if index_row["origin"] == "u"
-            }
-            for table_name in unique_constraint_columns
-        }
+        for row in unique_rows:
+            if row["table_name"] in actual_unique_constraints:
+                actual_unique_constraints[row["table_name"]].add(tuple(row["cols"]))
 
     assert actual_indexes == required_indexes
     assert all(
@@ -972,8 +1024,8 @@ def test_records_v1_checksum_is_historical_constant():
     assert RECORDS_MIGRATIONS[0].checksum == V1_CHECKSUM
 
 
-def test_records_migration_can_be_run_twice(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
+def test_records_migration_can_be_run_twice(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
 
     run_migrations(database, RECORDS_MIGRATIONS)
     run_migrations(database, RECORDS_MIGRATIONS)
@@ -985,8 +1037,9 @@ def test_records_migration_can_be_run_twice(tmp_path):
         catalog_search_count = connection.execute(
             """
             SELECT COUNT(*) AS count
-            FROM sqlite_master
-            WHERE name = 'catalog_search'
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'catalog_search'
             """
         ).fetchone()["count"]
 
@@ -1003,24 +1056,39 @@ def test_records_migration_can_be_run_twice(tmp_path):
         (10, "plan_candidate_documents"),
         (11, "plan_history_and_head"),
         (12, "profile_safety_versions"),
+        (13, "body_measurements_and_training_context"),
+        (14, "plan_cycles_and_weekly_automation"),
+        (15, "account_state_and_target_weight"),
+        (16, "agent_runtime_and_pgvector"),
     ]
     assert catalog_search_count == 1
 
 
-def test_data_migration_ledger_supports_user_scoping(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+def test_data_migration_ledger_supports_user_scoping():
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.connection() as connection:
-        columns = connection.execute("PRAGMA table_info(data_migrations)").fetchall()
-        indexes = connection.execute("PRAGMA index_list(data_migrations)").fetchall()
+        columns = connection.execute(
+            """
+            SELECT column_name AS name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = 'data_migrations'
+            """
+        ).fetchall()
+        indexes = connection.execute(
+            """
+            SELECT indexname AS name
+            FROM pg_indexes
+            WHERE schemaname = current_schema() AND tablename = 'data_migrations'
+            """
+        ).fetchall()
 
     assert "user_id" in {row["name"] for row in columns}
     assert "idx_data_migrations_user_status" in {row["name"] for row in indexes}
 
 
-def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
+def test_records_v1_upgrades_to_v2_without_losing_data(make_isolated_pg_db):
+    database = make_isolated_pg_db(initialize=False)
     old_v1 = RECORDS_MIGRATIONS[0]
 
     run_migrations(database, (old_v1,))
@@ -1033,10 +1101,10 @@ def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
         connection.execute(
             """
             INSERT INTO catalog_search (
-                rowid, catalog_kind, catalog_id, name, aliases, pinyin,
+                catalog_kind, catalog_id, name, aliases, pinyin,
                 source_tokens
             ) VALUES (
-                42, 'food', 'food-1', 'Kung pao chicken', '辣子鸡丁',
+                'food', 'food-1', 'Kung pao chicken', '辣子鸡丁',
                 'gongbaojiding',
                 '宫保鸡丁 宫保 保鸡 鸡丁 辣子鸡丁 辣子 子鸡 鸡丁'
             )
@@ -1055,13 +1123,18 @@ def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
         ).fetchone()
         search_row = connection.execute(
             """
-            SELECT rowid, catalog_id FROM catalog_search
-            WHERE catalog_search MATCH '宫保鸡丁'
+            SELECT catalog_kind, catalog_id FROM catalog_search
+            WHERE search_tsv @@ to_tsquery('simple', '宫保鸡丁')
             """
         ).fetchone()
-        catalog_search_sql = connection.execute(
-            "SELECT sql FROM sqlite_master WHERE name = 'catalog_search'"
-        ).fetchone()["sql"]
+        catalog_search_index = connection.execute(
+            """
+            SELECT indexdef FROM pg_indexes
+            WHERE schemaname = current_schema()
+              AND tablename = 'catalog_search'
+              AND indexname = 'idx_catalog_search_tsv'
+            """
+        ).fetchone()["indexdef"]
 
     assert [tuple(row) for row in applied] == [
         (1, "create_records_schema"),
@@ -1076,13 +1149,16 @@ def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
         (10, "plan_candidate_documents"),
         (11, "plan_history_and_head"),
         (12, "profile_safety_versions"),
+        (13, "body_measurements_and_training_context"),
+        (14, "plan_cycles_and_weekly_automation"),
+        (15, "account_state_and_target_weight"),
+        (16, "agent_runtime_and_pgvector"),
     ]
     assert tuple(food) == ("user-a", "Rice")
-    assert tuple(search_row) == (42, "food-1")
-    assert "tokenize = 'unicode61 remove_diacritics 2'" in catalog_search_sql
-    assert "prefix = '2 3 4'" in catalog_search_sql
+    assert tuple(search_row) == ("food", "food-1")
+    assert "USING GIN" in catalog_search_index.upper()
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -1107,14 +1183,14 @@ def test_records_v1_upgrades_to_v2_without_losing_data(tmp_path):
         "json_array_strength",
     ],
 )
-def test_records_v2_rejects_invalid_v1_data_atomically(tmp_path, violation):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
+def test_records_v2_rejects_invalid_v1_data_atomically(make_isolated_pg_db, violation):
+    database = make_isolated_pg_db(initialize=False)
     run_migrations(database, (RECORDS_MIGRATIONS[0],))
 
     with database.transaction() as connection:
         table_name, row_id = _seed_v1_upgrade_violation(connection, violation)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         run_migrations(database, RECORDS_MIGRATIONS)
 
     with database.connection() as connection:
@@ -1122,17 +1198,22 @@ def test_records_v2_rejects_invalid_v1_data_atomically(tmp_path, violation):
             "SELECT version, name FROM schema_migrations ORDER BY version"
         ).fetchall()
         trigger_count = connection.execute(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'"
+            """
+            SELECT COUNT(*)
+            FROM pg_trigger t
+            JOIN pg_class c ON c.oid = t.tgrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = current_schema() AND NOT t.tgisinternal
+            """
         ).fetchone()[0]
         migration_artifacts = connection.execute(
             """
-            SELECT name FROM sqlite_master
-            WHERE name IN ('records_v2_migration_guard', 'catalog_search_v2')
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name IN ('records_v2_migration_guard', 'catalog_search_v2')
             """
         ).fetchall()
-        catalog_search_sql = connection.execute(
-            "SELECT sql FROM sqlite_master WHERE name = 'catalog_search'"
-        ).fetchone()[0]
         invalid_row_count = connection.execute(
             f"SELECT COUNT(*) FROM {table_name} WHERE id = ?", (row_id,)
         ).fetchone()[0]
@@ -1140,13 +1221,11 @@ def test_records_v2_rejects_invalid_v1_data_atomically(tmp_path, violation):
     assert [tuple(row) for row in applied] == [(1, "create_records_schema")]
     assert trigger_count == 0
     assert migration_artifacts == []
-    assert "remove_diacritics" not in catalog_search_sql
     assert invalid_row_count == 1
 
 
 def test_version_links_reject_cross_user_references(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         _insert_profile(connection)
@@ -1188,14 +1267,13 @@ def test_version_links_reject_cross_user_references(tmp_path):
     ]
 
     for statement in invalid_inserts:
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(DatabaseIntegrityError):
             with database.transaction() as connection:
                 connection.execute(statement)
 
 
 def test_referenced_version_history_cannot_be_deleted(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         _insert_profile(connection)
@@ -1218,21 +1296,13 @@ def test_referenced_version_history_cannot_be_deleted(tmp_path):
         "DELETE FROM overall_goal_versions WHERE id = 'goal-1'",
         "DELETE FROM daily_target_versions WHERE id = 'target-1'",
     ):
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(DatabaseIntegrityError):
             with database.transaction() as connection:
                 connection.execute(statement)
 
     with database.connection() as connection:
-        target_foreign_keys = sorted(
-            (row["from"], row["to"], row["on_delete"])
-            for row in connection.execute(
-                "PRAGMA foreign_key_list('daily_target_versions')"
-            )
-        )
-        log_foreign_keys = sorted(
-            (row["from"], row["to"], row["on_delete"])
-            for row in connection.execute("PRAGMA foreign_key_list('daily_logs')")
-        )
+        target_foreign_keys = _foreign_keys(connection, "daily_target_versions")
+        log_foreign_keys = _foreign_keys(connection, "daily_logs")
 
     assert target_foreign_keys == [
         ("overall_goal_version_id", "id", "RESTRICT"),
@@ -1259,10 +1329,9 @@ def test_referenced_version_history_cannot_be_deleted(tmp_path):
 def test_catalog_source_requires_matching_owner_partition(
     tmp_path, catalog_kind, source, owner_user_id
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             if catalog_kind == "food":
                 _insert_food(
@@ -1282,8 +1351,7 @@ def test_catalog_source_requires_matching_owner_partition(
 def test_private_catalog_source_identity_is_unique_per_owner(
     tmp_path, catalog_kind
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     insert_record = _insert_food if catalog_kind == "food" else _insert_exercise
     second_id_kwargs = (
         {"food_id": "food-2"}
@@ -1314,7 +1382,7 @@ def test_private_catalog_source_identity_is_unique_per_owner(
         if catalog_kind == "food"
         else {"exercise_id": duplicate_id}
     )
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             insert_record(
                 connection,
@@ -1342,16 +1410,15 @@ def test_private_catalog_source_identity_is_unique_per_owner(
 def test_deferred_foreign_keys_cannot_bypass_catalog_invariants(
     tmp_path, case, operation
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     if operation == "update":
         with database.transaction() as connection:
             _seed_valid_deferred_child(connection, case)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
-            connection.execute("PRAGMA defer_foreign_keys = ON")
+            connection.execute("SET CONSTRAINTS ALL DEFERRED")
             _write_deferred_child(connection, case, operation)
             _insert_late_invalid_parents(connection, case)
 
@@ -1361,10 +1428,9 @@ def test_deferred_foreign_keys_cannot_bypass_catalog_invariants(
 def test_catalog_user_relations_reject_nonexistent_targets(
     tmp_path, table_name, target_column
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 f"""
@@ -1379,8 +1445,7 @@ def test_catalog_user_relations_reject_nonexistent_targets(
 def test_catalog_user_relations_only_link_visible_catalog_rows(
     tmp_path, table_name, catalog_kind
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     target_column = "food_id" if catalog_kind == "food" else "exercise_id"
     insert_record = _insert_food if catalog_kind == "food" else _insert_exercise
 
@@ -1415,7 +1480,7 @@ def test_catalog_user_relations_only_link_visible_catalog_rows(
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 f"""
@@ -1433,8 +1498,7 @@ def test_catalog_user_relations_only_link_visible_catalog_rows(
 def test_catalog_user_relation_updates_recheck_visibility(
     tmp_path, table_name, catalog_kind
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     target_column = "food_id" if catalog_kind == "food" else "exercise_id"
     insert_record = _insert_food if catalog_kind == "food" else _insert_exercise
 
@@ -1455,7 +1519,7 @@ def test_catalog_user_relation_updates_recheck_visibility(
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 f"""
@@ -1474,7 +1538,7 @@ def test_catalog_user_relation_updates_recheck_visibility(
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 f"""
@@ -1486,8 +1550,7 @@ def test_catalog_user_relation_updates_recheck_visibility(
 
 @pytest.mark.parametrize("table_name", ["catalog_favorites", "catalog_usage"])
 def test_catalog_user_relations_require_exactly_one_target(tmp_path, table_name):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         _insert_food(connection)
@@ -1497,7 +1560,7 @@ def test_catalog_user_relations_require_exactly_one_target(tmp_path, table_name)
         ("relation-both", "food-1", "exercise-1"),
         ("relation-neither", None, None),
     ):
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(DatabaseIntegrityError):
             with database.transaction() as connection:
                 connection.execute(
                     f"""
@@ -1511,8 +1574,7 @@ def test_catalog_user_relations_require_exactly_one_target(tmp_path, table_name)
 
 @pytest.mark.parametrize("catalog_kind", ["food", "exercise"])
 def test_deleting_catalog_row_cascades_user_relations(tmp_path, catalog_kind):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     target_column = "food_id" if catalog_kind == "food" else "exercise_id"
     catalog_table = "food_catalog" if catalog_kind == "food" else "exercise_catalog"
     catalog_id = "food-1" if catalog_kind == "food" else "exercise-1"
@@ -1549,10 +1611,8 @@ def test_deleting_catalog_row_cascades_user_relations(tmp_path, catalog_kind):
         ]
         foreign_key_actions = {
             table_name: {
-                (row["from"], row["on_delete"])
-                for row in connection.execute(
-                    f"PRAGMA foreign_key_list('{table_name}')"
-                )
+                (from_col, on_delete)
+                for from_col, _, on_delete in _foreign_keys(connection, table_name)
             }
             for table_name in ("catalog_favorites", "catalog_usage")
         }
@@ -1572,8 +1632,7 @@ def test_deleting_catalog_row_cascades_user_relations(tmp_path, catalog_kind):
 
 @pytest.mark.parametrize("item_kind", ["strength", "cardio"])
 def test_training_item_position_is_unique_within_session(tmp_path, item_kind):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     statements = {
         "strength": """
             INSERT INTO strength_exercises (
@@ -1597,7 +1656,7 @@ def test_training_item_position_is_unique_within_session(tmp_path, item_kind):
         )
         connection.execute(statements[item_kind], ("item-1",))
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(statements[item_kind], ("item-2",))
 
@@ -1612,8 +1671,7 @@ def test_training_item_position_is_unique_within_session(tmp_path, item_kind):
 def test_training_items_require_visible_matching_catalog_subtype(
     tmp_path, item_kind, catalog_type, mismatched_type
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     item_statements = {
         "strength": """
             INSERT INTO strength_exercises (
@@ -1672,7 +1730,7 @@ def test_training_items_require_visible_matching_catalog_subtype(
         ("item-private-b", "exercise-private-b", 3),
         ("item-mismatched", "exercise-mismatched", 4),
     ):
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(DatabaseIntegrityError):
             with database.transaction() as connection:
                 connection.execute(
                     item_statements[item_kind],
@@ -1681,8 +1739,7 @@ def test_training_items_require_visible_matching_catalog_subtype(
 
 
 def test_meal_item_updates_recheck_catalog_visibility(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         for meal_id, user_id, position in (
@@ -1719,7 +1776,7 @@ def test_meal_item_updates_recheck_catalog_visibility(tmp_path):
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 """
@@ -1736,7 +1793,7 @@ def test_meal_item_updates_recheck_catalog_visibility(tmp_path):
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 "UPDATE meal_items SET meal_id = 'meal-b' WHERE id = 'item-1'"
@@ -1753,8 +1810,7 @@ def test_meal_item_updates_recheck_catalog_visibility(tmp_path):
 def test_training_item_updates_recheck_visibility_and_subtype(
     tmp_path, item_kind, catalog_type, mismatched_type
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     insert_item = {
         "strength": """
             INSERT INTO strength_exercises (
@@ -1800,7 +1856,7 @@ def test_training_item_updates_recheck_visibility_and_subtype(
         connection.execute(insert_item[item_kind])
 
     for exercise_id in ("exercise-private-b", "exercise-mismatched"):
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(DatabaseIntegrityError):
             with database.transaction() as connection:
                 connection.execute(
                     f"""
@@ -1818,7 +1874,7 @@ def test_training_item_updates_recheck_visibility_and_subtype(
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(
                 f"""
@@ -1829,8 +1885,7 @@ def test_training_item_updates_recheck_visibility_and_subtype(
 
 
 def test_catalog_partition_and_exercise_subtype_are_immutable(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         _insert_food(
@@ -1875,7 +1930,7 @@ def test_catalog_partition_and_exercise_subtype_are_immutable(tmp_path):
         "UPDATE exercise_catalog SET exercise_type = 'cardio' WHERE id = 'exercise-1'",
     )
     for statement in invalid_updates:
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(DatabaseIntegrityError):
             with database.transaction() as connection:
                 connection.execute(statement)
 
@@ -1887,8 +1942,7 @@ def test_catalog_partition_and_exercise_subtype_are_immutable(tmp_path):
 
 
 def test_meal_and_training_session_owners_are_immutable(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(
@@ -1912,14 +1966,13 @@ def test_meal_and_training_session_owners_are_immutable(tmp_path):
         "UPDATE meals SET user_id = 'user-b' WHERE id = 'meal-1'",
         "UPDATE training_sessions SET user_id = 'user-b' WHERE id = 'session-1'",
     ):
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(DatabaseIntegrityError):
             with database.transaction() as connection:
                 connection.execute(statement)
 
 
 def test_json_columns_declare_array_or_object_shapes(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
     expected_shapes = {
         "data_migrations": {"details_json": "object"},
         "user_profile_versions": {"safety_conditions_json": "array"},
@@ -1958,11 +2011,16 @@ def test_json_columns_declare_array_or_object_shapes(tmp_path):
                 row["sql"]
                 for row in connection.execute(
                     """
-                    SELECT sql FROM sqlite_master
-                    WHERE type = 'trigger'
-                      AND tbl_name = ?
-                      AND name LIKE '%_json_shape_%'
-                    ORDER BY name
+                    SELECT p.prosrc AS sql
+                    FROM pg_trigger t
+                    JOIN pg_class c ON c.oid = t.tgrelid
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    JOIN pg_proc p ON p.oid = t.tgfoid
+                    WHERE n.nspname = current_schema()
+                      AND NOT t.tgisinternal
+                      AND c.relname = ?
+                      AND t.tgname LIKE '%_json_shape_%'
+                    ORDER BY t.tgname
                     """,
                     (table_name,),
                 )
@@ -1975,7 +2033,7 @@ def test_json_columns_declare_array_or_object_shapes(tmp_path):
         combined_sql = "\n".join(trigger_sql[table_name])
         for column_name, expected_shape in columns.items():
             assert (
-                f"json_type(NEW.{column_name}) <> '{expected_shape}'"
+                f"fitlife_json_type(NEW.{column_name}), '') <> '{expected_shape}'"
                 in combined_sql
             )
 
@@ -2012,10 +2070,9 @@ def test_json_columns_declare_array_or_object_shapes(tmp_path):
     ],
 )
 def test_json_columns_reject_the_wrong_shape(tmp_path, statement):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(statement)
 
@@ -2065,27 +2122,25 @@ def test_json_columns_reject_the_wrong_shape(tmp_path, statement):
                 user_id, operation, idempotency_key, response_json
             ) VALUES ('user-a', 'create-meal', 'key-1', '{}')
             """,
-            "UPDATE idempotency_keys SET response_json = '[]' WHERE id = 1",
+            "UPDATE idempotency_keys SET response_json = '[]' WHERE user_id = 'user-a' AND operation = 'create-meal' AND idempotency_key = 'key-1'",
         ),
     ],
 )
 def test_json_column_updates_reject_the_wrong_shape(
     tmp_path, insert_statement, update_statement
 ):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(insert_statement)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(DatabaseIntegrityError):
         with database.transaction() as connection:
             connection.execute(update_statement)
 
 
 def test_json_columns_accept_declared_shapes_and_valid_defaults(tmp_path):
-    database = SQLiteDatabase(tmp_path / "records.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
+    database = PostgresDatabase(TEST_DATABASE_URL)
 
     with database.transaction() as connection:
         connection.execute(
@@ -2116,8 +2171,8 @@ def test_json_columns_accept_declared_shapes_and_valid_defaults(tmp_path):
 
     with database.connection() as connection:
         assert connection.execute(
-            "SELECT json_type(details_json) FROM data_migrations"
+            "SELECT fitlife_json_type(details_json) FROM data_migrations"
         ).fetchone()[0] == "object"
         assert connection.execute(
-            "SELECT json_type(safety_conditions_json) FROM user_profile_versions"
+            "SELECT fitlife_json_type(safety_conditions_json) FROM user_profile_versions"
         ).fetchone()[0] == "array"

@@ -12,15 +12,13 @@ from backend.application.ports.workout_repository import (
 )
 from backend.domain.workouts import StrengthSet
 from backend.infrastructure.catalog.seed_exercises import seed_bundled_exercises
-from backend.infrastructure.repositories.sqlite_exercise_catalog_repository import (
-    SQLiteExerciseCatalogRepository,
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.infrastructure.repositories.postgres_exercise_catalog_repository import (
+    PostgresExerciseCatalogRepository,
 )
-from backend.infrastructure.repositories.sqlite_workout_repository import (
-    SQLiteWorkoutRepository,
+from backend.infrastructure.repositories.postgres_workout_repository import (
+    PostgresWorkoutRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
 
 
 SEED_PATH = Path(__file__).parents[2] / "data" / "catalog" / "exercises.zh-CN.v1.json"
@@ -30,13 +28,7 @@ LEGACY_SEARCH_TERMS_PATH = (
 EXPECTED_COUNT = 750
 
 
-def _database(tmp_path: Path) -> SQLiteDatabase:
-    database = SQLiteDatabase(tmp_path / "exercise-seed.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return database
-
-
-def test_seed_is_auditable_idempotent_and_searchable(tmp_path: Path) -> None:
+def test_seed_is_auditable_idempotent_and_searchable(pg_db) -> None:
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     assert len(payload["exercises"]) == EXPECTED_COUNT
     assert payload["dataset_version"] == "2026-08-09"
@@ -45,13 +37,13 @@ def test_seed_is_auditable_idempotent_and_searchable(tmp_path: Path) -> None:
     assert all(item["source_name"] == "free-exercise-db" for item in payload["exercises"])
     assert all(item["provenance"]["original_category"] != "stretching" for item in payload["exercises"])
 
-    database = _database(tmp_path)
+    database = pg_db
     first = seed_bundled_exercises(database, SEED_PATH)
     second = seed_bundled_exercises(database, SEED_PATH)
 
     assert first.inserted_count == EXPECTED_COUNT
     assert second.unchanged_count == EXPECTED_COUNT
-    repository = SQLiteExerciseCatalogRepository(database)
+    repository = PostgresExerciseCatalogRepository(database)
     full_squat_zh = _search_by_source_id(
         repository, "杠铃深蹲", "Barbell_Full_Squat"
     )
@@ -77,7 +69,7 @@ def test_seed_is_auditable_idempotent_and_searchable(tmp_path: Path) -> None:
     assert len(full_squat_zh.content_hash or "") == 64
 
 
-def test_seed_preserves_explicit_legacy_exercise_search_terms(tmp_path: Path) -> None:
+def test_seed_preserves_explicit_legacy_exercise_search_terms(pg_db) -> None:
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     legacy = json.loads(LEGACY_SEARCH_TERMS_PATH.read_text(encoding="utf-8"))[
         "exercises"
@@ -96,7 +88,7 @@ def test_seed_preserves_explicit_legacy_exercise_search_terms(tmp_path: Path) ->
             unicodedata.normalize("NFKC", term).casefold() for term in terms
         } <= available
 
-    database = _database(tmp_path)
+    database = pg_db
     seed_bundled_exercises(database, SEED_PATH)
     with database.connection() as connection:
         seeded = {
@@ -119,6 +111,7 @@ def test_seed_preserves_explicit_legacy_exercise_search_terms(tmp_path: Path) ->
 
 def test_localized_reimport_preserves_ids_and_historical_workout_names(
     tmp_path: Path,
+    pg_db,
 ) -> None:
     localized = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     legacy = json.loads(json.dumps(localized, ensure_ascii=False))
@@ -158,9 +151,9 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
         encoding="utf-8",
     )
 
-    database = _database(tmp_path)
+    database = pg_db
     seed_bundled_exercises(database, legacy_path)
-    catalog = SQLiteExerciseCatalogRepository(database)
+    catalog = PostgresExerciseCatalogRepository(database)
     old_squat = next(
         item
         for item in catalog.search("user-a", "杠铃全深蹲", limit=20)
@@ -168,7 +161,7 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
     )
     old_ids = _public_exercise_ids(database)
     _insert_profile(database)
-    workouts = SQLiteWorkoutRepository(
+    workouts = PostgresWorkoutRepository(
         database,
         clock=lambda: datetime(2026, 8, 15, tzinfo=timezone.utc),
     )
@@ -237,7 +230,7 @@ def test_localized_reimport_preserves_ids_and_historical_workout_names(
 
 
 def _search_by_source_id(
-    repository: SQLiteExerciseCatalogRepository,
+    repository: PostgresExerciseCatalogRepository,
     query: str,
     source_record_id: str,
 ) -> ExerciseCatalogItem:
@@ -247,7 +240,7 @@ def _search_by_source_id(
     return results[0]
 
 
-def _public_exercise_ids(database: SQLiteDatabase) -> dict[str, str]:
+def _public_exercise_ids(database: PostgresDatabase) -> dict[str, str]:
     with database.connection() as connection:
         rows = connection.execute(
             """
@@ -259,7 +252,7 @@ def _public_exercise_ids(database: SQLiteDatabase) -> dict[str, str]:
     return {row["source_record_id"]: row["id"] for row in rows}
 
 
-def _insert_profile(database: SQLiteDatabase) -> None:
+def _insert_profile(database: PostgresDatabase) -> None:
     with database.transaction() as connection:
         connection.execute(
             """
@@ -276,8 +269,8 @@ def _insert_profile(database: SQLiteDatabase) -> None:
         )
 
 
-def test_removed_seed_records_are_deactivated(tmp_path: Path) -> None:
-    database = _database(tmp_path)
+def test_removed_seed_records_are_deactivated(tmp_path: Path, pg_db) -> None:
+    database = pg_db
     seed_bundled_exercises(database, SEED_PATH)
     payload = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     payload["dataset_version"] = "2026-08-10"
@@ -288,4 +281,4 @@ def test_removed_seed_records_are_deactivated(tmp_path: Path) -> None:
     result = seed_bundled_exercises(database, removed)
 
     assert result.deactivated_count == EXPECTED_COUNT
-    assert SQLiteExerciseCatalogRepository(database).search("user-a", "深蹲", limit=20) == ()
+    assert PostgresExerciseCatalogRepository(database).search("user-a", "深蹲", limit=20) == ()

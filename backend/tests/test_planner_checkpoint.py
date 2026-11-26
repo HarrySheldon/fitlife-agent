@@ -9,19 +9,18 @@ from backend.agent.planner import PlannerRoute
 from backend.agent.runtime import AgentRuntime
 from backend.agent.workflow import FitLifeWorkflow, rebuild_state_after_planner
 from backend.infrastructure.agent_runtime.memory_run_repository import MemoryRunRepository, MemoryCheckpointStore
-from backend.infrastructure.agent_runtime.sqlite_run_repository import SQLiteRunRepository
-from backend.infrastructure.agent_runtime.sqlite_checkpoint_store import SQLiteCheckpointStore
+from backend.infrastructure.agent_runtime.postgres_run_repository import PostgresRunRepository
+from backend.infrastructure.agent_runtime.postgres_checkpoint_store import PostgresCheckpointStore
 from backend.infrastructure.repositories.file_fitness_repository import FileFitnessRepository
 
 
-@pytest.fixture(params=["memory", "sqlite"])
-def stores(request, tmp_path):
+@pytest.fixture(params=["memory", "postgres"])
+def stores(request, pg_db):
     if request.param == "memory":
         repository = MemoryRunRepository()
         return repository, MemoryCheckpointStore(repository), lambda: MemoryCheckpointStore(repository)
-    path = tmp_path / "checkpoint.sqlite3"
-    repository = SQLiteRunRepository(path)
-    return repository, SQLiteCheckpointStore(repository), lambda: SQLiteCheckpointStore(SQLiteRunRepository(path))
+    repository = PostgresRunRepository(pg_db)
+    return repository, PostgresCheckpointStore(repository), lambda: PostgresCheckpointStore(PostgresRunRepository(pg_db))
 
 
 class Gateway:

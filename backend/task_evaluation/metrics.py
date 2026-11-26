@@ -5,9 +5,7 @@ are derived from it rather than from completed decisions, because a handler that
 started and was torn down has no decision to count and would otherwise look
 identical to a handler that was never invoked.
 """
-import sqlite3
 import json
-from pathlib import Path
 
 from backend.task_evaluation.measurements import MEASURED_USAGE_SOURCES
 
@@ -45,7 +43,7 @@ def _payloads(connection, event_type, columns):
     payloads = []
     for run_id, raw in rows:
         try:
-            value = json.loads(raw)
+            value = raw if isinstance(raw, dict) else json.loads(raw)
         except (TypeError, ValueError):
             value = {}
         payloads.append({**(value if isinstance(value, dict) else {}), "_run_id": run_id})
@@ -103,14 +101,46 @@ def _attempt_closure(connection, columns):
     }
 
 
-def runtime_metrics(root):
-    path = Path(root) / "agent_runtime.sqlite3"
-    if not path.exists():
-        return dict(_EMPTY)
-    with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as connection:
-        rows = connection.execute("SELECT id,policy_version,attempt,started_at,finished_at,status,policy_snapshot_json FROM agent_runs").fetchall()
-        retries = connection.execute("SELECT COUNT(*) FROM agent_run_events WHERE event_type='STEP_RETRY_SCHEDULED'").fetchone()[0]
-        columns = {row[1] for row in connection.execute('PRAGMA table_info(agent_run_events)')}
+def runtime_metrics(root=None, *, database=None):
+    from backend.config import get_settings
+    from backend.infrastructure.postgres.database import PostgresDatabase
+
+    db = database if isinstance(database, PostgresDatabase) else (
+        root if isinstance(root, PostgresDatabase) else None
+    )
+    if db is None:
+        settings = get_settings()
+        db = PostgresDatabase(settings.database_url, schema=settings.database_schema)
+    with db.connection() as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                  AND table_name IN ('agent_runs', 'agent_run_events')
+                """
+            ).fetchall()
+        }
+        if not {"agent_runs", "agent_run_events"} <= tables:
+            return dict(_EMPTY)
+        rows = connection.execute(
+            "SELECT id,policy_version,attempt,started_at,finished_at,status,policy_snapshot_json FROM agent_runs"
+        ).fetchall()
+        retries = connection.execute(
+            "SELECT COUNT(*) FROM agent_run_events WHERE event_type='STEP_RETRY_SCHEDULED'"
+        ).fetchone()[0]
+        columns = {
+            row[0]
+            for row in connection.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = 'agent_run_events'
+                """
+            ).fetchall()
+        }
         decisions = _payloads(connection, "AGENT_TOOL_DECIDED", columns)
         progress = _payloads(connection, "AGENT_PROGRESS", columns)
         attempts = _attempt_closure(connection, columns)

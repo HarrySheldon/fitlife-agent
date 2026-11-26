@@ -286,13 +286,14 @@ def test_physical_mapping_and_data_errors_have_stable_exit_codes(tmp_path: Path,
     assert "NUTRIENT_UNIT_UNSUPPORTED" in captured.out
 
 
-def test_import_command_creates_database_and_skips_second_run(tmp_path: Path, capsys) -> None:
+def test_import_command_creates_database_and_skips_second_run(tmp_path: Path, make_isolated_pg_db, capsys) -> None:
     source = ROOT / "fixtures/tfda-foods.csv"
-    database = tmp_path / "catalog.sqlite3"
+    db = make_isolated_pg_db(initialize=False)
     localization = _food_localization(tmp_path)
     args = [
         "import", str(source), "--mapping", str(FOOD_PROFILE),
-        "--localization", str(localization), "--database", str(database)
+        "--localization", str(localization),
+        "--database", db.dsn, "--schema", db.target_schema,
     ]
 
     assert main(args) == 0
@@ -301,17 +302,21 @@ def test_import_command_creates_database_and_skips_second_run(tmp_path: Path, ca
     output = capsys.readouterr().out
     assert '"status": "committed"' in output
     assert '"status": "skipped"' in output
-    assert database.exists()
+    with db.connection() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM food_catalog WHERE source_record_id = 'A001'"
+        ).fetchone()[0]
+    assert count == 1
 
 
-def test_import_validation_failure_does_not_create_database(tmp_path: Path) -> None:
+def test_import_validation_failure_does_not_create_database(tmp_path: Path, make_isolated_pg_db) -> None:
     source = tmp_path / "invalid.csv"
     text = (ROOT / "fixtures/tfda-foods.csv").read_text(encoding="utf-8")
     source.write_text(
         text.replace("總碳水化合物,g,28.2", "總碳水化合物,mg,unknown"),
         encoding="utf-8",
     )
-    database = tmp_path / "must-not-exist.sqlite3"
+    db = make_isolated_pg_db(initialize=False)
     localization = _food_localization(tmp_path)
 
     exit_code = main(
@@ -323,9 +328,19 @@ def test_import_validation_failure_does_not_create_database(tmp_path: Path) -> N
             "--localization",
             str(localization),
             "--database",
-            str(database),
+            db.dsn,
+            "--schema",
+            db.target_schema,
         ]
     )
 
     assert exit_code == 4
-    assert not database.exists()
+    with db.connection() as connection:
+        migrated = connection.execute(
+            """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = ? AND table_name = 'food_catalog'
+            """,
+            (db.target_schema,),
+        ).fetchone()
+    assert migrated is None

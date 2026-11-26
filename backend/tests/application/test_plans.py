@@ -21,12 +21,10 @@ from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.application.use_cases.plans import Plans
 from backend.domain.errors import ApplicationError
 from backend.infrastructure.repositories.file_plan_repository import FilePlanRepository
-from backend.infrastructure.repositories.sqlite_coach_conversation_repository import (
-    SQLiteCoachConversationRepository,
+from backend.infrastructure.repositories.postgres_coach_conversation_repository import (
+    PostgresCoachConversationRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.database import PostgresDatabase
 from backend.infrastructure.user_lifecycle import user_lifecycle_guard
 from backend.schemas import AuthenticatedUser
 from backend.tools.data_access import DEFAULT_PROFILE, MEAL_COLUMNS, WORKOUT_COLUMNS
@@ -47,16 +45,14 @@ class _UnusedAnswer:
         raise AssertionError("plan interpretation must not reach the answer port")
 
 
-def _admission_on(tmp_path) -> CoachTurnService:
-    """A real admission service on a throwaway database.
+def _admission_on(database: PostgresDatabase) -> CoachTurnService:
+    """A real admission service on an isolated PostgreSQL test database.
 
     The endpoint genuinely takes the shared slot, so the test gives it a real one
     instead of stubbing the check away.
     """
-    database = SQLiteDatabase(tmp_path / "coach.sqlite")
-    run_migrations(database, RECORDS_MIGRATIONS)
     return CoachTurnService(
-        SQLiteCoachConversationRepository(database), _UnusedAnswer(), lease_id="test-lease"
+        PostgresCoachConversationRepository(database), _UnusedAnswer(), lease_id="test-lease"
     )
 
 
@@ -249,7 +245,7 @@ def test_plan_endpoints_keep_draft_and_activation_explicit(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize("delete_during_interpretation", [False, True])
-def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_path, monkeypatch, delete_during_interpretation):
+def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_path, monkeypatch, delete_during_interpretation, pg_db):
     from types import SimpleNamespace
 
     monkeypatch.setattr(plan_api, "get_settings", lambda: SimpleNamespace(data_dir=tmp_path))
@@ -287,7 +283,7 @@ def test_plan_interpretation_endpoint_loads_the_authorized_persisted_plan(tmp_pa
         user_id="user-a", display_name="User A"
     )
 
-    app.dependency_overrides[get_coach_admission_service] = lambda: _admission_on(tmp_path)
+    app.dependency_overrides[get_coach_admission_service] = lambda: _admission_on(pg_db)
 
     if delete_during_interpretation:
         with pytest.raises(ApplicationError) as raised:

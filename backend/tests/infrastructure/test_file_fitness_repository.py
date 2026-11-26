@@ -153,7 +153,7 @@ def test_concurrent_legacy_projection_preserves_unrelated_profile_update(
                 projection.project,
                 user_id,
                 SimpleNamespace(height_cm=180, weight_kg=80, age=35),
-                SimpleNamespace(goal="muscle_gain"),
+                SimpleNamespace(goal="muscle_gain", target_weight_kg=None),
                 SimpleNamespace(calories=3000, protein=160),
             )
             assert projection_entered.wait(timeout=5)

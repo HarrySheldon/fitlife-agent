@@ -9,14 +9,14 @@ from backend.domain.entry_interaction import CatalogDependency
 from backend.domain.entry_resolution import catalog_signature, resolve_item
 from backend.tests.application.test_smart_entry import _food
 
-from backend.infrastructure.repositories.sqlite_smart_entry_repository import SQLiteSmartEntryRepository
+from backend.infrastructure.repositories.postgres_smart_entry_repository import PostgresSmartEntryRepository
 from backend.tests.infrastructure.test_sqlite_smart_entry_repository import _database, _cleanup, _payload
 
 
 def test_partial_confirmation_preserves_body_and_replays_after_body_deletion():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         payload = _payload()
         values = {**payload.interaction.items[0].values, 'basis_type': 'per_100g'}
         item = replace(payload.interaction.items[0], state='ready', values=values, missing_fields=(),
@@ -68,7 +68,7 @@ def _confirm(repository, draft, **overrides):
 def test_partial_retains_missing_item_new_key_reuses_fact_and_ratio_only_scales_amount():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository, ratio=.5)
         result = _confirm(repository, draft)
         duplicate = _confirm(repository, draft, idempotency_key='new', request_fingerprint='new')
@@ -86,7 +86,7 @@ def test_partial_retains_missing_item_new_key_reuses_fact_and_ratio_only_scales_
 def test_all_selected_validate_before_any_write_and_foreign_is_hidden():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository)
         with pytest.raises(SmartEntryRepositoryError, match='ITEM_NOT_READY'):
             _confirm(repository, draft, selections=[{'item_id': item.item_id, 'item_revision': item.revision} for item in draft.payload.interaction.items])
@@ -102,7 +102,7 @@ def test_all_selected_validate_before_any_write_and_foreign_is_hidden():
 def test_concurrent_confirmation_commits_once_and_record_edits_and_deletes_are_historical():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository)
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = list(executor.map(lambda _: _confirm(repository, draft), range(2)))
@@ -123,7 +123,7 @@ def test_concurrent_confirmation_commits_once_and_record_edits_and_deletes_are_h
 def test_estimate_acceptance_is_exact_revision_and_preserves_sources():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository, estimated=True)
         revision = draft.payload.interaction.items[0].revision
         with pytest.raises(SmartEntryRepositoryError, match='ESTIMATE_ACCEPTANCE_REQUIRED'):
@@ -142,7 +142,7 @@ def test_expiry_new_key_rejected_but_historical_receipt_survives():
     database, path = _database()
     now = datetime(2026, 10, 15, tzinfo=timezone.utc)
     try:
-        repository = SQLiteSmartEntryRepository(database, clock=lambda: now)
+        repository = PostgresSmartEntryRepository(database, clock=lambda: now)
         draft = _active(repository)
         _confirm(repository, draft)
         now = datetime(2100, 1, 1, tzinfo=timezone.utc)
@@ -156,7 +156,7 @@ def test_expiry_new_key_rejected_but_historical_receipt_survives():
 def test_second_insert_failure_rolls_back_records_facts_and_draft(monkeypatch):
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository)
         second = draft.payload.interaction.items[1]
         values = {**second.values, 'calories': 100}
@@ -187,7 +187,7 @@ def test_second_insert_failure_rolls_back_records_facts_and_draft(monkeypatch):
 def test_real_catalog_dependency_is_checked_in_confirmation_and_totals_scaled_once():
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository, ratio=.5)
         food = _food('food-oats', '燕麦')
         with database.transaction() as connection:
@@ -224,7 +224,7 @@ def test_active_legacy_confirmation_only_consumes_training_and_blocks_food_bypas
     from backend.tests.infrastructure.test_sqlite_smart_entry_repository import _cardio_candidate
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository)
         with pytest.raises(SmartEntryRepositoryError, match='INTERACTION_CONFIRM_ITEMS_REQUIRED'):
             repository.confirm('owner', draft.id, expected_version=draft.version,
@@ -249,11 +249,11 @@ def test_active_legacy_confirmation_only_consumes_training_and_blocks_food_bypas
 
 
 def test_versions_and_account_deletion_remove_only_owners_history():
-    from backend.infrastructure.repositories.sqlite_profile_target_repository import SQLiteProfileTargetRepository
-    from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
+    from backend.infrastructure.repositories.postgres_profile_target_repository import PostgresProfileTargetRepository
+    from backend.infrastructure.repositories.postgres_task_budget_repository import PostgresTaskBudgetRepository
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository)
         revision = draft.payload.interaction.items[0].revision
         with pytest.raises(SmartEntryRepositoryError, match='DRAFT_VERSION_CONFLICT'):
@@ -261,12 +261,12 @@ def test_versions_and_account_deletion_remove_only_owners_history():
         with pytest.raises(SmartEntryRepositoryError, match='ITEM_REVISION_CONFLICT'):
             _confirm(repository, draft, selections=[{'item_id': 'segment-1', 'item_revision': revision + 1}])
         _confirm(repository, draft)
-        budgets = SQLiteTaskBudgetRepository(database)
+        budgets = PostgresTaskBudgetRepository(database)
         budgets.initialize('owner', draft.id, 2, 100)
         budgets.initialize('other', 'other-task', 2, 100)
         with database.transaction() as connection:
             connection.execute('INSERT INTO entry_item_commits SELECT ?,draft_id,item_id,item_revision,meal_id,meal_item_id,record_hash,created_at FROM entry_item_commits WHERE user_id=?', ('other', 'owner'))
-        SQLiteProfileTargetRepository(database).delete_user_data('owner')
+        PostgresProfileTargetRepository(database).delete_user_data('owner')
         with database.connection() as connection:
             assert [row[0] for row in connection.execute('SELECT user_id FROM entry_item_commits')] == ['other']
             assert [row[0] for row in connection.execute('SELECT user_id FROM task_budgets')] == ['other']
@@ -279,7 +279,7 @@ def test_active_pure_training_legacy_confirmation_preserves_original_behavior():
     from backend.tests.infrastructure.test_sqlite_smart_entry_repository import _cardio_candidate
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = repository.create_draft('owner', SmartEntryDraftPayload(
             '2026-10-15', '跑步 30分钟', 'test', (_cardio_candidate('training'),)),
             expires_at='2099-01-01T00:00:00Z')
@@ -296,14 +296,24 @@ def test_active_pure_training_legacy_confirmation_preserves_original_behavior():
 
 @pytest.mark.parametrize('corruption', ['blob', 'wrong_shape', 'oversize', 'deep'])
 def test_corrupt_confirmation_receipt_returns_bounded_error(corruption):
+    from backend.infrastructure.postgres.errors import DatabaseIntegrityError
+    from backend.infrastructure.repositories.postgres_entry_item_commits import _receipt
+
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository)
         _confirm(repository, draft)
         if corruption == 'blob':
-            serialized = b'{"private":"body"}'
-        elif corruption == 'wrong_shape':
+            with pytest.raises(DatabaseIntegrityError):
+                with database.transaction() as connection:
+                    connection.execute("UPDATE idempotency_keys SET response_json=? WHERE operation='entry_confirm_items'", ('not-json',))
+            with pytest.raises(SmartEntryRepositoryError, match='IDEMPOTENCY_RESPONSE_CORRUPT'):
+                _receipt('not-json')
+            with pytest.raises(SmartEntryRepositoryError, match='IDEMPOTENCY_RESPONSE_CORRUPT'):
+                _receipt(b'{}')
+            return
+        if corruption == 'wrong_shape':
             serialized = '{"commits":false}'
         elif corruption == 'oversize':
             serialized = '{"private":"' + 'x' * (300 * 1024) + '"}'
@@ -322,7 +332,7 @@ def test_corrupt_confirmation_receipt_returns_bounded_error(corruption):
 def test_confirmation_rejects_invalid_fingerprint_before_any_replay(fingerprint, receipt_exists):
     database, path = _database()
     try:
-        repository = SQLiteSmartEntryRepository(database)
+        repository = PostgresSmartEntryRepository(database)
         draft = _active(repository)
         _confirm(repository, draft)
         with pytest.raises(SmartEntryRepositoryError, match='ENTRY_COMMAND_INVALID'):

@@ -8,13 +8,17 @@ from backend.tests.test_model_connection_workflow_api import workflow_client, mo
 
 
 def test_offline_setup_export_activation_and_account_removal(workflow_client):
+    from urllib.parse import urlparse
     from backend.config import get_settings
     from backend.infrastructure.model_gateway.factory import resolve_user_model_gateway
-    from backend.infrastructure.sqlite.runtime import initialize_database
+    from backend.infrastructure.postgres.runtime import initialize_database
     from backend.task_evaluation.network import install_network_guard
 
     client, headers, calls = workflow_client
-    restore = install_network_guard()
+    parsed_db = urlparse(get_settings().database_url)
+    restore = install_network_guard(
+        allowed_addresses={(parsed_db.hostname or "127.0.0.1", parsed_db.port or 5432)}
+    )
     try:
         initialize_database()
         listed = client.post("/settings/model/preview/models", headers=headers, json=model_input(model=""))

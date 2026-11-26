@@ -4,8 +4,8 @@ from uuid import uuid4
 import pytest
 
 from backend.config import get_settings
-from backend.infrastructure.repositories.sqlite_smart_entry_repository import SQLiteSmartEntryRepository
-from backend.infrastructure.sqlite.runtime import get_database
+from backend.infrastructure.repositories.postgres_smart_entry_repository import PostgresSmartEntryRepository
+from backend.infrastructure.postgres.runtime import get_database
 from backend.tests.test_interactive_entry_api import BASE
 from backend.tests.test_s2_mixed_training_regression import _complete_training, _start
 from backend.tests.test_smart_entry_api import client, reset_settings_cache
@@ -14,7 +14,7 @@ from backend.tests.test_smart_entry_api import client, reset_settings_cache
 def _stale_food(client, monkeypatch, enabled, catalog_change):
     headers, active = _start(client, monkeypatch)
     database = get_database()
-    repository = SQLiteSmartEntryRepository(database)
+    repository = PostgresSmartEntryRepository(database)
     stored = repository.read_interaction_draft(active['user_id'], active['id'])
     food = next(item for item in stored.payload.candidates
                 if item.kind == 'food' and item.selected_catalog_id is not None)

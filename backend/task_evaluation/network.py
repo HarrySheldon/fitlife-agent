@@ -3,16 +3,22 @@ import socket
 from threading import local
 
 
-def install_network_guard():
+def install_network_guard(allowed_addresses: set[tuple[str, int]] | frozenset[tuple[str, int]] = ()):
     from backend.task_evaluation.runner import NetworkAttempt
     permission = local()
     originals = {name: getattr(socket.socket, name) for name in ("connect", "connect_ex", "sendto")}
     original_pair = socket.socketpair
     original_create = socket.create_connection
+    allowed = set(allowed_addresses)
 
     def permitted(address):
-        return (getattr(permission, "selfpipe", False) and isinstance(address, tuple)
-                and address and address[0] in {"127.0.0.1", "::1"})
+        if not isinstance(address, tuple) or not address:
+            return False
+        host = address[0]
+        port = address[1] if len(address) >= 2 and isinstance(address[1], int) else None
+        if port is not None and (host, port) in allowed:
+            return True
+        return getattr(permission, "selfpipe", False) and host in {"127.0.0.1", "::1"}
 
     def pair(*args, **kwargs):
         permission.selfpipe = True

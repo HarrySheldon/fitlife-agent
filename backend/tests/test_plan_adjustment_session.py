@@ -24,12 +24,11 @@ from backend.agent.tools.registry import SPECS, TASK_SPECS
 from backend.agent.unified_coach import UnifiedCoachWorkflow
 from backend.application.ports.agent_decision_gateway import AgentDecisionResult
 from backend.domain.plan_adjustment import CandidateVerdict, Violation
-from backend.infrastructure.repositories.sqlite_plan_adjustment_repository import (
-    SQLitePlanAdjustmentRepository,
+from backend.infrastructure.repositories.postgres_plan_adjustment_repository import (
+    PostgresPlanAdjustmentRepository,
 )
-from backend.infrastructure.sqlite.database import SQLiteDatabase
-from backend.infrastructure.sqlite.migrations import run_migrations
-from backend.infrastructure.sqlite.schema import RECORDS_MIGRATIONS
+from backend.infrastructure.postgres.database import PostgresDatabase
+from backend.tests.conftest import TEST_DATABASE_URL
 
 NOW = datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -77,10 +76,9 @@ def _ids():
     return next_id
 
 
-def _repository(tmp_path):
-    database = SQLiteDatabase(tmp_path / "plan.sqlite3")
-    run_migrations(database, RECORDS_MIGRATIONS)
-    return SQLitePlanAdjustmentRepository(database, clock=lambda: NOW, ids=_ids())
+def _repository(_tmp_path=None):
+    database = PostgresDatabase(TEST_DATABASE_URL)
+    return PostgresPlanAdjustmentRepository(database, clock=lambda: NOW, ids=_ids())
 
 
 def _task(repo, *, read=frozenset({"training"}), change=frozenset({"training"})):

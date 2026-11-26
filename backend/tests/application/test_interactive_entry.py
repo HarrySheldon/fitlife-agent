@@ -11,21 +11,19 @@ from pydantic import ValidationError
 from backend.application.ports.smart_entry_repository import SmartEntryDraftPayload
 from backend.application.use_cases.smart_entry import resolve_candidates
 from backend.domain.smart_entry import parse_entry_text
-from backend.infrastructure.repositories.sqlite_smart_entry_repository import SQLiteSmartEntryRepository
-from backend.infrastructure.repositories.sqlite_task_budget_repository import SQLiteTaskBudgetRepository
-from backend.tests.infrastructure.test_sqlite_smart_entry_repository import _database, _cleanup
+from backend.infrastructure.repositories.postgres_smart_entry_repository import PostgresSmartEntryRepository
+from backend.infrastructure.repositories.postgres_task_budget_repository import PostgresTaskBudgetRepository
 from backend.tests.application.test_smart_entry import _food
 
 
 @pytest.fixture
-def scenario():
-    database, path = _database()
+def scenario(pg_db):
     foods = Mock()
     food = _food('oats', '燕麦')
     foods.search.return_value = (food,)
     foods.get_visible_food.return_value = food
-    repository = SQLiteSmartEntryRepository(database)
-    budgets = SQLiteTaskBudgetRepository(database)
+    repository = PostgresSmartEntryRepository(pg_db)
+    budgets = PostgresTaskBudgetRepository(pg_db)
     service = InteractiveEntryService(repository, foods, budgets, enabled=True)
 
     def draft(text):
@@ -37,7 +35,6 @@ def scenario():
             expires_at='2099-01-01T00:00:00Z')
 
     yield service, draft, repository, foods, budgets
-    _cleanup(path)
 
 
 def test_sufficient_catalog_meal_has_no_question(scenario):
