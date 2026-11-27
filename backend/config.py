@@ -73,7 +73,16 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.5"
     # Local hashing is the default so user queries never leave for a remote
     # embedding API merely because a deployment OPENAI_API_KEY is present.
-    rag_embedding_provider: Literal["hashing", "openai"] = "hashing"
+    rag_embedding_provider: Literal["hashing", "openai", "bge-m3"] = "hashing"
+    rag_embedding_base_url: str | None = None
+    rag_embedding_api_key: str | None = None
+    rag_embedding_model: str = "BAAI/bge-m3"
+    rag_reranker_provider: Literal["none", "bge", "lexical"] = "none"
+    rag_reranker_base_url: str | None = None
+    rag_reranker_api_key: str | None = None
+    rag_reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    rag_chunk_overlap_ratio: float = Field(default=0.15, ge=0.0, le=0.4)
+    rag_contextual_prefix_mode: Literal["off", "deterministic", "llm"] = "deterministic"
     # Request-path index building can be disabled (e.g. in production/multi-worker)
     # after startup or `python -m backend.rag.build` publishes the active release.
     rag_allow_request_build: bool = True

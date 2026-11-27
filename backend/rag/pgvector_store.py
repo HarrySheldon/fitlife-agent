@@ -8,6 +8,7 @@ from typing import Any
 
 from backend.infrastructure.postgres.database import PostgresDatabase
 from backend.infrastructure.postgres.errors import DatabaseOperationalError
+from backend.rag.contextual import effective_search_text
 from backend.rag.contracts import (
     CHUNKING_VERSION,
     IndexManifest,
@@ -195,12 +196,47 @@ class PgVectorReleaseStore:
                     continue
         return f"release-{next_num:04d}"
 
-    def previous_vectors(
+    def previous_context_prefixes(
+        self,
+        *,
+        previous_release_id: str | None = None,
+    ) -> dict[tuple[str, str], str]:
+        """Load cached contextual prefixes keyed by ``(content_hash, document_version)``."""
+        try:
+            with self.database.connection() as connection:
+                target_id = previous_release_id
+                if target_id is None:
+                    ptr = connection.execute(
+                        "SELECT active_release_id FROM rag_active_pointer WHERE slot = 'default'"
+                    ).fetchone()
+                    if ptr is None:
+                        return {}
+                    target_id = ptr["active_release_id"]
+                rows = connection.execute(
+                    """
+                    SELECT content_hash, document_version, metadata_json
+                    FROM rag_chunks
+                    WHERE release_id = ?
+                    """,
+                    (target_id,),
+                ).fetchall()
+        except DatabaseOperationalError:
+            return {}
+        prefixes: dict[tuple[str, str], str] = {}
+        for row in rows:
+            meta = _decode_json(row["metadata_json"])
+            prefix = meta.get("context_prefix")
+            if isinstance(prefix, str) and prefix.strip():
+                prefixes[(row["content_hash"], row["document_version"])] = prefix.strip()
+        return prefixes
+
+    def previous_vectors_with_context(
         self,
         provider: Any,
         *,
         previous_release_id: str | None = None,
-    ) -> dict[str, list[float]]:
+    ) -> dict[tuple[str, str], list[float]]:
+        """Reuse vectors only when BOTH ``content_hash`` and ``context_prefix`` agree."""
         provider_name, model_name = _provider_identity(provider)
         target_dims = int(provider.dimensions)
         with self.database.connection() as connection:
@@ -229,16 +265,27 @@ class PgVectorReleaseStore:
             ):
                 return {}
             rows = connection.execute(
-                "SELECT content_hash, embedding::text AS vec FROM rag_chunks WHERE release_id = ?",
+                "SELECT content_hash, metadata_json, embedding::text AS vec FROM rag_chunks WHERE release_id = ?",
                 (previous_release_id,),
             ).fetchall()
-        vectors: dict[str, list[float]] = {}
+        vectors: dict[tuple[str, str], list[float]] = {}
         for row in rows:
+            meta = _decode_json(row["metadata_json"])
+            ctx_prefix = str(meta.get("context_prefix") or "")
             try:
-                vectors[row["content_hash"]] = _parse_vector(row["vec"])
+                vectors[(row["content_hash"], ctx_prefix)] = _parse_vector(row["vec"])
             except (TypeError, ValueError):
                 continue
         return vectors
+
+    def previous_vectors(
+        self,
+        provider: Any,
+        *,
+        previous_release_id: str | None = None,
+    ) -> dict[str, list[float]]:
+        by_ctx = self.previous_vectors_with_context(provider, previous_release_id=previous_release_id)
+        return {content_hash_key: vec for (content_hash_key, _ctx), vec in by_ctx.items()}
 
     def publish_release(
         self,
@@ -260,14 +307,19 @@ class PgVectorReleaseStore:
             if chunk.get("content_hash") != content_hash(chunk["text"]):
                 raise ValueError("chunk content_hash does not match its text")
 
-        reuse = self.previous_vectors(provider, previous_release_id=previous_release_id)
+        reuse = self.previous_vectors_with_context(provider, previous_release_id=previous_release_id)
         provider_name, model_name = _provider_identity(provider)
 
         prepared_rows: list[tuple[dict[str, Any], list[float]]] = []
         dimensions: int | None = int(getattr(provider, "dimensions", 0) or 0) or None
         for chunk in chunks:
-            cached = reuse.get(chunk["content_hash"])
-            vector = list(cached) if cached is not None else embedding_lookup(chunk["text"])
+            cache_key = (chunk["content_hash"], str(chunk.get("context_prefix") or ""))
+            cached = reuse.get(cache_key)
+            vector = (
+                list(cached)
+                if cached is not None
+                else embedding_lookup(effective_search_text(chunk))
+            )
             width = _validate_vector(vector, dimensions=dimensions, where=chunk["chunk_id"])
             dimensions = width if dimensions is None else dimensions
             prepared_rows.append((chunk, list(vector)))

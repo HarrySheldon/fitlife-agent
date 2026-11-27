@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Bumping this changes every chunk_id, so it must be recorded in the manifest: a
 # different splitter is a different corpus, not the same corpus chunked differently.
-CHUNKING_VERSION = "markdown-heading-v2"
+CHUNKING_VERSION = "markdown-heading-v3"
 MANIFEST_SCHEMA_VERSION = 1
 
 RetrievalStatus = Literal["ok", "insufficient", "unavailable"]

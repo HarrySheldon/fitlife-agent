@@ -1,16 +1,21 @@
 ﻿from __future__ import annotations
 
 import time
+from datetime import date, datetime, timezone
+from typing import Any, Mapping
 
 from backend.agent.telemetry import SafeTelemetryContext, active_telemetry_context
 from backend.config import get_settings
 from backend.infrastructure.postgres.database import PostgresDatabase
 from backend.infrastructure.postgres.runtime import get_database
+from backend.rag.bm25 import BM25Index
 from backend.rag.contracts import Hit, IndexManifest, RetrievalResult
 from backend.rag.index_release import index_is_valid, load_release, publish_release, read_manifest
 from backend.rag.ingest import ensure_chunk_identity, load_knowledge_chunks
 from backend.rag.pgvector_store import PgVectorReleaseStore
+from backend.rag.query_router import classify_query
 from backend.rag.ranking import fuse, rerank, select_with_diversity
+from backend.rag.reranker import build_reranker
 from backend.rag.vector_store import (
     EmbeddingProvider,
     build_embedding_provider,
@@ -35,15 +40,103 @@ def _resolve_database(database: PostgresDatabase | None) -> PostgresDatabase:
     return database if database is not None else get_database()
 
 
+def _parse_iso_date(raw: object) -> date | None:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def is_chunk_valid_at(chunk: Mapping[str, Any], as_of: date | datetime | None = None) -> bool:
+    """Enforce ``valid_from`` / ``expires_at`` metadata at the retrieval layer."""
+    ref_date = _parse_iso_date(as_of) or datetime.now(timezone.utc).date()
+    valid_from = _parse_iso_date(chunk.get("valid_from"))
+    expires_at = _parse_iso_date(chunk.get("expires_at"))
+    if valid_from is not None and ref_date < valid_from:
+        return False
+    if expires_at is not None and ref_date > expires_at:
+        return False
+    return True
+
+
+def _matches_filters(
+    chunk: Mapping[str, Any],
+    *,
+    domain: str | None = None,
+    doc_type: str | None = None,
+    extra_filters: Mapping[str, Any] | None = None,
+) -> bool:
+    if domain is not None and domain != "general":
+        chunk_domain = chunk.get("domain")
+        if chunk_domain not in (None, domain, "general"):
+            return False
+    if doc_type is not None and chunk.get("doc_type") is not None:
+        if chunk.get("doc_type") != doc_type:
+            return False
+    if extra_filters:
+        for key, expected in extra_filters.items():
+            if expected is None:
+                continue
+            if chunk.get(key) != expected:
+                return False
+    return True
+
+
+def _filter_release_chunks(
+    chunks: list[dict],
+    *,
+    as_of: date | datetime | None,
+    domain: str | None,
+    strict_filter: bool,
+    extra_filters: Mapping[str, Any] | None,
+) -> tuple[list[dict], set[str] | None]:
+    valid_chunks = [chunk for chunk in chunks if is_chunk_valid_at(chunk, as_of)]
+    if domain is None and not extra_filters:
+        return valid_chunks, {c["chunk_id"] for c in valid_chunks}
+    filtered = [
+        chunk
+        for chunk in valid_chunks
+        if _matches_filters(chunk, domain=domain, extra_filters=extra_filters)
+    ]
+    if filtered or strict_filter:
+        return filtered, {c["chunk_id"] for c in filtered}
+    # When inferred domain filter produces zero valid candidates (soft hint), keep valid pool.
+    return valid_chunks, {c["chunk_id"] for c in valid_chunks}
+
+
+def _load_chunks_for_build(database: PostgresDatabase) -> list[dict]:
+    settings = get_settings()
+    if settings.rag_contextual_prefix_mode == "llm":
+        try:
+            cached = PgVectorReleaseStore(database).previous_context_prefixes()
+        except Exception:
+            cached = {}
+        if cached:
+            try:
+                return ensure_chunk_identity(load_knowledge_chunks(cached_prefixes=cached))
+            except TypeError:
+                pass
+    return ensure_chunk_identity(load_knowledge_chunks())
+
+
 def build_knowledge_index(
     *,
     provider: EmbeddingProvider | None = None,
     database: PostgresDatabase | None = None,
 ) -> str:
     """Ensure an up-to-date release is published in PostgreSQL and warm the cache."""
-    chunks = ensure_chunk_identity(load_knowledge_chunks())
-    provider = provider or build_embedding_provider()
     db = _resolve_database(database)
+    chunks = _load_chunks_for_build(db)
+    provider = provider or build_embedding_provider()
     manifest, _ = _load_or_build_release(chunks, provider=provider, database=db, allow_build=True)
     return manifest.release_id
 
@@ -54,9 +147,20 @@ def retrieve_knowledge(
     *,
     provider: EmbeddingProvider | None = None,
     database: PostgresDatabase | None = None,
+    scope: str | None = None,
+    as_of: date | datetime | None = None,
+    filters: Mapping[str, Any] | None = None,
 ) -> list[dict]:
     """Compatibility entry: just the hits, returning plain dicts."""
-    result = retrieve_detailed(query, top_k, provider=provider, database=database)
+    result = retrieve_detailed(
+        query,
+        top_k,
+        provider=provider,
+        database=database,
+        scope=scope,
+        as_of=as_of,
+        filters=filters,
+    )
     return [
         {
             "chunk_id": hit.chunk_id,
@@ -81,15 +185,22 @@ def retrieve_detailed(
     per_source_cap: int = 2,
     allow_build: bool | None = None,
     telemetry=None,
+    scope: str | None = None,
+    as_of: date | datetime | None = None,
+    filters: Mapping[str, Any] | None = None,
+    use_reranker: bool = True,
 ) -> RetrievalResult:
-    """The full answer: status, hits, release, mode and why it fell back."""
+    """Hybrid dense + Chinese BM25 -> RRF -> cross-encoder rerank retrieval with validity checks."""
     tel = SafeTelemetryContext(telemetry) if telemetry is not None else SafeTelemetryContext(active_telemetry_context())
     started = time.monotonic()
-    chunks = ensure_chunk_identity(load_knowledge_chunks())
+    db = _resolve_database(database)
+    chunks = _load_chunks_for_build(db)
     provider = provider or build_embedding_provider()
     settings = get_settings()
-    db = _resolve_database(database)
     effective_allow_build = settings.rag_allow_request_build if allow_build is None else allow_build
+    effective_reranker = reranker if reranker is not None else (build_reranker(settings) if use_reranker else None)
+
+    query_plan = classify_query(query, explicit_scope=scope)
 
     with tel.sync_span("fitlife.rag.retrieve", {"provider": str(getattr(provider, "provider_name", "unknown")), "model": str(getattr(provider, "model_name", "unknown"))}) as retrieve_span:
         try:
@@ -100,7 +211,7 @@ def retrieve_detailed(
                 allow_build=effective_allow_build,
             )
             release_id = manifest.release_id
-            vector_candidates = _vector_candidates(
+            raw_vector_candidates = _vector_candidates(
                 query,
                 database=db,
                 release_id=release_id,
@@ -114,20 +225,39 @@ def retrieve_detailed(
             retrieve_span.set_attributes({"outcome": "failed", "fallback_reason": "index_error", "duration_ms": max(0.0, (time.monotonic() - started) * 1000)})
             return RetrievalResult.unavailable(reason="index_error")
 
-        lexical_candidates = _lexical_candidates(query, release_chunks, limit=len(release_chunks))
+        filtered_chunks, allowed_ids = _filter_release_chunks(
+            release_chunks,
+            as_of=as_of,
+            domain=query_plan.domain,
+            strict_filter=query_plan.strict_filter,
+            extra_filters=filters,
+        )
+        vector_candidates = _rerank_positions(
+            [hit for hit in raw_vector_candidates if hit.chunk_id in allowed_ids]
+        )
+
+        lexical_candidates = _lexical_candidates(query, filtered_chunks, limit=len(filtered_chunks))
         if not lexical_candidates:
-            retrieve_span.set_attributes({"outcome": "succeeded", "release_id": release_id, "fallback_reason": "no_matching_chunk", "candidate_count": len(vector_candidates), "hit_count": 0, "duration_ms": max(0.0, (time.monotonic() - started) * 1000)})
+            retrieve_span.set_attributes({
+                "outcome": "succeeded",
+                "release_id": release_id,
+                "fallback_reason": "no_matching_chunk",
+                "candidate_count": len(vector_candidates),
+                "hit_count": 0,
+                "duration_ms": max(0.0, (time.monotonic() - started) * 1000),
+            })
             return RetrievalResult.insufficient(release_id=release_id)
 
+        used_lexical = _query_is_wordlike(query) or bool(lexical_candidates)
         fused = (
             fuse([vector_candidates, lexical_candidates])
-            if _query_is_wordlike(query)
-            else fuse([vector_candidates])
+            if used_lexical and vector_candidates
+            else fuse([lexical_candidates] if lexical_candidates else [vector_candidates])
         )
         picked = select_with_diversity(fused, top_k=top_k, per_source_cap=per_source_cap)
         rerank_started = time.monotonic()
         with tel.sync_span("fitlife.rag.rerank", {"candidate_count": len(picked)}) as rerank_span:
-            outcome = rerank(query, picked, reranker=reranker)
+            outcome = rerank(query, picked, reranker=effective_reranker)
             rerank_span.set_attributes({
                 "outcome": "succeeded",
                 "hit_count": len(outcome.hits),
@@ -135,6 +265,15 @@ def retrieve_detailed(
                 "duration_ms": max(0.0, (time.monotonic() - rerank_started) * 1000),
             })
 
+        mode = (
+            "reranked"
+            if outcome.applied
+            else "hybrid"
+            if (vector_candidates and lexical_candidates)
+            else "lexical"
+            if lexical_candidates
+            else "vector"
+        )
         hits = [
             Hit(
                 chunk_id=item.chunk_id,
@@ -150,19 +289,34 @@ def retrieve_detailed(
         result = RetrievalResult.found(
             hits=hits,
             release_id=release_id or "release-unknown",
-            retrieval_mode="hybrid",
+            retrieval_mode=mode,
             fallback_reason=outcome.reason,
         )
         retrieve_span.set_attributes({
             "outcome": "succeeded",
             "release_id": release_id or "release-unknown",
-            "retrieval_mode": result.retrieval_mode or "hybrid",
+            "retrieval_mode": mode,
             "candidate_count": len(fused),
             "hit_count": len(hits),
             **({"fallback_reason": outcome.reason} if outcome.reason else {}),
             "duration_ms": max(0.0, (time.monotonic() - started) * 1000),
         })
         return result
+
+
+def _rerank_positions(hits: list[Hit]) -> list[Hit]:
+    return [
+        Hit(
+            chunk_id=hit.chunk_id,
+            content_hash=hit.content_hash,
+            source=hit.source,
+            heading=hit.heading,
+            text=hit.text,
+            rank=position,
+            score=hit.score,
+        )
+        for position, hit in enumerate(hits, start=1)
+    ]
 
 
 def _vector_candidates(
@@ -196,14 +350,9 @@ def _vector_candidates(
 
 
 def _lexical_candidates(query: str, chunks: list[dict], *, limit: int) -> list[Hit]:
-    scored = []
-    for chunk in chunks:
-        searchable = f"{chunk['source']} {chunk['heading']} {chunk['text']}"
-        score = score_text(query, searchable)
-        if score <= 0:
-            continue
-        scored.append((score, chunk))
-    scored.sort(key=lambda item: (-item[0], item[1]["chunk_id"]))
+    if not chunks or limit <= 0:
+        return []
+    scored = BM25Index(chunks).score_all(query)
     return [
         Hit(
             chunk_id=chunk["chunk_id"],

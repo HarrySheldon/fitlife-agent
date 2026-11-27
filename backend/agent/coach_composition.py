@@ -63,11 +63,16 @@ def local_knowledge(query, top_k, *, scope):
     to quote from, and inventing one is how an unsupported answer gets a citation.
     """
     allowed = {
-        'training': {'fitness_rules.md', 'exercise_library.md', 'plan_rules.md'},
-        'nutrition': {'nutrition_guidelines.md', 'meal_templates.md', 'plan_rules.md'},
+        'training': {'fitness_rules.md', 'exercise_library.md', 'plan_rules.md', 'training_volume_tables.md', 'recovery_and_safety_policy.md'},
+        'nutrition': {'nutrition_guidelines.md', 'meal_templates.md', 'plan_rules.md', 'macro_substitution_tables.md', 'recovery_and_safety_policy.md'},
     }.get(scope)
-    result = retrieve_detailed(query, top_k=max(top_k, 5),
-                               provider=HashingEmbeddingProvider())
+    from backend.rag.vector_store import build_embedding_provider
+    result = retrieve_detailed(
+        query,
+        top_k=max(top_k, 5),
+        provider=build_embedding_provider(),
+        scope=scope,
+    )
     if result.status != 'ok':
         return []
     hits = [hit for hit in result.hits
