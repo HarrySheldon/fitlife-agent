@@ -6,7 +6,7 @@ import json
 import random as random_module
 import re
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from contextvars import copy_context
