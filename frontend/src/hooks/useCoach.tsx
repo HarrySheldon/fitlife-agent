@@ -1,14 +1,24 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { coachApi } from '../services/coachApi'
-import type { CoachConversation, CoachMessage, CoachSend, CoachTurn } from '../types/coach'
+import type {
+  CoachConversation,
+  CoachMessage,
+  CoachSend,
+  CoachStreamEvent,
+  CoachStreamProgressEvent,
+  CoachTurn,
+} from '../types/coach'
 import { holdsCoachSlot } from '../types/coach'
 
 export type CoachReadDomain = 'profile' | 'training' | 'diet'
+export type CoachApiClient = Omit<typeof coachApi, 'streamTurn'> & {
+  streamTurn?: typeof coachApi.streamTurn
+}
 const DEFAULT_READ_DOMAINS: CoachReadDomain[] = ['profile', 'training', 'diet']
 
 // One controller per authenticated owner; UI visibility never owns execution.
-export function useCoachController(owner: string, api = coachApi) {
+export function useCoachController(owner: string, api: CoachApiClient = coachApi) {
   const [open, setOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
   const [conversations, setConversations] = useState<CoachConversation[]>([])
@@ -27,13 +37,103 @@ export function useCoachController(owner: string, api = coachApi) {
   const [sending, setSending] = useState(false)
   const [supportsReadConsent, setSupportsReadConsent] = useState(false)
   const [capabilitiesReady, setCapabilitiesReady] = useState(false)
+  const [streamSteps, setStreamSteps] = useState<CoachStreamProgressEvent[]>([])
+  const [streamingBody, setStreamingBody] = useState('')
+  const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null)
   const alive = useRef(true)
   const sendingRef = useRef(false)
   const selectedRef = useRef(selected)
   const openRef = useRef(open)
   const tracked = useRef<CoachTurn | null>(null)
+  const streamAbortRef = useRef<AbortController | null>(null)
+  const streamingTurnIdRef = useRef<string | null>(null)
   const requestEpoch = useRef(0)
   const selectionTouched = useRef(false)
+
+  const clearStreamState = () => {
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = null
+    streamingTurnIdRef.current = null
+    setStreamSteps([])
+    setStreamingBody('')
+    setStreamingConversationId(null)
+  }
+
+  const startTurnStream = (turn: CoachTurn) => {
+    const streamFn = (api as Partial<typeof coachApi>).streamTurn
+    if (typeof streamFn !== 'function' || !holdsCoachSlot(turn)) return
+    if (streamingTurnIdRef.current === turn.turn_id) return
+    streamAbortRef.current?.abort()
+    const controller = new AbortController()
+    streamAbortRef.current = controller
+    streamingTurnIdRef.current = turn.turn_id
+    setStreamingConversationId(turn.conversation_id)
+    setStreamSteps([])
+    setStreamingBody('')
+    void streamFn(turn.turn_id, {
+      signal: controller.signal,
+      onEvent: (ev: CoachStreamEvent) => {
+        if (!alive.current || controller.signal.aborted || streamingTurnIdRef.current !== turn.turn_id) return
+        if (ev.event === 'step_progress') {
+          setStreamSteps(old => {
+            const last = old[old.length - 1]
+            if (last && last.stage === ev.data.stage && last.status === ev.data.status) return old
+            return [...old.slice(-11), ev.data]
+          })
+          return
+        }
+        if (ev.event === 'answer_delta') {
+          setStreamingBody(old => old + ev.data.delta)
+          return
+        }
+        if (ev.event === 'turn_done') {
+          streamingTurnIdRef.current = null
+          streamAbortRef.current = null
+          setStreamSteps([])
+          setStreamingBody('')
+          setStreamingConversationId(null)
+          setActive(null)
+          tracked.current = null
+          setLastTurn(ev.data.turn)
+          const msg = ev.data.message
+          if (msg) {
+            setMessages(old => {
+              const existing = old[ev.data.turn.conversation_id] ?? []
+              if (existing.some(item => item.message_id === msg.message_id)) return old
+              return { ...old, [ev.data.turn.conversation_id]: [...existing, msg] }
+            })
+          }
+          void api.messages(ev.data.turn.conversation_id).then(updated => {
+            if (alive.current) setMessages(old => ({ ...old, [ev.data.turn.conversation_id]: updated.messages }))
+          }).catch(() => {})
+          if (!openRef.current || selectedRef.current !== ev.data.turn.conversation_id) setUnread(true)
+          return
+        }
+        if (ev.event === 'turn_error') {
+          streamingTurnIdRef.current = null
+          streamAbortRef.current = null
+          setStreamSteps([])
+          setStreamingBody('')
+          setStreamingConversationId(null)
+          setActive(null)
+          tracked.current = null
+          void api.turn(ev.data.turn_id).then(final => {
+            if (alive.current) setLastTurn(final)
+          }).catch(() => {})
+        }
+      },
+      onClose: () => {
+        if (streamingTurnIdRef.current === turn.turn_id) {
+          streamingTurnIdRef.current = null
+        }
+      },
+      onError: () => {
+        if (streamingTurnIdRef.current === turn.turn_id) {
+          streamingTurnIdRef.current = null
+        }
+      },
+    })
+  }
   const setSelected = (id: string | null) => {
     // A stop notice belongs to the turn it stopped. Showing it next to a later
     // answer, or in another chat, would read as if that turn had been stopped.
@@ -89,6 +189,9 @@ export function useCoachController(owner: string, api = coachApi) {
         if (stopped) return
         if (epoch !== requestEpoch.current) { timer = setTimeout(poll, 1500); return }
         tracked.current = result.turn
+        if (result.turn && holdsCoachSlot(result.turn)) {
+          startTurnStream(result.turn)
+        }
       } catch { if (!stopped) setError(true) }
       if (!stopped) timer = setTimeout(poll, 1500)
     }
@@ -101,7 +204,7 @@ export function useCoachController(owner: string, api = coachApi) {
       )
     }).catch(() => { if (!stopped) setError(true) })
     void poll()
-    return () => { stopped = true; alive.current = false; clearTimeout(timer) }
+    return () => { stopped = true; alive.current = false; clearTimeout(timer); clearStreamState() }
   }, [owner, api])
 
   useEffect(() => {
@@ -156,6 +259,9 @@ export function useCoachController(owner: string, api = coachApi) {
       setActive(holdsCoachSlot(turn) ? turn : null)
       tracked.current = turn
       setLastTurn(turn)
+      if (holdsCoachSlot(turn)) {
+        startTurnStream(turn)
+      }
       setDrafts(old => {
         const next = { ...old }
         for (const key of new Set([original ?? 'new', conversation])) {
@@ -217,16 +323,17 @@ export function useCoachController(owner: string, api = coachApi) {
     readDomains, setReadDomains, toggleReadDomain,
     active, lastTurn: selected ? lastTurns[selected] ?? null : null,
     error, notice, unread, clearUnread, sending, supportsReadConsent, capabilitiesReady,
+    streamSteps, streamingBody, streamingConversationId,
     show, newChat, send, stop, remove, rename,
   }
 }
 
 type Controller = ReturnType<typeof useCoachController>
 const CoachContext = createContext<Controller | null>(null)
-export function CoachProvider({ owner, children, api = coachApi }: { owner: string; children: ReactNode; api?: typeof coachApi }) {
+export function CoachProvider({ owner, children, api = coachApi }: { owner: string; children: ReactNode; api?: CoachApiClient }) {
   return <CoachOwner key={owner} owner={owner} api={api}>{children}</CoachOwner>
 }
-function CoachOwner({ owner, children, api }: { owner: string; children: ReactNode; api: typeof coachApi }) {
+function CoachOwner({ owner, children, api }: { owner: string; children: ReactNode; api: CoachApiClient }) {
   const controller = useCoachController(owner, api)
   return <CoachContext.Provider value={controller}>{children}</CoachContext.Provider>
 }

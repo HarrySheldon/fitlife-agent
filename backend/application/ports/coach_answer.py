@@ -9,7 +9,7 @@ database, and lets the lifecycle tests run without a model.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Callable, Protocol
 
 from backend.domain.user_preferences import UserPreferences
 
@@ -30,6 +30,9 @@ class CoachTurnRequest:
     plan_id: str | None = None
     report_week: str | None = None
     read_domains: tuple[str, ...] | None = None
+    progress_observer: Callable[[dict[str, object]], None] | None = field(
+        default=None, compare=False, repr=False
+    )
 
 
 @dataclass(frozen=True)

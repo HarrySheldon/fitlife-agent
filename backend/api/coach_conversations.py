@@ -21,14 +21,17 @@ migrating to this one.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.agent.telemetry import SafeTelemetryContext, active_telemetry_context
 from backend.api.dependencies import require_current_user
 from backend.api.preference_context import preferences_for
 from backend.api.utils import ok
@@ -37,9 +40,11 @@ from backend.application.ports.coach_conversation_repository import (
     ConversationRecord,
     TurnRecord,
 )
+from backend.application.use_cases.coach_turn_stream import SSE_KEEPALIVE_SECONDS, StreamEvent
 from backend.application.use_cases.coach_turns import CoachTurnService
 from backend.config import get_settings
 from backend.domain.coach_answer import ACTION_REGISTRY, AnswerLanguage, resolve_language
+from backend.domain.coach_conversation import TERMINAL_TURN_STATUSES
 from backend.domain.coach_turn import (
     TurnNotCancellable,
     TurnSlotBusy,
@@ -47,6 +52,7 @@ from backend.domain.coach_turn import (
 )
 from backend.domain.errors import ApplicationError
 from backend.domain.user_preferences import AppLanguage
+from backend.i18n import translate_public_message
 from backend.infrastructure.agent_runtime.coach_answer_adapter import (
     RuntimeCoachAnswerAdapter,
 )
@@ -425,6 +431,240 @@ def read_turn(
     except KeyError:
         raise _missing_turn() from None
     return ok(_turn_payload(record))
+
+
+def _parse_last_event_id(raw: str | None) -> int:
+    if raw is None:
+        return 0
+    try:
+        parsed = int(raw.strip())
+    except (ValueError, AttributeError):
+        return 0
+    return max(0, parsed)
+
+
+def _terminal_sse_events(
+    record: TurnRecord,
+    *,
+    service: CoachTurnService,
+    user: AuthenticatedUser,
+    language: AppLanguage,
+) -> list[StreamEvent]:
+    events: list[StreamEvent] = []
+    seq = 1
+    events.append(
+        StreamEvent(
+            id=seq,
+            event="turn_status",
+            data={
+                "turn_id": record.turn_id,
+                "status": record.status,
+                "stopping": False,
+                "version": record.version,
+                "stage": record.status,
+            },
+            turn_id=record.turn_id,
+        )
+    )
+    seq += 1
+
+    coach_message = None
+    if record.status in {"succeeded", "awaiting_user"}:
+        try:
+            messages = service.repository.list_messages(
+                user.user_id, record.conversation_id, now=_now(service)
+            )
+            coach_message = next(
+                (
+                    item
+                    for item in messages
+                    if item.turn_id == record.turn_id
+                    and item.role == "coach"
+                    and item.review_status == "approved"
+                ),
+                None,
+            )
+        except KeyError:
+            coach_message = None
+
+    if coach_message is not None:
+        body = coach_message.body
+        chunk_size = 48
+        for index, start in enumerate(range(0, len(body), chunk_size)):
+            events.append(
+                StreamEvent(
+                    id=seq,
+                    event="answer_delta",
+                    data={
+                        "turn_id": record.turn_id,
+                        "message_id": coach_message.message_id,
+                        "delta": body[start : start + chunk_size],
+                        "index": index,
+                    },
+                    turn_id=record.turn_id,
+                )
+            )
+            seq += 1
+        events.append(
+            StreamEvent(
+                id=seq,
+                event="turn_done",
+                data={
+                    "turn": _turn_payload(record),
+                    "message": _message_payload(coach_message),
+                },
+                turn_id=record.turn_id,
+            )
+        )
+    elif record.status == "succeeded":
+        events.append(
+            StreamEvent(
+                id=seq,
+                event="turn_done",
+                data={"turn": _turn_payload(record), "message": None},
+                turn_id=record.turn_id,
+            )
+        )
+    else:
+        notice = (
+            cancellation_notice(language)
+            if record.status == "cancelled"
+            else translate_public_message(record.error_code or "INTERNAL_ERROR", language)
+        )
+        events.append(
+            StreamEvent(
+                id=seq,
+                event="turn_error",
+                data={
+                    "turn_id": record.turn_id,
+                    "status": record.status,
+                    "error_code": record.error_code,
+                    "message": notice,
+                },
+                turn_id=record.turn_id,
+            )
+        )
+    return events
+
+
+@router.get("/turns/{turn_id}/stream")
+async def stream_turn(
+    turn_id: str,
+    request: Request,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    after_id: int | None = None,
+    user: AuthenticatedUser = Depends(require_current_user),
+    service: CoachTurnService = Depends(get_coach_turn_service),
+):
+    """Stream redacted turn lifecycle/step milestones and approved answer deltas."""
+    try:
+        record = service.repository.get_turn(user.user_id, turn_id)
+    except KeyError:
+        raise _missing_turn() from None
+
+    resume_after = max(0, after_id) if after_id is not None else _parse_last_event_id(last_event_id)
+    user_lang = resolve_language(account=preferences_for(user).language)
+    is_terminal = record.status in TERMINAL_TURN_STATUSES or record.status == "timed_out"
+
+    if is_terminal:
+        terminal_events = [
+            ev
+            for ev in _terminal_sse_events(
+                record, service=service, user=user, language=user_lang
+            )
+            if ev.id > resume_after
+        ]
+
+        async def replay_terminal():
+            telemetry = SafeTelemetryContext(active_telemetry_context())
+            async with telemetry.span("fitlife.coach.sse", {"operation": "replay_terminal", "outcome": "succeeded"}):
+                for ev in terminal_events:
+                    if await request.is_disconnected():
+                        return
+                    yield ev.format_sse()
+
+        return StreamingResponse(
+            replay_terminal(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    replay, queue, closed, unsubscribe = service.event_bus.subscribe(
+        turn_id, after_id=resume_after
+    )
+
+    async def stream_live():
+        telemetry = SafeTelemetryContext(active_telemetry_context())
+        try:
+            async with telemetry.span("fitlife.coach.sse", {"operation": "live_stream"}):
+                if not replay and resume_after == 0 and not closed:
+                    initial = StreamEvent(
+                        id=0,
+                        event="turn_status",
+                        data={
+                            "turn_id": record.turn_id,
+                            "status": record.status,
+                            "stopping": record.status == "running" and record.cancel_requested_at is not None,
+                            "version": record.version,
+                            "stage": record.status,
+                        },
+                        turn_id=record.turn_id,
+                    )
+                    yield initial.format_sse()
+
+                for ev in replay:
+                    if await request.is_disconnected():
+                        return
+                    yield ev.format_sse()
+                    if ev.event in {"turn_done", "turn_error"}:
+                        return
+
+                if closed:
+                    return
+
+                while True:
+                    if await request.is_disconnected():
+                        return
+                    try:
+                        item = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_SECONDS)
+                    except asyncio.TimeoutError:
+                        # Confirm turn did not silently reach terminal state outside this bus.
+                        try:
+                            latest = service.repository.get_turn(user.user_id, turn_id)
+                        except KeyError:
+                            return
+                        if latest.status in TERMINAL_TURN_STATUSES or latest.status == "timed_out":
+                            for ev in _terminal_sse_events(
+                                latest, service=service, user=user, language=user_lang
+                            ):
+                                yield ev.format_sse()
+                            return
+                        yield ": keepalive\n\n"
+                        continue
+                    if item is None:
+                        return
+                    yield item.format_sse()
+                    if item.event in {"turn_done", "turn_error"}:
+                        return
+        except asyncio.CancelledError:
+            # Closing the SSE stream must not cancel the underlying background turn.
+            return
+        finally:
+            unsubscribe()
+
+    return StreamingResponse(
+        stream_live(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/turns/{turn_id}/cancel")

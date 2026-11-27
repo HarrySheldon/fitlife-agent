@@ -57,7 +57,7 @@ import type {
 import i18n from '../i18n'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
-const API_V1_BASE = import.meta.env.VITE_API_V1_BASE_URL || '/api/v1'
+export const API_V1_BASE = import.meta.env.VITE_API_V1_BASE_URL || '/api/v1'
 const TOKEN_KEY = 'fitlife_access_token'
 const ACCOUNT_EXPORT_FILENAME = 'account-data-export.zip'
 
@@ -115,7 +115,7 @@ function planTaskRequest<T>(path: string, key: string, body: unknown): Promise<T
   })
 }
 
-function requestHeaders(init?: RequestInit): Headers {  const token = tokenStorage.get()
+export function requestHeaders(init?: RequestInit): Headers {  const token = tokenStorage.get()
   const headers = new Headers(init?.headers)
   headers.set('Accept-Language', languageStorage.get())
   headers.set('X-Timezone', browserTimezone())

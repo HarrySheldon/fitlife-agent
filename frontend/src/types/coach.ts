@@ -39,4 +39,19 @@ export interface CoachSend {
   answer_mode?: 'brief' | 'detailed'
   read_domains?: Array<'profile' | 'training' | 'diet'>
 }
+export interface CoachStreamProgressEvent {
+  turn_id: string
+  step?: string | null
+  stage: string
+  status: 'started' | 'succeeded' | 'failed'
+  tool_name?: string | null
+  decision_count?: number
+  elapsed_ms?: number
+}
+export type CoachStreamEvent =
+  | { id: number; event: 'turn_status'; data: { turn_id: string; status: CoachTurn['status']; stopping: boolean; version: number; stage: string } }
+  | { id: number; event: 'step_progress'; data: CoachStreamProgressEvent }
+  | { id: number; event: 'answer_delta'; data: { turn_id: string; message_id: string; delta: string; index: number } }
+  | { id: number; event: 'turn_done'; data: { turn: CoachTurn; message: CoachMessage | null } }
+  | { id: number; event: 'turn_error'; data: { turn_id: string; status: string; error_code: string | null; message: string } }
 export const holdsCoachSlot = (turn: CoachTurn | null) => turn?.status === 'queued' || turn?.status === 'running'

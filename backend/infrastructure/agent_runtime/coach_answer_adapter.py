@@ -8,6 +8,8 @@ of being published as a partial answer.
 
 from __future__ import annotations
 
+import inspect
+
 from backend.agent.graph import run_contextual_coach_action, run_fitlife_agent
 from backend.application.ports.coach_answer import CoachTurnAnswer, CoachTurnRequest
 from backend.application.use_cases.coach_conversations import CoachConversations
@@ -18,6 +20,16 @@ from backend.infrastructure.repositories.file_report_repository import FileRepor
 from backend.safety.business_scope import is_closed_followup
 
 CHAT_ACTION = "chat"
+
+
+def _accepts_kwarg(fn, name: str) -> bool:
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return False
+    return name in sig.parameters or any(
+        param.kind == inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values()
+    )
 
 
 class RuntimeCoachAnswerAdapter:
@@ -51,15 +63,25 @@ class RuntimeCoachAnswerAdapter:
                 operation, tool = "weekly_review", "load_persisted_weekly_report"
             if is_closed_followup(request.question):
                 question += " Explain the reasons and provide more detail about this result."
+            observer_kwargs = (
+                {"progress_observer": request.progress_observer}
+                if request.progress_observer is not None and _accepts_kwarg(self.chat, "progress_observer")
+                else {}
+            )
             result = self.chat(question, request.user_id, initial_tool_results=facts,
                 initial_tool_calls=[tool], operation=operation, surface=request.surface,
                 _trusted_page_intent=True, preferences=request.preferences,
                 coach_action=request.action,
                 language=request.language, answer_mode=request.answer_mode,
-                request_id=request.request_id, **history_options)
+                request_id=request.request_id, **history_options, **observer_kwargs)
         elif request.action == CHAT_ACTION:
             if request.read_domains is not None:
                 history_options['read_domains'] = request.read_domains
+            observer_kwargs = (
+                {"progress_observer": request.progress_observer}
+                if request.progress_observer is not None and _accepts_kwarg(self.chat, "progress_observer")
+                else {}
+            )
             result = self.chat(
                 request.question,
                 request.user_id,
@@ -68,10 +90,16 @@ class RuntimeCoachAnswerAdapter:
                 language=request.language,
                 answer_mode=request.answer_mode,
                 **history_options,
+                **observer_kwargs,
             )
         else:
             if is_closed_followup(request.question):
                 history_options["followup_detail"] = True
+            observer_kwargs = (
+                {"progress_observer": request.progress_observer}
+                if request.progress_observer is not None and _accepts_kwarg(self.contextual, "progress_observer")
+                else {}
+            )
             result = self.contextual(
                 surface=request.surface,
                 action=request.action,
@@ -87,6 +115,7 @@ class RuntimeCoachAnswerAdapter:
                 language=request.language,
                 answer_mode=request.answer_mode,
                 **history_options,
+                **observer_kwargs,
             )
         return CoachTurnAnswer(
             answer_markdown=str(result["answer_markdown"]),

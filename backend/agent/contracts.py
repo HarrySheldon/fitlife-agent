@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal, Mapping, Protocol
+from typing import TYPE_CHECKING, Callable, Literal, Mapping, Protocol
 from pydantic import BaseModel
 from uuid import uuid4
 from backend.agent.tasks.contracts import TaskRef
@@ -36,6 +36,9 @@ class AgentCommand:
     coach_action: str | None = None
     recent_history: tuple[dict, ...] = ()
     read_domains: tuple[str, ...] | None = None
+    progress_observer: Callable[[dict[str, object]], None] | None = field(
+        default=None, compare=False, repr=False
+    )
 
 
 @dataclass(frozen=True)

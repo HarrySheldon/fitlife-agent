@@ -37,9 +37,11 @@ from backend.application.ports.coach_conversation_repository import (
     TurnRecord,
 )
 from backend.application.ports.model_call_context import AbortRegistry, current_abort
+from backend.application.use_cases.coach_turn_stream import TurnEventBus
 from backend.domain.coach_conversation import TERMINAL_TURN_STATUSES, CoachMessage
-from backend.domain.coach_turn import TurnNotCancellable
+from backend.domain.coach_turn import TurnNotCancellable, cancellation_notice
 from backend.domain.user_preferences import UserPreferences
+from backend.i18n import translate_public_message
 
 LEGACY_CONVERSATION_PREFIX = "system:"
 
@@ -78,6 +80,7 @@ class CoachTurnService:
         clock=None,
         lease_id: str | None = None,
         executor: Executor | None = None,
+        event_bus: TurnEventBus | None = None,
     ) -> None:
         self.repository = repository
         self.answers = answers
@@ -87,6 +90,7 @@ class CoachTurnService:
         self.executor = executor or ThreadPoolExecutor(
             max_workers=8, thread_name_prefix="coach-turn"
         )
+        self.event_bus = event_bus or TurnEventBus()
         self._running: dict[str, _Execution] = {}
         self._lock = Lock()
 
@@ -180,6 +184,13 @@ class CoachTurnService:
             )
             raise
         self._start(user_id, turn.turn_id, request)
+        self.event_bus.publish_status(
+            turn.turn_id,
+            status=turn.status,
+            stopping=False,
+            version=turn.version,
+            stage="queued",
+        )
         return TurnSubmission(turn=turn, replayed=False)
 
     def cancel(self, user_id: str, turn_id: str) -> TurnRecord:
@@ -197,9 +208,23 @@ class CoachTurnService:
             self.repository.publish_turn(
                 user_id, turn_id, status="cancelled", updated_at=self.clock()
             )
-            return self.repository.get_turn(user_id, turn_id)
+            cancelled = self.repository.get_turn(user_id, turn_id)
+            self.event_bus.publish_error(
+                turn_id,
+                status="cancelled",
+                error_code=None,
+                message=cancellation_notice(cancelled.language if hasattr(cancelled, "language") else "en-US"),
+            )
+            return cancelled
 
         stopping = self.repository.request_cancel(user_id, turn_id, at=self.clock())
+        self.event_bus.publish_status(
+            turn_id,
+            status=stopping.status,
+            stopping=True,
+            version=stopping.version,
+            stage="stopping",
+        )
         execution = self._execution(turn_id)
         if execution is not None:
             execution.abort.abort()
@@ -437,6 +462,13 @@ class CoachTurnService:
             claimed = self.repository.claim_turn(
                 user_id, turn_id, lease_id=self.lease_id, started_at=self.clock()
             )
+            self.event_bus.publish_status(
+                turn_id,
+                status=claimed.status,
+                stopping=claimed.cancel_requested_at is not None,
+                version=claimed.version,
+                stage="running",
+            )
             if claimed.cancel_requested_at is not None or execution.abort.aborted:
                 execution.abort.abort()
                 raise RuntimeError("the request was cancelled before production")
@@ -457,7 +489,18 @@ class CoachTurnService:
             if is_closed_followup(request.question):
                 admitted_scope = admitted_scope or followup_policy_question(request.question,
                     tuple({"role": item.role, "body": item.body, "admitted_scope": item.admitted_scope} for item in projection.messages)) != request.question
-            answer = self.answers.run(request)
+            observed_request = replace(
+                request,
+                progress_observer=lambda ev: self.event_bus.publish_step_progress(
+                    turn_id,
+                    step=str(ev.get("step") or "") or None,
+                    stage=str(ev.get("stage") or "") or None,
+                    status=str(ev.get("status") or "started"),
+                    tool_name=str(ev.get("tool_name") or "") or None,
+                    decision_count=ev.get("decision_count") if isinstance(ev.get("decision_count"), int) else None,
+                ),
+            )
+            answer = self.answers.run(observed_request)
             from backend.domain.coach_answer import limits_for_or_default
             contract = request.action
             if (request.action == 'chat' and answer.trace.get('agent_mode') == 'unified'
@@ -476,33 +519,48 @@ class CoachTurnService:
                     updated_at=self.clock(),
                     error_code="ANSWER_NOT_APPROVED",
                 )
+                self.event_bus.publish_error(
+                    turn_id,
+                    status="failed",
+                    error_code="ANSWER_NOT_APPROVED",
+                    message=translate_public_message("INTERNAL_ERROR", request.language),
+                )
                 return
+            coach_message = CoachMessage(
+                message_id=f"{turn_id}-coach",
+                conversation_id=request.conversation_id,
+                turn_id=turn_id,
+                role="coach",
+                body=answer.answer_markdown,
+                created_at=self.clock(),
+                review_status="approved",
+            )
+            receipt_data = {
+                "model": answer.model,
+                "trace": answer.trace,
+                "sources": answer.sources,
+                # Display-only handoff for a business task. The business service
+                # remains the only owner of candidates, budgets and permissions.
+                "business_task_ref": answer.trace.get("business_task_ref") if isinstance(answer.trace, dict) else None,
+                "context": {
+                    "action": request.action,
+                    "date": request.date,
+                    "plan_id": request.plan_id,
+                    "report_week": request.report_week,
+                    "surface": request.surface,
+                    "language": request.language,
+                    "answer_mode": request.answer_mode,
+                    "admitted_scope": admitted_scope,
+                    **({"read_domains": list(request.read_domains)} if request.read_domains is not None else {}),
+                },
+            }
             completed = self.repository.complete_turn(
                 user_id,
                 turn_id,
-                message=CoachMessage(
-                    message_id=f"{turn_id}-coach",
-                    conversation_id=request.conversation_id,
-                    turn_id=turn_id,
-                    role="coach",
-                    body=answer.answer_markdown,
-                    created_at=self.clock(),
-                    review_status="approved",
-                ),
+                message=coach_message,
                 updated_at=self.clock(),
                 expected_version=claimed.version,
-                receipt_json=json.dumps(
-                    {"model": answer.model, "trace": answer.trace, "sources": answer.sources,
-                     # Display-only handoff for a business task. The business service
-                     # remains the only owner of candidates, budgets and permissions.
-                     "business_task_ref": answer.trace.get("business_task_ref") if isinstance(answer.trace, dict) else None,
-                     "context": {"action": request.action, "date": request.date,
-                                 "plan_id": request.plan_id, "report_week": request.report_week,
-                                 "surface": request.surface, "language": request.language,
-                                 "answer_mode": request.answer_mode, "admitted_scope": admitted_scope,
-                                 **({'read_domains':list(request.read_domains)} if request.read_domains is not None else {})}},
-                    ensure_ascii=False, default=str
-                ),
+                receipt_json=json.dumps(receipt_data, ensure_ascii=False, default=str),
             )
             if not completed:
                 # A cancel, a deletion, an expiry or a moved version won the race.
@@ -513,6 +571,48 @@ class CoachTurnService:
                     execution,
                     RuntimeError("the answer was not publishable"),
                 )
+                return
+            turn_payload = {
+                "turn_id": claimed.turn_id,
+                "conversation_id": claimed.conversation_id,
+                "status": "succeeded",
+                "stopping": False,
+                "version": claimed.version + 1,
+                "created_at": claimed.created_at.isoformat(),
+                "finished_at": coach_message.created_at.isoformat(),
+                "cancel_requested_at": None,
+                "error_code": None,
+                "receipt": receipt_data,
+                "replayed": False,
+            }
+            message_metadata = {
+                key: value
+                for key, value in {
+                    "model": answer.model,
+                    "sources": list(answer.sources) if answer.sources else None,
+                    "context": receipt_data["context"],
+                    "business_task_ref": receipt_data.get("business_task_ref"),
+                }.items()
+                if value is not None
+            }
+            message_payload = {
+                "message_id": coach_message.message_id,
+                "turn_id": coach_message.turn_id,
+                "role": coach_message.role,
+                "body": coach_message.body,
+                "metadata": message_metadata,
+                "created_at": coach_message.created_at.isoformat(),
+            }
+            self.event_bus.publish_approved_answer(
+                turn_id,
+                message_id=coach_message.message_id,
+                body=coach_message.body,
+            )
+            self.event_bus.publish_done(
+                turn_id,
+                turn_payload=turn_payload,
+                message_payload=message_payload,
+            )
         except BaseException as error:  # noqa: BLE001 - the turn must reach a terminal state
             self._finish_failed(user_id, turn_id, execution, error)
         finally:
@@ -535,21 +635,45 @@ class CoachTurnService:
                 )
             except KeyError:
                 pass
+            self.event_bus.publish_error(
+                turn_id,
+                status="cancelled",
+                error_code=None,
+                message=cancellation_notice("en-US"),
+            )
             return
         if turn.status in TERMINAL_TURN_STATUSES:
             return
         cancelled = execution.abort.aborted or turn.cancel_requested_at is not None
+        final_status = "cancelled" if cancelled else "failed"
+        final_code = None if cancelled else _error_code(error)
         try:
             self.repository.publish_turn(
                 user_id,
                 turn_id,
-                status="cancelled" if cancelled else "failed",
+                status=final_status,
                 updated_at=self.clock(),
-                error_code=None if cancelled else _error_code(error),
+                error_code=final_code,
             )
         except KeyError:
             # Account deletion can remove the turn row after get_turn() above.
+            self.event_bus.publish_error(
+                turn_id,
+                status="cancelled",
+                error_code=None,
+                message=cancellation_notice("en-US"),
+            )
             return
+        self.event_bus.publish_error(
+            turn_id,
+            status=final_status,
+            error_code=final_code,
+            message=(
+                cancellation_notice("en-US")
+                if cancelled
+                else translate_public_message(final_code or "INTERNAL_ERROR", "en-US")
+            ),
+        )
 
     def _execution(self, turn_id: str) -> _Execution | None:
         with self._lock:
@@ -583,3 +707,25 @@ def _error_code(error: BaseException) -> str:
     if isinstance(code, str) and code.isupper() and code.isascii():
         return code[:64]
     return "COACH_TURN_FAILED"
+
+
+def _public_turn_dict(record: TurnRecord) -> dict:
+    try:
+        receipt = json.loads(record.receipt_json) if record.receipt_json else None
+    except ValueError:
+        receipt = None
+    if not isinstance(receipt, dict):
+        receipt = None
+    return {
+        "turn_id": record.turn_id,
+        "conversation_id": record.conversation_id,
+        "status": record.status,
+        "stopping": record.status == "running" and record.cancel_requested_at is not None,
+        "version": record.version,
+        "created_at": record.created_at.isoformat() if record.created_at is not None else None,
+        "finished_at": record.finished_at.isoformat() if record.finished_at is not None else None,
+        "cancel_requested_at": record.cancel_requested_at.isoformat() if record.cancel_requested_at is not None else None,
+        "error_code": record.error_code,
+        "receipt": receipt,
+        "replayed": False,
+    }

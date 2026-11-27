@@ -76,7 +76,7 @@ class RuntimeContext:
     def __init__(self, *, policy=None, clock=time.monotonic, sleeper=_sleep, random_value=random_module.random,
                  token_estimator=None, cancel_event=None, deadline_at=None, record=None, telemetry=None,
                  checkpoint_store=None, run_id=None, user_id=None, task_budget_binding=None,
-                 initial_checkpoint=None, resumed_from_run_id=None):
+                 initial_checkpoint=None, resumed_from_run_id=None, progress_callback=None):
         self.policy = policy or RuntimePolicy()
         self.clock = clock
         self.sleeper = sleeper
@@ -90,6 +90,7 @@ class RuntimeContext:
         self.attempt = 0
         self.input_chars = self.tokens = self.model_calls = self.tool_calls = 0
         self.record = record or (lambda *args, **kwargs: None)
+        self.progress_callback = progress_callback
         self.telemetry = SafeTelemetryContext(telemetry)
         self.checkpoint_store = checkpoint_store
         self.run_id, self.user_id = run_id, user_id
@@ -103,6 +104,15 @@ class RuntimeContext:
         self.attempts = AttemptLedger(clock=clock)
         self.task_budget_binding = task_budget_binding
         self._budget_operation_prefix = run_id or uuid4().hex
+
+    def emit_progress(self, payload: Mapping[str, object]) -> None:
+        callback = self.progress_callback
+        if callback is None:
+            return
+        try:
+            callback(dict(payload))
+        except Exception:
+            pass
 
     def set_model_metadata(self, *, provider=None, model=None):
         self.raise_if_cancelled()
@@ -338,6 +348,12 @@ class RuntimeContext:
             try:
                 self.record("TOOL_STARTED" if is_tool else "STEP_STARTED", self,
                             {**metadata, "attempt_id": attempt_id} if is_tool else metadata)
+                self.emit_progress({
+                    "event_type": "TOOL_STARTED" if is_tool else "STEP_STARTED",
+                    "step": self.current_step or name,
+                    "status": "started",
+                    **({"tool_name": name} if is_tool else {}),
+                })
                 if is_tool and name.endswith("_model"):
                     async with self.telemetry.span("fitlife.ai.request", {"attempt": attempt}) as ai_span:
                         result = await self._budgeted_model_call(operation)
@@ -367,6 +383,12 @@ class RuntimeContext:
                             {**metadata, "outcome": "succeeded", "attempt_id": attempt_id,
                              **self._usage_event(usage)} if is_tool
                             else {**metadata, "outcome": "succeeded"})
+                self.emit_progress({
+                    "event_type": "TOOL_FINISHED" if is_tool else "STEP_SUCCEEDED",
+                    "step": self.current_step or name,
+                    "status": "succeeded",
+                    **({"tool_name": name} if is_tool else {}),
+                })
                 return result
             except (RunCancelled, RunTimedOut, BudgetExceeded) as control_error:
                 if attempt_id is not None:
@@ -380,6 +402,12 @@ class RuntimeContext:
                             {**metadata, "outcome": "failed", "attempt_id": attempt_id,
                              **self._usage_event(None)} if is_tool
                             else {**metadata, "outcome": "failed"})
+                self.emit_progress({
+                    "event_type": "TOOL_FINISHED" if is_tool else "STEP_FAILED",
+                    "step": self.current_step or name,
+                    "status": "failed",
+                    **({"tool_name": name} if is_tool else {}),
+                })
                 raise
             except Exception as error:
                 if attempt_id is not None:
@@ -389,6 +417,12 @@ class RuntimeContext:
                             {**metadata, "outcome": "failed", "attempt_id": attempt_id,
                              **self._usage_event(None)} if is_tool
                             else {**metadata, "outcome": "failed"})
+                self.emit_progress({
+                    "event_type": "TOOL_FINISHED" if is_tool else "STEP_FAILED",
+                    "step": self.current_step or name,
+                    "status": "failed",
+                    **({"tool_name": name} if is_tool else {}),
+                })
                 if attempt >= limit or getattr(error,"_fitlife_no_replay",False) or decide_disposition(failure) is not Disposition.RETRY:
                     try:
                         setattr(error, "_fitlife_no_replay", True)
@@ -576,7 +610,8 @@ class AgentRuntime:
         context=RuntimeContext(policy=policy,clock=self.clock,sleeper=self.sleeper,random_value=self.random_value,token_estimator=self.token_estimator,cancel_event=event,deadline_at=self.clock()+policy.deadline_seconds,
                                record=lambda kind, ctx, payload=None: self._record(run_id, kind, ctx, payload),
                                telemetry=self.telemetry, checkpoint_store=self.checkpoint_store, run_id=run_id, user_id=command.user_id,
-                               initial_checkpoint=initial_checkpoint, resumed_from_run_id=resumed_from_run_id)
+                               initial_checkpoint=initial_checkpoint, resumed_from_run_id=resumed_from_run_id,
+                               progress_callback=getattr(command, "progress_observer", None))
         context.effective_config = config
         span.set_attributes({"policy_version": f"policy-{config.revision}"})
         active_trace_id = current_trace_id()
@@ -720,6 +755,13 @@ class AgentRuntime:
                 current_step=context.current_step, attempt=context.attempt,
                 input_chars=context.input_chars, input_tokens=context.tokens, output_tokens=context.output_tokens,
                 provider=context.provider, model=context.model, tool_calls=context.tool_calls), kind, payload)
+        if kind == "AGENT_PROGRESS" and isinstance(payload, Mapping):
+            context.emit_progress({
+                "event_type": kind,
+                "step": context.current_step or "planner",
+                "status": "started",
+                **({"decision_count": payload["decision_count"]} if "decision_count" in payload else {}),
+            })
 
     def _finish(self, run_id, status, context, error=None):
         run = self._runs[run_id]

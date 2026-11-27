@@ -530,6 +530,9 @@ export function CoachPage() {
             onOpenTask={setPlanTask}
             onGeneratePlanFromAnswer={(body) => void handleGeneratePersonalizedDraft(summarizeAnswerForFocusNote(body))}
             generatingPlan={generatingPlan}
+            streamSteps={coach && coach.selected === coach.streamingConversationId ? coach.streamSteps : []}
+            streamingBody={coach && coach.selected === coach.streamingConversationId ? coach.streamingBody : ''}
+            streamingActive={Boolean(coach && busy && coach.selected === coach.streamingConversationId)}
             emptyState={emptyStateNode}
           />
         </div>

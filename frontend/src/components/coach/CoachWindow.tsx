@@ -142,7 +142,15 @@ function CoachWindowBody({ onOpenWorkbench }: { onOpenWorkbench?: () => void }) 
         </nav>
       </header>
       {history ? <CoachHistory /> : null}
-      <CoachMessages messages={coach.messages} conversation={coach.selected} visible={coach.open} onOpenTask={setPlanTask} />
+      <CoachMessages
+        messages={coach.messages}
+        conversation={coach.selected}
+        visible={coach.open}
+        onOpenTask={setPlanTask}
+        streamSteps={coach.selected === coach.streamingConversationId ? coach.streamSteps : []}
+        streamingBody={coach.selected === coach.streamingConversationId ? coach.streamingBody : ''}
+        streamingActive={busy && coach.selected === coach.streamingConversationId}
+      />
       <button type="button" disabled={busy} onClick={() => setPlanTask(null)}>{t('plan.planTask.open')}</button>
       <PlanAdjustmentDialog open={planTask !== undefined} taskId={planTask ?? undefined} onClose={() => setPlanTask(undefined)} />
       <div className="coach-turn-status" role="status">

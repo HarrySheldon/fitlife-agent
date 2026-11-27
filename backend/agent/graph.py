@@ -46,6 +46,7 @@ def run_fitlife_agent(
     history_loader=None,
     coach_action: str | None = None,
     read_domains: tuple[str, ...] | None = None,
+    progress_observer=None,
 ) -> dict:
     command = AgentCommand(
         operation=operation,
@@ -61,6 +62,7 @@ def run_fitlife_agent(
         answer_mode=answer_mode,
         coach_action=coach_action,
         read_domains=read_domains,
+        progress_observer=progress_observer,
     )
     workflow = _LazyFitLifeWorkflow(repository, gateway, user_id, preferences or UserPreferences(), history_loader=history_loader)
     return DEFAULT_AGENT_RUNTIME.execute_sync(command, workflow).to_dict()
@@ -170,6 +172,7 @@ def run_contextual_coach_action(
     answer_mode: str | None = None,
     history_loader=None,
     followup_detail: bool = False,
+    progress_observer=None,
 ) -> dict:
     command = AgentCommand(
         operation="coach_action", question=_coach_prompt(surface, action, date, question)
@@ -180,6 +183,7 @@ def run_contextual_coach_action(
         language=language,
         answer_mode=answer_mode,
         coach_action=action,
+        progress_observer=progress_observer,
     )
     workflow = _LazyFitLifeWorkflow(
         repository, gateway, user_id, preferences or UserPreferences(),

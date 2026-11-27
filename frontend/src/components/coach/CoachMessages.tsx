@@ -2,7 +2,7 @@ import { CalendarPlus, Check, Copy } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
-import type { CoachMessage } from '../../types/coach'
+import type { CoachMessage, CoachStreamProgressEvent } from '../../types/coach'
 
 interface Props {
   messages: CoachMessage[]
@@ -11,6 +11,9 @@ interface Props {
   onOpenTask?: (taskId: string) => void
   onGeneratePlanFromAnswer?: (answerBody: string) => void
   generatingPlan?: boolean
+  streamSteps?: CoachStreamProgressEvent[]
+  streamingBody?: string
+  streamingActive?: boolean
   emptyState?: ReactNode
 }
 
@@ -22,9 +25,17 @@ export function CoachMessages({
   onOpenTask,
   onGeneratePlanFromAnswer,
   generatingPlan = false,
+  streamSteps = [],
+  streamingBody = '',
+  streamingActive = false,
   emptyState,
 }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+
+  const stageLabel = (stage: string) => {
+    const key = `coachConversation.streamStages.${stage}`
+    return i18n.exists(key) ? t(key) : t('coachConversation.running')
+  }
   const list = useRef<HTMLDivElement>(null)
   const positions = useRef<Record<string, number>>({})
   const follow = useRef(true)
@@ -162,6 +173,32 @@ export function CoachMessages({
             </article>
           ))
         )}
+        {streamingActive && (streamSteps.length > 0 || streamingBody) ? (
+          <article className="coach-message coach-message-coach coach-message-streaming" data-testid="coach-stream-live">
+            {streamSteps.length > 0 ? (
+              <div className="coach-stream-steps" data-testid="coach-stream-progress">
+                <small>{t('coachConversation.streamLive')}</small>
+                <ul>
+                  {streamSteps.map((step, index) => (
+                    <li key={`${step.stage}-${step.status}-${index}`} className={`stream-step-${step.status}`}>
+                      {stageLabel(step.stage)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {streamingBody ? (
+              <>
+                <header>
+                  <span>{t('coachConversation.streamReply')}</span>
+                </header>
+                <div className="coach-message-body" data-testid="coach-streaming-body">
+                  <ReactMarkdown>{streamingBody}</ReactMarkdown>
+                </div>
+              </>
+            ) : null}
+          </article>
+        ) : null}
       </div>
       {newMessage ? (
         <button

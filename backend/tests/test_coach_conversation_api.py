@@ -300,6 +300,7 @@ def test_an_awaiting_user_turn_releases_the_slot(client, service, answer):
     second = _ask(client, headers, conversation_id, "key-2")
     assert second.status_code == 200, second.text
     answer.release.set()
+    service.wait(second.json()["data"]["turn_id"], timeout=5)
 
 
 def test_reading_a_turn_never_starts_a_model_call(client, service, answer):
