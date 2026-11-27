@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: fitlife
+          POSTGRES_PASSWORD: fitlife
+          POSTGRES_DB: fitlife_test
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd="pg_isready -U fitlife -d fitlife_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://fitlife:fitlife@127.0.0.1:15432/fitlife_test
+      FITLIFE_TEST_DATABASE_URL: postgresql://fitlife:fitlife@127.0.0.1:15432/fitlife_test
+      FITLIFE_OTEL_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run backend test suite
+        run: pytest -q
+      - name: Verify hybrid RAG evaluation gate
+        run: python -m backend.rag.evaluation --backend postgres --gate
+      - name: Verify safety red-team & anti-over-refusal gate
+        run: python -m backend.safety.redteam_suite --gate
+
+  frontend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Run frontend test suite
+        run: npx vitest run --maxWorkers=1

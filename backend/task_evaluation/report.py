@@ -73,6 +73,8 @@ class Report:
     rule_version: str
     groups: dict[str, GroupSummary]
     records: tuple[RunRecord, ...]
+    reliability: dict[str, Any] | None = None
+    first_errors: tuple[dict[str, Any], ...] = ()
 
 
 def _sum_tokens(records: list[RunRecord]) -> int | None:
@@ -115,6 +117,23 @@ def build_report(records: list[RunRecord]) -> Report:
     # A single model/rule version is only meaningful when every record belongs to one
     # mode; mixing mock and live must not produce a summary that reads as one result.
     single_mode = len(modes) <= 1
+    from backend.task_evaluation.attribution import attribute_first_error
+    from backend.task_evaluation.comparison import compute_pass_k
+
+    first_errors = tuple(
+        asdict(attr)
+        for attr in (attribute_first_error(record) for record in records)
+        if attr is not None
+    )
+    by_case: dict[tuple[str, int], int] = {}
+    for record in records:
+        key = (record.case_id, record.version)
+        by_case[key] = by_case.get(key, 0) + 1
+    reliability = (
+        compute_pass_k(records).as_record()
+        if any(count >= 2 for count in by_case.values())
+        else None
+    )
     return Report(
         total_runs=len(records),
         total_successes=successes,
@@ -124,6 +143,8 @@ def build_report(records: list[RunRecord]) -> Report:
         rule_version=next(iter(rules)) if single_mode and len(rules) == 1 and None not in rules else "unknown",
         groups={mode: _group(records, mode) for mode in sorted(modes)},
         records=tuple(records),
+        reliability=reliability,
+        first_errors=first_errors,
     )
 
 
@@ -158,6 +179,20 @@ def render_markdown(report: Report) -> str:
         if group.failure_processing_ms:
             lines.append(f"- 失败耗时（ms）：{', '.join(str(int(v)) for v in group.failure_processing_ms)}")
         lines.append("")
+    if report.reliability is not None:
+        lines.extend([
+            "## 可靠性 (Pass@k vs Pass^k)",
+            "",
+            f"- k={report.reliability.get('k')}，评估用例={report.reliability.get('cases_evaluated')}",
+            f"- Pass@k：{report.reliability.get('pass_at_k')}",
+            f"- Pass^k：{report.reliability.get('pass_pow_k')}",
+            "",
+        ])
+    if report.first_errors:
+        lines.extend(["## 首次故障归因", ""])
+        for err in report.first_errors:
+            lines.append(f"- {err['case_id']} [{err['error_category']}]: {err['summary']}")
+        lines.append("")
     lines.extend(["## 运行详情", "", "```json", json.dumps([asdict(r) for r in report.records], ensure_ascii=False, indent=2, allow_nan=False), "```", ""])
     return "\n".join(lines)
 
@@ -173,5 +208,7 @@ def render_json(report: Report) -> str:
         "rule_version": report.rule_version,
         "groups": {mode: asdict(group) for mode, group in report.groups.items()},
         "records": [asdict(record) for record in report.records],
+        **({"reliability": report.reliability} if report.reliability is not None else {}),
+        **({"first_errors": list(report.first_errors)} if report.first_errors else {}),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)

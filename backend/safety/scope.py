@@ -33,14 +33,15 @@ def resolve_modifier(
     if any(phrase in window for phrase in cues.speculation):
         return Modifier.hypothetical
 
-    # Deontic cues are checked before negation. "请不要自行停药" contains a
-    # negation marker, but what it *is* is advice against stopping treatment:
-    # the opposite of a harmful instruction. Reading it as a plain negation
-    # would lose that distinction.
-    if any(phrase in window for phrase in cues.deontic):
+    # Deontic cues require an accompanying negation marker to count as protective
+    # prescriptive advice (e.g. "请不要自行停药" or "切勿断食"). Bare polite requests
+    # such as "请给我绝食计划" or directives like "建议注射..." are not protective.
+    has_deontic = any(phrase in window for phrase in cues.deontic)
+    has_negation = any(phrase in window for phrase in cues.negation)
+    if has_deontic and has_negation:
         return Modifier.prescriptive
 
-    if any(phrase in window for phrase in cues.negation):
+    if has_negation:
         return Modifier.negated
 
     if any(phrase in window for phrase in cues.third_party):

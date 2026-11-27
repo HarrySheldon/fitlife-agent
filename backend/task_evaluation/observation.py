@@ -203,6 +203,31 @@ def observe_database(target=None, *, actors=None, data_dir=None):
                         "SELECT COUNT(*) FROM agent_runs WHERE user_id=? AND status='succeeded'",
                         (user_id,),
                     ).fetchone()[0]
+                    if "agent_run_events" in tables:
+                        rows = connection.execute(
+                            "SELECT e.run_id, e.seq, e.event_type, e.step, e.payload_json "
+                            "FROM agent_run_events e JOIN agent_runs r ON e.run_id = r.id "
+                            "WHERE r.user_id=? ORDER BY r.created_at, e.run_id, e.seq LIMIT 100",
+                            (user_id,),
+                        ).fetchall()
+                        events_summary = []
+                        for row_run_id, seq, event_type, step, payload_raw in rows:
+                            try:
+                                payload = payload_raw if isinstance(payload_raw, dict) else json.loads(payload_raw or "{}")
+                            except (TypeError, ValueError):
+                                payload = {}
+                            if not isinstance(payload, dict):
+                                payload = {}
+                            events_summary.append({
+                                "run_id": row_run_id,
+                                "seq": seq,
+                                "event_type": event_type,
+                                "step_name": step,
+                                "status": payload.get("outcome"),
+                                "error_code": payload.get("error_code"),
+                                "error_type": payload.get("error_type"),
+                            })
+                        result["run_events"] = events_summary
             if user_id is not None:
                 result.update(observe_plan_tasks(connection, tables, user_id))
             return result

@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 from backend.task_evaluation.report import RunRecord
 
@@ -554,3 +554,68 @@ def render_comparison(result: PairedResult, summary: PairedSummary,
         "",
     ])
     return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class ReliabilitySummary:
+    """Multi-repeat reliability summary distinguishing ``Pass@k`` from ``Pass^k``."""
+
+    k: int
+    cases_evaluated: int
+    pass_at_k: float | None
+    pass_pow_k: float | None
+    per_case: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            "k": self.k,
+            "cases_evaluated": self.cases_evaluated,
+            "pass_at_k": self.pass_at_k,
+            "pass_pow_k": self.pass_pow_k,
+            "per_case": dict(self.per_case),
+        }
+
+
+def compute_pass_k(records: Sequence[RunRecord], *, k: int | None = None) -> ReliabilitySummary:
+    """Compute exact combinatorial ``Pass@k`` and ``Pass^k`` across repeated case runs."""
+    grouped: dict[tuple[str, int], list[RunRecord]] = {}
+    for record in records:
+        grouped.setdefault((record.case_id, record.version), []).append(record)
+
+    if not grouped:
+        return ReliabilitySummary(k=max(1, k or 1), cases_evaluated=0, pass_at_k=None, pass_pow_k=None)
+
+    effective_k = k if k is not None else min(len(items) for items in grouped.values())
+    if effective_k < 1:
+        raise ValueError("k must be at least 1")
+
+    pass_at_values: list[float] = []
+    pass_pow_values: list[float] = []
+    per_case: dict[str, dict[str, Any]] = {}
+    for (case_id, version), items in sorted(grouped.items()):
+        n = len(items)
+        if n < effective_k:
+            continue
+        c = sum(1 for item in items if item.success)
+        p_at_k = 1.0 - (math.comb(n - c, effective_k) / math.comb(n, effective_k)) if (n - c) >= effective_k else 1.0
+        p_pow_k = (math.comb(c, effective_k) / math.comb(n, effective_k)) if c >= effective_k else 0.0
+        pass_at_values.append(p_at_k)
+        pass_pow_values.append(p_pow_k)
+        per_case[f"{case_id}:v{version}"] = {
+            "n": n,
+            "c": c,
+            "k": effective_k,
+            "pass_at_k": round(p_at_k, 4),
+            "pass_pow_k": round(p_pow_k, 4),
+        }
+
+    if not per_case:
+        return ReliabilitySummary(k=effective_k, cases_evaluated=0, pass_at_k=None, pass_pow_k=None)
+
+    return ReliabilitySummary(
+        k=effective_k,
+        cases_evaluated=len(per_case),
+        pass_at_k=round(sum(pass_at_values) / len(pass_at_values), 4),
+        pass_pow_k=round(sum(pass_pow_values) / len(pass_pow_values), 4),
+        per_case=per_case,
+    )
